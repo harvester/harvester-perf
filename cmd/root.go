@@ -1,6 +1,3 @@
-/*
-Copyright © 2026 NAME HERE <EMAIL ADDRESS>
-*/
 package cmd
 
 import (
@@ -31,8 +28,4 @@ func Execute() {
 
 func init() {
 	kcliopts.NewConfigFlags(true).AddFlags(runCmd.Flags())
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

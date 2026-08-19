@@ -1,11 +1,10 @@
-/*
-Copyright © 2026 NAME HERE <EMAIL ADDRESS>
-*/
 package cmd
 
 import (
 	"errors"
 	"fmt"
+
+	"github.com/harvester/hperf/internal/suites"
 
 	"github.com/spf13/cobra"
 	kcliopts "k8s.io/cli-runtime/pkg/genericclioptions"
@@ -24,16 +23,13 @@ Use 'all' to run all test suites. By default, only "read-only" test suites are
 run. These tests do not create or modify any resources in the cluster. To include 
 "read-write" test suites, use 'all --include-write' flag.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		results, errs := runSuites(args)
+		suites := suites.Find(args)
+		results, errs := runSuites(suites)
 		return out(results, errs)
 	},
 }
 
-var (
-	defaultSuites = []string{}
-	writeSuites   = []string{}
-	includeWrite  bool
-)
+var includeWrite bool
 
 var runAllCmd = &cobra.Command{
 	Use:   "all",
@@ -44,10 +40,7 @@ By default, only "read-only" test suites are run. These tests do not create or
 modify any resources in the cluster. To include "read-write" test suites, use the
 '--include-write' flag.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		suites := defaultSuites
-		if includeWrite {
-			suites = append(suites, writeSuites...)
-		}
+		suites := suites.All(includeWrite)
 		results, errs := runSuites(suites)
 		return out(results, errs)
 	},
@@ -56,20 +49,18 @@ modify any resources in the cluster. To include "read-write" test suites, use th
 func init() {
 	rootCmd.AddCommand(runCmd)
 	runCmd.AddCommand(runAllCmd)
-
+	runCmd.SilenceUsage = true
+	runAllCmd.SilenceUsage = true
 	runAllCmd.Flags().BoolVar(&includeWrite, "include-write", false, "Include read-write test suites")
 	kcliopts.NewPrintFlags("perf").AddFlags(runCmd)
 	for _, c := range runCmd.Commands() {
 		kcliopts.NewPrintFlags("perf").AddFlags(c)
 	}
-
-	runCmd.SilenceUsage = true
-	runAllCmd.SilenceUsage = true
 }
 
 type TestResult struct{}
 
-func runSuites(suites []string) ([]*TestResult, error) {
+func runSuites(suites []suites.TestSuite) ([]*TestResult, error) {
 	var (
 		results []*TestResult
 		errs    error
@@ -85,7 +76,7 @@ func runSuites(suites []string) ([]*TestResult, error) {
 	return results, errs
 }
 
-func runSuite(suiteName string) (*TestResult, error) {
+func runSuite(suite suites.TestSuite) (*TestResult, error) {
 	return nil, nil
 }
 

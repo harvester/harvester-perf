@@ -1,10 +1,6 @@
-/*
-Copyright © 2026 NAME HERE <EMAIL ADDRESS>
-
-*/
 package main
 
-import "github.com/harvester/harvester-perf/cmd"
+import "github.com/harvester/hperf/cmd"
 
 func main() {
 	cmd.Execute()
