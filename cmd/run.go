@@ -4,6 +4,7 @@ Copyright © 2026 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -22,10 +23,17 @@ specified as a list of comma-separated arguments.
 Use 'all' to run all test suites. By default, only "read-only" test suites are
 run. These tests do not create or modify any resources in the cluster. To include 
 "read-write" test suites, use 'all --include-write' flag.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("run called")
+	RunE: func(cmd *cobra.Command, args []string) error {
+		results, errs := runSuites(args)
+		return out(results, errs)
 	},
 }
+
+var (
+	defaultSuites = []string{}
+	writeSuites   = []string{}
+	includeWrite  bool
+)
 
 var runAllCmd = &cobra.Command{
 	Use:   "all",
@@ -35,17 +43,52 @@ var runAllCmd = &cobra.Command{
 By default, only "read-only" test suites are run. These tests do not create or
 modify any resources in the cluster. To include "read-write" test suites, use the
 '--include-write' flag.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("run all called")
+	RunE: func(cmd *cobra.Command, args []string) error {
+		suites := defaultSuites
+		if includeWrite {
+			suites = append(suites, writeSuites...)
+		}
+		results, errs := runSuites(suites)
+		return out(results, errs)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(runCmd)
 	runCmd.AddCommand(runAllCmd)
-	runAllCmd.Flags().Bool("include-write", false, "Include read-write test suites")
+
+	runAllCmd.Flags().BoolVar(&includeWrite, "include-write", false, "Include read-write test suites")
 	kcliopts.NewPrintFlags("perf").AddFlags(runCmd)
 	for _, c := range runCmd.Commands() {
 		kcliopts.NewPrintFlags("perf").AddFlags(c)
 	}
+
+	runCmd.SilenceUsage = true
+	runAllCmd.SilenceUsage = true
+}
+
+type TestResult struct{}
+
+func runSuites(suites []string) ([]*TestResult, error) {
+	var (
+		results []*TestResult
+		errs    error
+	)
+	for _, suite := range suites {
+		result, err := runSuite(suite)
+		if err != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to run test suite %q: %w", suite, err))
+			continue
+		}
+		results = append(results, result)
+	}
+	return results, errs
+}
+
+func runSuite(suiteName string) (*TestResult, error) {
+	return nil, nil
+}
+
+func out(results []*TestResult, errs error) error {
+	return nil
 }
