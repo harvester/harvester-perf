@@ -1,6 +1,9 @@
 package suites
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // TestSuite defines the interface that every test suite must implement.
 type TestSuite interface {
@@ -27,8 +30,13 @@ func (t *TestSuiteMarshaler) String() string {
 
 // MarshalJSON implements the json.Marshaler interface for TestSuiteMarshaler.
 func (t *TestSuiteMarshaler) MarshalJSON() ([]byte, error) {
-	raw := fmt.Sprintf(`{"name": "%s", "readWrite": %t}`, t.Marshal.Name(), t.Marshal.IsReadWrite())
-	return []byte(raw), nil
+	return json.Marshal(struct {
+		Name        string `json:"name"`
+		IsReadWrite bool   `json:"readWrite"`
+	}{
+		Name:        t.Marshal.Name(),
+		IsReadWrite: t.Marshal.IsReadWrite(),
+	})
 }
 
 // MarshalYAML implements the yaml.Marshaler interface for TestSuiteMarshaler.

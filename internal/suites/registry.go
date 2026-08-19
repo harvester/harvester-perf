@@ -1,6 +1,7 @@
 package suites
 
 import (
+	"slices"
 	"sync"
 )
 
@@ -35,9 +36,11 @@ func All(includeReadWrite bool) []TestSuite {
 // match any registered test suite, it is ignored.
 func Find(names []string) []TestSuite {
 	suites := []TestSuite{}
-	for k, s := range r.suites {
-		if k == s.Name() {
-			suites = append(suites, s)
+	for _, name := range names {
+		if _, exists := r.suites[name]; exists {
+			if !slices.Contains(suites, r.suites[name]) {
+				suites = append(suites, r.suites[name])
+			}
 		}
 	}
 	return suites
