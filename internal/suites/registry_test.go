@@ -8,9 +8,9 @@ import (
 )
 
 var (
-	readOnlySuite0 = newFakeSuite("test-fake-ro-0", false)
-	readOnlySuite1 = newFakeSuite("test-fake-ro-1", false)
-	readWriteSuite = newFakeSuite("test-fake-rw", true)
+	readOnlySuite0 = newFakeSuite("test-fake-ro-0", "fake test suite", false)
+	readOnlySuite1 = newFakeSuite("test-fake-ro-1", "fake test suite", false)
+	readWriteSuite = newFakeSuite("test-fake-rw", "fake test suite", true)
 )
 
 func TestMain(m *testing.M) {
