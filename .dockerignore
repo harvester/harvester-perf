@@ -3,3 +3,5 @@
 results
 *.md
 !README.md
+bin
+hperf
