@@ -4,7 +4,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	kcliopts "k8s.io/cli-runtime/pkg/genericclioptions"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -24,8 +23,4 @@ func Execute() {
 	if err != nil {
 		os.Exit(1)
 	}
-}
-
-func init() {
-	kcliopts.NewConfigFlags(true).AddFlags(runCmd.Flags())
 }

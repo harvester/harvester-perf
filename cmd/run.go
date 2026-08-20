@@ -7,7 +7,6 @@ import (
 	"github.com/harvester/hperf/internal/suites"
 
 	"github.com/spf13/cobra"
-	kcliopts "k8s.io/cli-runtime/pkg/genericclioptions"
 )
 
 // runCmd represents the run command
@@ -25,7 +24,7 @@ run. These tests do not create or modify any resources in the cluster. To includ
 	RunE: func(cmd *cobra.Command, args []string) error {
 		suites := suites.Find(args)
 		results, errs := runSuites(suites)
-		return out(results, errs)
+		return outRun(results, errs)
 	},
 }
 
@@ -42,19 +41,22 @@ modify any resources in the cluster. To include "read-write" test suites, use th
 	RunE: func(cmd *cobra.Command, args []string) error {
 		suites := suites.All(includeWrite)
 		results, errs := runSuites(suites)
-		return out(results, errs)
+		return outRun(results, errs)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(runCmd)
 	runCmd.AddCommand(runAllCmd)
+
 	runCmd.SilenceUsage = true
 	runAllCmd.SilenceUsage = true
+
 	runAllCmd.Flags().BoolVar(&includeWrite, "include-write", false, "Include read-write test suites")
-	kcliopts.NewPrintFlags("perf").AddFlags(runCmd)
+	k8sConfigFlags.AddFlags(runCmd.PersistentFlags())
+	k8sPrintFlags.AddFlags(runCmd)
 	for _, c := range runCmd.Commands() {
-		kcliopts.NewPrintFlags("perf").AddFlags(c)
+		k8sPrintFlags.AddFlags(c)
 	}
 }
 
@@ -80,6 +82,6 @@ func runSuite(suite suites.TestSuite) (*TestResult, error) {
 	return nil, nil
 }
 
-func out(results []*TestResult, errs error) error {
+func outRun(results []*TestResult, errs error) error {
 	return nil
 }

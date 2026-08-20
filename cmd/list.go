@@ -10,7 +10,6 @@ import (
 	"go.yaml.in/yaml/v4"
 
 	"github.com/spf13/cobra"
-	kcliopts "k8s.io/cli-runtime/pkg/genericclioptions"
 )
 
 // listCmd represents the list command
@@ -23,18 +22,17 @@ All "read-only" and "read-write" test suites are listed. Use the -o/--output fla
 to specify the output format. Supported formats are "table", "name", "json", and
 "yaml". The default format is "table".`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		format := cmd.Flag("output").Value.String()
-		return listOut(format)
+		return outList(*k8sPrintFlags.OutputFormat)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(listCmd)
-	kcliopts.NewPrintFlags("perf").AddFlags(listCmd)
+	k8sPrintFlags.AddFlags(listCmd)
 	listCmd.SilenceUsage = true
 }
 
-func listOut(format string) error {
+func outList(format string) error {
 	suites := suites.All(true)
 
 	var (
