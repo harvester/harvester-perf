@@ -40,7 +40,7 @@ COPY . .
 ARG CLI_VERSION
 RUN --mount=type=cache,target=/go/pkg/mod \
   --mount=type=cache,target=/root/.cache/go-build \
-  go build -o /out/hperf .
+  go build -ldflags "-X github.com/harvester/hperf/cmd.Version=${CLI_VERSION}" -o /out/hperf .
 
 # ---------------------------------------------------------------------------
 # build the harvester-perf image. this image includes all the performance and
@@ -68,3 +68,4 @@ RUN set -eux ;\
 ENV KUBECONFIG=/root/.kube/config \
   ETCDCTL_API=3
 ENTRYPOINT ["/usr/local/bin/hperf"]
+CMD ["version"]
