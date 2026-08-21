@@ -14,8 +14,8 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	// remove any real test suites from the registry so that the tests below can run
-	// with fake test suites
+	// remove any test suites from the registry so that the tests below can run with
+	// fake test suites
 	r.mu.Lock()
 	r.suites = map[string]Suite{}
 	r.mu.Unlock()
