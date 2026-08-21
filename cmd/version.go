@@ -19,12 +19,7 @@ var (
 		Short: "Display the version of hperf",
 		Long:  `Display the version of hperf.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := version()
-			if err != nil {
-				return err
-			}
-			_, ferr := fmt.Fprint(os.Stdout, out)
-			return ferr
+			return printVersion()
 		},
 	}
 )
@@ -37,22 +32,29 @@ func init() {
 	k8sConfigFlags.AddFlags(versionCmd.Flags())
 }
 
-func version() (string, error) {
+func printVersion() error {
+	_, err := fmt.Fprintf(os.Stdout, "Client version: %s\n", Version)
+	if err != nil {
+		return err
+	}
+
 	if clientOnly {
-		return fmt.Sprintf("Client version: %s\n", Version), nil
+		return nil
 	}
 
 	config, err := restConfig()
 	if err != nil {
-		return "", err
+		return err
 	}
 	dc, err := discclient.NewDiscoveryClientForConfig(config)
 	if err != nil {
-		return "", err
+		return err
 	}
 	serverVersion, err := dc.ServerVersion()
 	if err != nil {
-		return "", err
+		return err
 	}
-	return fmt.Sprintf("Client version: %s\nServer version: %s\n", Version, serverVersion), nil
+
+	_, ferr := fmt.Fprintf(os.Stdout, "Server version: %s\n", serverVersion)
+	return ferr
 }
