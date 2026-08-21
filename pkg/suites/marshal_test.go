@@ -7,12 +7,12 @@ import (
 	"go.yaml.in/yaml/v4"
 )
 
-var _ TestSuite = &fakeSuite{}
+var _ Suite = &fakeSuite{}
 
 // fakeSuite is a minimal TestSuite implementation used to exercise
 // TestSuiteMarshaler in isolation from the real test suites.
 type fakeSuite struct {
-	TestSuiteMarshaler
+	SuiteMarshaler
 
 	name        string
 	description string
@@ -37,8 +37,8 @@ func (s *fakeSuite) IsReadWrite() bool {
 	return s.readWrite
 }
 
-func (s *fakeSuite) RunE() error {
-	return nil
+func (s *fakeSuite) RunE() (SuiteResult, error) {
+	return SuiteResult{}, nil
 }
 
 func TestMarshalerString(t *testing.T) {
@@ -74,7 +74,7 @@ func TestMarshalerString(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := &TestSuiteMarshaler{Marshal: newFakeSuite(tc.suiteName, tc.description, tc.readWrite)}
+			m := &SuiteMarshaler{Marshal: newFakeSuite(tc.suiteName, tc.description, tc.readWrite)}
 			if got := m.String(); got != tc.expected {
 				t.Errorf("String() = %q, want %q", got, tc.expected)
 			}
@@ -108,7 +108,7 @@ func TestMarshalerMarshalJSON(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := &TestSuiteMarshaler{Marshal: newFakeSuite(tc.suiteName, tc.description, tc.readWrite)}
+			m := &SuiteMarshaler{Marshal: newFakeSuite(tc.suiteName, tc.description, tc.readWrite)}
 
 			// MarshalJSON returns an SuiteOutput struct, so assert on the encoded
 			// form rather than on the concrete type.
@@ -121,7 +121,7 @@ func TestMarshalerMarshalJSON(t *testing.T) {
 			}
 
 			// The output must also be valid JSON that decodes to the same values.
-			var decoded SuiteOutput
+			var decoded SuiteMarshal
 			if err := json.Unmarshal(data, &decoded); err != nil {
 				t.Fatalf("MarshalJSON() produced invalid JSON %s: %v", data, err)
 			}
@@ -138,7 +138,7 @@ func TestMarshalerMarshalJSON(t *testing.T) {
 	}
 }
 
-func TestTestSuiteMarshalerMarshalYAML(t *testing.T) {
+func TestMarshalerMarshalYAML(t *testing.T) {
 	testCases := []struct {
 		name        string
 		description string
@@ -161,7 +161,7 @@ func TestTestSuiteMarshalerMarshalYAML(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := &TestSuiteMarshaler{Marshal: newFakeSuite(tc.suiteName, tc.description, tc.readWrite)}
+			m := &SuiteMarshaler{Marshal: newFakeSuite(tc.suiteName, tc.description, tc.readWrite)}
 			v, err := m.MarshalYAML()
 			if err != nil {
 				t.Fatalf("MarshalYAML() returned unexpected error: %v", err)
@@ -172,7 +172,7 @@ func TestTestSuiteMarshalerMarshalYAML(t *testing.T) {
 				t.Fatalf("yaml.Marshal() returned unexpected error: %v", err)
 			}
 
-			var decoded SuiteOutput
+			var decoded SuiteMarshal
 			if err := yaml.Unmarshal(data, &decoded); err != nil {
 				t.Fatalf("yaml.Unmarshal() returned unexpected error: %v", err)
 			}

@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/harvester/hperf/internal/suites"
+	"github.com/harvester/hperf/pkg/suites"
 	"go.yaml.in/yaml/v4"
 
 	"github.com/spf13/cobra"

@@ -48,6 +48,9 @@ go/build:
 go/test:
 	$(BUILD_CMD) $(BUILD_IMAGE) bash -c "go test -cover -race -shuffle=on ./..."
 
+go/tidy:
+	$(BUILD_CMD) $(BUILD_IMAGE) bash -c "go mod tidy"
+
 clean:
 	rm -rf bin
 

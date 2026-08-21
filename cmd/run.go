@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/harvester/hperf/internal/suites"
+	"github.com/harvester/hperf/pkg/suites"
 
 	"github.com/spf13/cobra"
 )
@@ -60,28 +60,28 @@ func init() {
 	}
 }
 
-type TestResult struct{}
-
-func runSuites(suites []suites.TestSuite) ([]*TestResult, error) {
+func runSuites(testSuites []suites.Suite) ([]*suites.SuiteResult, error) {
 	var (
-		results []*TestResult
+		results []*suites.SuiteResult
 		errs    error
 	)
-	for _, suite := range suites {
+	for _, suite := range testSuites {
 		result, err := runSuite(suite)
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to run test suite %q: %w", suite, err))
 			continue
 		}
-		results = append(results, result)
+		results = append(results, &result)
 	}
 	return results, errs
 }
 
-func runSuite(suite suites.TestSuite) (*TestResult, error) {
-	return nil, nil
+func runSuite(testSuite suites.Suite) (suites.SuiteResult, error) {
+	var opts suites.SuiteOption
+	opts.Bind(testSuite)
+	return testSuite.RunE()
 }
 
-func outRun(results []*TestResult, errs error) error {
+func outRun(results []*suites.SuiteResult, errs error) error {
 	return nil
 }

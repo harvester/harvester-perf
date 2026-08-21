@@ -17,12 +17,12 @@ func TestMain(m *testing.M) {
 	// remove any real test suites from the registry so that the tests below can run
 	// with fake test suites
 	r.mu.Lock()
-	r.suites = map[string]TestSuite{}
+	r.suites = map[string]Suite{}
 	r.mu.Unlock()
 
-	register(readOnlySuite0)
-	register(readOnlySuite1)
-	register(readWriteSuite)
+	Register(readOnlySuite0)
+	Register(readOnlySuite1)
+	Register(readWriteSuite)
 
 	code := m.Run()
 	os.Exit(code)
@@ -40,7 +40,7 @@ func TestAll(t *testing.T) {
 			t.Errorf("All(false) returned read-write suite %q", s.Name())
 		}
 	}
-	if !reflect.DeepEqual(readOnly, []TestSuite{readOnlySuite0, readOnlySuite1}) {
+	if !reflect.DeepEqual(readOnly, []Suite{readOnlySuite0, readOnlySuite1}) {
 		t.Errorf("All(false) = %v, want [%v, %v]", readOnly, readOnlySuite0.Name(), readOnlySuite1.Name())
 	}
 
@@ -48,7 +48,7 @@ func TestAll(t *testing.T) {
 	sort.Slice(every, func(i, j int) bool {
 		return every[i].Name() < every[j].Name()
 	})
-	if !reflect.DeepEqual(every, []TestSuite{readOnlySuite0, readOnlySuite1, readWriteSuite}) {
+	if !reflect.DeepEqual(every, []Suite{readOnlySuite0, readOnlySuite1, readWriteSuite}) {
 		t.Errorf("All(true) = %v, want [%v, %v, %v]", every, readOnlySuite0.Name(), readOnlySuite1.Name(), readWriteSuite.Name())
 	}
 }
@@ -57,32 +57,32 @@ func TestFind(t *testing.T) {
 	testCases := []struct {
 		name     string
 		names    []string
-		expected []TestSuite
+		expected []Suite
 	}{
 		{
 			name:     "nil names returns no suites",
 			names:    nil,
-			expected: []TestSuite{},
+			expected: []Suite{},
 		},
 		{
 			name:     "empty names returns no suites",
 			names:    []string{},
-			expected: []TestSuite{},
+			expected: []Suite{},
 		},
 		{
 			name:     "single match",
 			names:    []string{readOnlySuite0.Name()},
-			expected: []TestSuite{readOnlySuite0},
+			expected: []Suite{readOnlySuite0},
 		},
 		{
 			name:     "multiple matches",
 			names:    []string{readOnlySuite0.Name(), readOnlySuite1.Name(), readWriteSuite.Name()},
-			expected: []TestSuite{readOnlySuite0, readOnlySuite1, readWriteSuite},
+			expected: []Suite{readOnlySuite0, readOnlySuite1, readWriteSuite},
 		},
 		{
 			name:     "repeated name yields repeated results",
 			names:    []string{readOnlySuite0.Name(), readOnlySuite0.Name(), readOnlySuite1.Name()},
-			expected: []TestSuite{readOnlySuite0, readOnlySuite1},
+			expected: []Suite{readOnlySuite0, readOnlySuite1},
 		},
 	}
 

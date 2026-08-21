@@ -16,14 +16,14 @@ var (
 // is registered in this registry.
 type Registry struct {
 	mu     sync.Mutex
-	suites map[string]TestSuite
+	suites map[string]Suite
 }
 
 // All returns all registered test suites. If includeRW is true, it returns all
 // read-write and read-only test suites. Otherwise, it returns only read-only
 // test suites.
-func All(includeReadWrite bool) []TestSuite {
-	suites := []TestSuite{}
+func All(includeReadWrite bool) []Suite {
+	suites := []Suite{}
 	for _, s := range r.suites {
 		if includeReadWrite || !s.IsReadWrite() {
 			suites = append(suites, s)
@@ -34,8 +34,8 @@ func All(includeReadWrite bool) []TestSuite {
 
 // Find returns the test suites that match the provided names. If a name does not
 // match any registered test suite, it is ignored.
-func Find(names []string) []TestSuite {
-	suites := []TestSuite{}
+func Find(names []string) []Suite {
+	suites := []Suite{}
 	for _, name := range names {
 		if _, exists := r.suites[name]; exists {
 			if !slices.Contains(suites, r.suites[name]) {
@@ -46,9 +46,9 @@ func Find(names []string) []TestSuite {
 	return suites
 }
 
-func register(suite TestSuite) {
+func Register(suite Suite) {
 	once.Do(func() {
-		r.suites = map[string]TestSuite{}
+		r.suites = map[string]Suite{}
 	})
 
 	r.mu.Lock()
