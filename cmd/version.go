@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	discclient "k8s.io/client-go/discovery"
 )
 
 var (
@@ -42,11 +41,7 @@ func printVersion() error {
 		return nil
 	}
 
-	config, err := restConfig()
-	if err != nil {
-		return err
-	}
-	dc, err := discclient.NewDiscoveryClientForConfig(config)
+	dc, err := discoveryClient()
 	if err != nil {
 		return err
 	}

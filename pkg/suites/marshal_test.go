@@ -1,6 +1,7 @@
 package suites
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -37,8 +38,11 @@ func (s *fakeSuite) IsReadWrite() bool {
 	return s.readWrite
 }
 
-func (s *fakeSuite) RunE(opts Options) (SuiteResult, error) {
+func (s *fakeSuite) RunE(ctx context.Context, opts Options) (SuiteResult, error) {
 	return SuiteResult{}, nil
+}
+
+func (s *fakeSuite) SetClients(clientSets *Clients) {
 }
 
 func TestMarshalerString(t *testing.T) {

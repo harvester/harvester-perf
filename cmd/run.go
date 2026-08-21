@@ -1,12 +1,18 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
 	"github.com/harvester/hperf/pkg/suites"
 
 	"github.com/spf13/cobra"
+)
+
+var (
+	runCmdClients *suites.Clients
+	includeWrite  bool
 )
 
 // runCmd represents the run command
@@ -21,14 +27,20 @@ specified as a list of comma-separated arguments.
 Use 'all' to run all test suites. By default, only "read-only" test suites are
 run. These tests do not create or modify any resources in the cluster. To include 
 "read-write" test suites, use 'all --include-write' flag.`,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		clientSets, err := configureClients()
+		if err != nil {
+			return err
+		}
+		runCmdClients = clientSets
+		return nil
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		suites := suites.Find(args)
 		results, errs := runSuites(suites)
 		return outRun(results, errs)
 	},
 }
-
-var includeWrite bool
 
 var runAllCmd = &cobra.Command{
 	Use:   "all",
@@ -39,8 +51,8 @@ By default, only "read-only" test suites are run. These tests do not create or
 modify any resources in the cluster. To include "read-write" test suites, use the
 '--include-write' flag.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		suites := suites.All(includeWrite)
-		results, errs := runSuites(suites)
+		testSuites := suites.All(includeWrite)
+		results, errs := runSuites(testSuites)
 		return outRun(results, errs)
 	},
 }
@@ -65,8 +77,10 @@ func runSuites(testSuites []suites.Suite) ([]*suites.SuiteResult, error) {
 		results []*suites.SuiteResult
 		errs    error
 	)
+	ctx := context.Background()
 	for _, suite := range testSuites {
-		result, err := runSuite(suite, suites.Options{})
+		suite = suites.WithClients(suite, runCmdClients)
+		result, err := runSuite(ctx, suite, suites.Options{})
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to run test suite %q: %w", suite, err))
 			continue
@@ -76,8 +90,8 @@ func runSuites(testSuites []suites.Suite) ([]*suites.SuiteResult, error) {
 	return results, errs
 }
 
-func runSuite(testSuite suites.Suite, opts suites.Options) (suites.SuiteResult, error) {
-	return testSuite.RunE(opts)
+func runSuite(ctx context.Context, testSuite suites.Suite, opts suites.Options) (suites.SuiteResult, error) {
+	return testSuite.RunE(ctx, opts)
 }
 
 func outRun(results []*suites.SuiteResult, errs error) error {

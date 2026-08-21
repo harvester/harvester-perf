@@ -1,7 +1,8 @@
 package suites
 
 import (
-	"github.com/harvester/hperf/pkg/suites"
+	"context"
+
 	pkgsuites "github.com/harvester/hperf/pkg/suites"
 )
 
@@ -30,6 +31,9 @@ func (s *NodeCapacitySuite) IsReadWrite() bool {
 	return false
 }
 
-func (s *NodeCapacitySuite) RunE(opts suites.Options) (pkgsuites.SuiteResult, error) {
+func (s *NodeCapacitySuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgsuites.SuiteResult, error) {
 	return pkgsuites.SuiteResult{}, nil
+}
+
+func (s *NodeCapacitySuite) SetClients(clientSets *pkgsuites.Clients) {
 }
