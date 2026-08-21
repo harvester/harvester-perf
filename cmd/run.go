@@ -66,7 +66,7 @@ func runSuites(testSuites []suites.Suite) ([]*suites.SuiteResult, error) {
 		errs    error
 	)
 	for _, suite := range testSuites {
-		result, err := runSuite(suite)
+		result, err := runSuite(suite, suites.Options{})
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to run test suite %q: %w", suite, err))
 			continue
@@ -76,10 +76,8 @@ func runSuites(testSuites []suites.Suite) ([]*suites.SuiteResult, error) {
 	return results, errs
 }
 
-func runSuite(testSuite suites.Suite) (suites.SuiteResult, error) {
-	var opts suites.SuiteOption
-	opts.Bind(testSuite)
-	return testSuite.RunE()
+func runSuite(testSuite suites.Suite, opts suites.Options) (suites.SuiteResult, error) {
+	return testSuite.RunE(opts)
 }
 
 func outRun(results []*suites.SuiteResult, errs error) error {

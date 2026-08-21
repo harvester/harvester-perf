@@ -1,18 +1,21 @@
 package suites
 
-import perfsuites "github.com/harvester/hperf/pkg/suites"
+import (
+	"github.com/harvester/hperf/pkg/suites"
+	pkgsuites "github.com/harvester/hperf/pkg/suites"
+)
 
-var _ perfsuites.Suite = &NodeCapacitySuite{}
+var _ pkgsuites.Suite = &NodeCapacitySuite{}
 
 func init() {
 	suite := &NodeCapacitySuite{}
 	suite.Marshal = suite
-	perfsuites.Register(suite)
+	pkgsuites.Register(suite)
 }
 
 // NodeCapacitySuite implements test suite to assess node resource capacity.
 type NodeCapacitySuite struct {
-	perfsuites.SuiteMarshaler
+	pkgsuites.SuiteMarshaler
 }
 
 func (s *NodeCapacitySuite) Name() string {
@@ -27,6 +30,6 @@ func (s *NodeCapacitySuite) IsReadWrite() bool {
 	return false
 }
 
-func (s *NodeCapacitySuite) RunE() (perfsuites.SuiteResult, error) {
-	return perfsuites.SuiteResult{}, nil
+func (s *NodeCapacitySuite) RunE(opts suites.Options) (pkgsuites.SuiteResult, error) {
+	return pkgsuites.SuiteResult{}, nil
 }

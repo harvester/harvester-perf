@@ -37,7 +37,7 @@ func (s *fakeSuite) IsReadWrite() bool {
 	return s.readWrite
 }
 
-func (s *fakeSuite) RunE() (SuiteResult, error) {
+func (s *fakeSuite) RunE(opts Options) (SuiteResult, error) {
 	return SuiteResult{}, nil
 }
 
