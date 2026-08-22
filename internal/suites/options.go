@@ -2,6 +2,8 @@ package suites
 
 import (
 	"encoding/json"
+
+	"github.com/harvester/hperf/internal/suites/etcd"
 )
 
 // FromOptions converts the given suites.Options to the specific options type V.
@@ -19,5 +21,5 @@ func FromOptions[V InternalOptions](opts any) (V, error) {
 }
 
 type InternalOptions interface {
-	EtcdBenchmarkSuiteOptions
+	etcd.BenchmarkOptions
 }

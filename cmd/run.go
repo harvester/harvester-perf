@@ -88,7 +88,6 @@ func runSuites(testSuites []suites.Suite) ([]*suites.SuiteResult, error) {
 	)
 	ctx := context.Background()
 	for _, suite := range testSuites {
-		fmt.Fprintf(os.Stderr, "[info] running test suite: %s\n", suite.Name())
 		suite = suites.WithClients(suite, runCmdClients)
 		result, err := runSuite(ctx, suite, suites.Options{})
 		if err != nil {

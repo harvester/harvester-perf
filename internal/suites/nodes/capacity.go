@@ -1,4 +1,4 @@
-package suites
+package nodes
 
 import (
 	"context"
@@ -33,7 +33,7 @@ func (s *NodeCapacitySuite) IsReadWrite() bool {
 
 func (s *NodeCapacitySuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgsuites.SuiteResult, error) {
 	return pkgsuites.SuiteResult{
-		TestRunID: s.Name(),
+		TestSuiteName: s.Name(),
 	}, nil
 }
 
