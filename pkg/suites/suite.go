@@ -4,6 +4,7 @@ import (
 	"context"
 
 	k8sclient "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 // Suite defines the interface that every test suite must implement.
@@ -23,12 +24,14 @@ type Options map[string]any
 // to interact with the cluster.
 type Clients struct {
 	K8sClientSet k8sclient.Interface
+	RestConfig   *rest.Config
 }
 
 // NewClients creates a new ClientSets with the provided K8s client set.
-func NewClients(k8sClientSet k8sclient.Interface) *Clients {
+func NewClients(k8sClientSet k8sclient.Interface, restConfig *rest.Config) *Clients {
 	return &Clients{
 		K8sClientSet: k8sClientSet,
+		RestConfig:   restConfig,
 	}
 }
 

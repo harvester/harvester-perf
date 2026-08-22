@@ -38,9 +38,14 @@ func discoveryClient() (discoveryclient.DiscoveryInterface, error) {
 // passed to the command line. Hence, this function should be called after the
 // command line flags are parsed.
 func configureClients() (*suites.Clients, error) {
+	restConfig, err := restConfig()
+	if err != nil {
+		return nil, err
+	}
+
 	k8sClientSet, err := k8sClientSet()
 	if err != nil {
 		return nil, err
 	}
-	return suites.NewClients(k8sClientSet), nil
+	return suites.NewClients(k8sClientSet, restConfig), nil
 }

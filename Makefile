@@ -64,7 +64,7 @@ IMAGE_PLATFORMS ?= linux/amd64
 IMAGE_OUTPUT_TYPE ?= docker
 
 image/run:
-	$(DOCKER) run --rm \
+	@$(DOCKER) run --rm \
 		--mount type=bind,src=$(HOME)/.kube,dst=/root/.kube,ro=true \
 		$(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_RUN_ARGS)
 

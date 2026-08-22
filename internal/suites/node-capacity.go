@@ -32,7 +32,9 @@ func (s *NodeCapacitySuite) IsReadWrite() bool {
 }
 
 func (s *NodeCapacitySuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgsuites.SuiteResult, error) {
-	return pkgsuites.SuiteResult{}, nil
+	return pkgsuites.SuiteResult{
+		TestRunID: s.Name(),
+	}, nil
 }
 
 func (s *NodeCapacitySuite) SetClients(clientSets *pkgsuites.Clients) {

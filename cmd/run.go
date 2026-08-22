@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/harvester/hperf/pkg/suites"
 
@@ -27,6 +29,7 @@ specified as a list of comma-separated arguments.
 Use 'all' to run all test suites. By default, only "read-only" test suites are
 run. These tests do not create or modify any resources in the cluster. To include 
 "read-write" test suites, use 'all --include-write' flag.`,
+	Args: cobra.MinimumNArgs(1),
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		clientSets, err := configureClients()
 		if err != nil {
@@ -37,8 +40,11 @@ run. These tests do not create or modify any resources in the cluster. To includ
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		suites := suites.Find(args)
-		results, errs := runSuites(suites)
-		return outRun(results, errs)
+		results, err := runSuites(suites)
+		if err != nil {
+			return err
+		}
+		return outRun(results)
 	},
 }
 
@@ -52,8 +58,11 @@ modify any resources in the cluster. To include "read-write" test suites, use th
 '--include-write' flag.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		testSuites := suites.All(includeWrite)
-		results, errs := runSuites(testSuites)
-		return outRun(results, errs)
+		results, err := runSuites(testSuites)
+		if err != nil {
+			return err
+		}
+		return outRun(results)
 	},
 }
 
@@ -79,10 +88,11 @@ func runSuites(testSuites []suites.Suite) ([]*suites.SuiteResult, error) {
 	)
 	ctx := context.Background()
 	for _, suite := range testSuites {
+		fmt.Fprintf(os.Stderr, "[info] running test suite: %s\n", suite.Name())
 		suite = suites.WithClients(suite, runCmdClients)
 		result, err := runSuite(ctx, suite, suites.Options{})
 		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to run test suite %q: %w", suite, err))
+			errs = errors.Join(errs, fmt.Errorf("failed to run test suite %q: %w", suite.Name(), err))
 			continue
 		}
 		results = append(results, &result)
@@ -94,6 +104,11 @@ func runSuite(ctx context.Context, testSuite suites.Suite, opts suites.Options) 
 	return testSuite.RunE(ctx, opts)
 }
 
-func outRun(results []*suites.SuiteResult, errs error) error {
-	return nil
+func outRun(results []*suites.SuiteResult) error {
+	out, err := json.Marshal(results)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(os.Stdout, "%s\n", out)
+	return err
 }
