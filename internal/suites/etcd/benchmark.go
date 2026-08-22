@@ -72,7 +72,7 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 	}
 
 	// issue exec command to run the etcdclt and benchmark tool in the job pod
-	out, outerr, err := s.execBenchmark(pod, o)
+	out, outerr, err := s.execHealthcheck(pod, o)
 	if err != nil {
 		return pkgsuites.SuiteResult{}, err
 	}
@@ -80,12 +80,13 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 	return pkgsuites.SuiteResult{
 		TestSuiteName: s.Name(),
 		TestRunID:     o.TestRunID,
+		IsSuccess:     outerr == "",
 		Out:           out,
 		Err:           outerr,
 	}, nil
 }
 
-func (s *BenchmarkSuite) execBenchmark(
+func (s *BenchmarkSuite) execHealthcheck(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 ) (string, string, error) {
@@ -95,7 +96,7 @@ func (s *BenchmarkSuite) execBenchmark(
 		"--key", fmt.Sprintf("%s/server-client.key", opts.EtcdRemoteTLSCertDir),
 	}
 	outArgs := []string{
-		"-w", "json",
+		"-w", opts.EtcdctlOutputFormat,
 	}
 	endpointsArgs := []string{
 		"--endpoints", opts.EtcdEndpoints,
@@ -171,6 +172,7 @@ type BenchmarkOptions struct {
 
 	EtcdBenchmarkLocalPath  string
 	EtcdctlLocalPath        string
+	EtcdctlOutputFormat     string
 	EtcdEndpoints           string
 	EtcdMetricsPort         int
 	EtcdRemoteTLSCertDir    string
@@ -197,6 +199,7 @@ func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
 
 		EtcdBenchmarkLocalPath:  "/usr/local/bin/benchmark",
 		EtcdctlLocalPath:        "/usr/local/bin/etcdctl",
+		EtcdctlOutputFormat:     "table",
 		EtcdEndpoints:           "https://127.0.0.1:2379",
 		EtcdRemoteCopyTargetDir: "/usr/local/bin/",
 		EtcdRemoteTLSCertDir:    "/host/rancher/rke2/server/tls/etcd",

@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/harvester/hperf/pkg/suites"
+	"go.yaml.in/yaml/v4"
 
 	"github.com/spf13/cobra"
 )
@@ -40,11 +42,12 @@ run. These tests do not create or modify any resources in the cluster. To includ
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		suites := suites.Find(args)
-		results, err := runSuites(suites)
+		outputFormat := *k8sPrintFlags.OutputFormat
+		results, err := runSuites(suites, outputFormat)
 		if err != nil {
 			return err
 		}
-		return outRun(results)
+		return outRun(results, outputFormat)
 	},
 }
 
@@ -58,11 +61,12 @@ modify any resources in the cluster. To include "read-write" test suites, use th
 '--include-write' flag.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		testSuites := suites.All(includeWrite)
-		results, err := runSuites(testSuites)
+		outputFormat := *k8sPrintFlags.OutputFormat
+		results, err := runSuites(testSuites, outputFormat)
 		if err != nil {
 			return err
 		}
-		return outRun(results)
+		return outRun(results, outputFormat)
 	},
 }
 
@@ -81,7 +85,7 @@ func init() {
 	}
 }
 
-func runSuites(testSuites []suites.Suite) ([]*suites.SuiteResult, error) {
+func runSuites(testSuites []suites.Suite, format string) ([]*suites.SuiteResult, error) {
 	var (
 		results []*suites.SuiteResult
 		errs    error
@@ -103,8 +107,25 @@ func runSuite(ctx context.Context, testSuite suites.Suite, opts suites.Options) 
 	return testSuite.RunE(ctx, opts)
 }
 
-func outRun(results []*suites.SuiteResult) error {
-	out, err := json.Marshal(results)
+func outRun(results []*suites.SuiteResult, format string) error {
+	var (
+		out []byte
+		err error
+	)
+	switch format {
+	case "json":
+		out, err = json.Marshal(results)
+	case "yaml":
+		out, err = yaml.Marshal(results)
+	case "table":
+		fallthrough
+	default:
+		var s []string
+		for _, result := range results {
+			s = append(s, result.String())
+		}
+		out = []byte(strings.Join(s, "\n"))
+	}
 	if err != nil {
 		return err
 	}
