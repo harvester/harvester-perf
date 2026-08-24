@@ -197,11 +197,11 @@ type BenchmarkOptions struct {
 
 func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
 	return &BenchmarkOptions{
-		TestRunID: time.Now().Format("20060102150405.000"),
+		TestRunID: time.Now().Format("20060102150405"),
 
 		EtcdBenchmarkLocalPath:  "/usr/local/bin/benchmark",
 		EtcdctlLocalPath:        "/usr/local/bin/etcdctl",
-		EtcdctlOutputFormat:     "table",
+		EtcdctlOutputFormat:     "json",
 		EtcdEndpoints:           "https://127.0.0.1:2379",
 		EtcdRemoteCopyTargetDir: "/usr/local/bin/",
 		EtcdRemoteTLSCertDir:    "/host/rancher/rke2/server/tls/etcd",

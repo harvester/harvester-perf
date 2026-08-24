@@ -25,11 +25,11 @@ func (s *BenchmarkSuite) ensureJobReady(
 	opts *BenchmarkOptions,
 	podReadyTimeout time.Duration,
 ) (*batchv1.Job, *corev1.Pod, error) {
-	jobName := "etcd-benchmark-" + opts.TestRunID
+	jobName := "etcd-benchmark-" + opts.TestRunID + "-"
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      jobName,
-			Namespace: opts.JobPodNamespace,
+			GenerateName: jobName,
+			Namespace:    opts.JobPodNamespace,
 		},
 		Spec: batchv1.JobSpec{
 			ActiveDeadlineSeconds:   new(int64(opts.JobActiveDeadline.Seconds())),
@@ -45,7 +45,7 @@ func (s *BenchmarkSuite) ensureJobReady(
 							Name:            opts.JobPodContainerName,
 							Image:           opts.JobPodImageName,
 							ImagePullPolicy: corev1.PullIfNotPresent,
-							Command:         []string{"/bin/bash", "-c", fmt.Sprintf("sleep %s", opts.JobActiveDeadline.Seconds())},
+							Command:         []string{"/bin/bash", "-c", fmt.Sprintf("sleep %v", opts.JobActiveDeadline.Seconds())},
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser:  new(int64(0)),
 								Privileged: new(true),
