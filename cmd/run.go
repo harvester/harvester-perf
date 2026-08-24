@@ -44,10 +44,7 @@ run. These tests do not create or modify any resources in the cluster. To includ
 		suites := suites.Find(args)
 		outputFormat := *k8sPrintFlags.OutputFormat
 		results, err := runSuites(suites, outputFormat)
-		if err != nil {
-			return err
-		}
-		return outRun(results, outputFormat)
+		return outRun(results, outputFormat, err)
 	},
 }
 
@@ -63,10 +60,7 @@ modify any resources in the cluster. To include "read-write" test suites, use th
 		testSuites := suites.All(includeWrite)
 		outputFormat := *k8sPrintFlags.OutputFormat
 		results, err := runSuites(testSuites, outputFormat)
-		if err != nil {
-			return err
-		}
-		return outRun(results, outputFormat)
+		return outRun(results, outputFormat, err)
 	},
 }
 
@@ -107,7 +101,10 @@ func runSuite(ctx context.Context, testSuite suites.Suite, opts suites.Options) 
 	return testSuite.RunE(ctx, opts)
 }
 
-func outRun(results []*suites.SuiteResult, format string) error {
+// outRun outputs the results of the test suites in the specified format (json,
+// yaml, or text). The slice of results is always marshaled and printed, even if
+// there are errors. This ensures useful partial results are not discarded.
+func outRun(results []*suites.SuiteResult, format string, runErr error) error {
 	var (
 		out []byte
 		err error
@@ -117,7 +114,7 @@ func outRun(results []*suites.SuiteResult, format string) error {
 		out, err = json.Marshal(results)
 	case "yaml":
 		out, err = yaml.Marshal(results)
-	case "table":
+	case "text":
 		fallthrough
 	default:
 		var s []string
@@ -126,9 +123,11 @@ func outRun(results []*suites.SuiteResult, format string) error {
 		}
 		out = []byte(strings.Join(s, "\n"))
 	}
-	if err != nil {
-		return err
+	if runErr != nil {
+		err = errors.Join(runErr, err)
 	}
-	_, err = fmt.Fprintf(os.Stdout, "%s\n", out)
+	if _, formatErr := fmt.Fprintf(os.Stdout, "%s\n", out); formatErr != nil {
+		err = errors.Join(formatErr, err)
+	}
 	return err
 }
