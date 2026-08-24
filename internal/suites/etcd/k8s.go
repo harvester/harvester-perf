@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,7 +20,11 @@ import (
 	"k8s.io/kubectl/pkg/scheme"
 )
 
-func (s *BenchmarkSuite) ensureJobReady(ctx context.Context, opts *BenchmarkOptions) (*batchv1.Job, *corev1.Pod, error) {
+func (s *BenchmarkSuite) ensureJobReady(
+	ctx context.Context,
+	opts *BenchmarkOptions,
+	podReadyTimeout time.Duration,
+) (*batchv1.Job, *corev1.Pod, error) {
 	jobName := "etcd-benchmark-" + opts.TestRunID
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -86,7 +91,9 @@ func (s *BenchmarkSuite) ensureJobReady(ctx context.Context, opts *BenchmarkOpti
 			return s.K8sClientSet.CoreV1().Pods(created.GetNamespace()).Watch(ctx, options)
 		},
 	}
-	event, err := watch.UntilWithSync(ctx, listWatch, &corev1.Pod{}, nil, func(event watchapi.Event) (bool, error) {
+	ctxWithTimeout, cancel := watch.ContextWithOptionalTimeout(ctx, podReadyTimeout)
+	defer cancel()
+	event, err := watch.UntilWithSync(ctxWithTimeout, listWatch, &corev1.Pod{}, nil, func(event watchapi.Event) (bool, error) {
 		pod, ok := event.Object.(*corev1.Pod)
 		if !ok {
 			return false, fmt.Errorf("unexpected object type: %T", event.Object)

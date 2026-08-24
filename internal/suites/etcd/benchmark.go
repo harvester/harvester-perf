@@ -59,7 +59,7 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 	// fmt.Fprintf(os.Stderr, "[info] test run ID: %s\n", custom.TestRunID)
 
 	// ensure the job is created and ready
-	job, pod, err := s.ensureJobReady(ctx, o)
+	job, pod, err := s.ensureJobReady(ctx, o, o.JobPodReadyTimeout)
 	if err != nil {
 		return pkgsuites.SuiteResult{}, err
 	}
@@ -185,6 +185,7 @@ type BenchmarkOptions struct {
 	JobPodNamespace        string
 	JobPodNode             string
 	JobPodTTLAfterFinished time.Duration
+	JobPodReadyTimeout     time.Duration
 	JobSuspend             bool
 
 	LoadSize   EtcdBenchmarkLoadSize
@@ -209,6 +210,7 @@ func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
 		JobPodImageName:        "registry.suse.com/bci/bci-base",
 		JobPodImageTag:         "latest",
 		JobPodNamespace:        "default",
+		JobPodReadyTimeout:     300 * time.Second,
 		JobPodTTLAfterFinished: 3600 * time.Second,
 	}
 }
