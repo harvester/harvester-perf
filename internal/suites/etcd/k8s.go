@@ -45,7 +45,7 @@ func (s *BenchmarkSuite) ensureJobReady(
 							Name:            opts.JobPodContainerName,
 							Image:           opts.JobPodImageName,
 							ImagePullPolicy: corev1.PullIfNotPresent,
-							Command:         []string{"/bin/bash", "-c", "sleep infinity"},
+							Command:         []string{"/bin/bash", "-c", fmt.Sprintf("sleep %s", opts.JobActiveDeadline.Seconds())},
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser:  new(int64(0)),
 								Privileged: new(true),
