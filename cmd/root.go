@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"os"
+	"context"
 
 	"github.com/spf13/cobra"
 )
@@ -16,11 +16,9 @@ It provides various commands to run test suites, collect metrics, and
 analyze results.`,
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
+// ExecuteContext adds all child commands to the root command and sets flags
+// appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
-		os.Exit(1)
-	}
+func ExecuteContext(ctx context.Context) error {
+	return rootCmd.ExecuteContext(ctx)
 }
