@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	pkgsuites "github.com/harvester/hperf/pkg/suites"
+	pkgsuites "github.com/harvester/hvperf/pkg/suites"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/kubectl/pkg/scheme"

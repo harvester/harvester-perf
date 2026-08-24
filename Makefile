@@ -43,7 +43,7 @@ go/build:
 		--env GOARCH=$(GOARCH) \
 		--env CGO_ENABLED="0" \
 		--env GOFLAGS="-trimpath" \
-		$(BUILD_IMAGE) bash -c "go build -ldflags \"-X github.com/harvester/hperf/cmd.Version=$(CLI_VERSION)\" -o /out/hperf ."
+		$(BUILD_IMAGE) bash -c "go build -ldflags \"-X github.com/harvester/hvperf/cmd.Version=$(CLI_VERSION)\" -o /out/hvperf ."
 
 go/test:
 	$(BUILD_CMD) $(BUILD_IMAGE) bash -c "go test -cover -race -shuffle=on ./..."
@@ -55,10 +55,10 @@ clean:
 	rm -rf bin
 
 ################################################################################
-# targets for building the hperf image and running it. the image consists of the
-# hperf CLI and other performance and benchmarking tools.
+# targets for building the hvperf image and running it. the image consists of the
+# hvperf CLI and other performance and benchmarking tools.
 ################################################################################
-IMAGE_NAME ?= hperf
+IMAGE_NAME ?= hvperf
 IMAGE_TAG ?= $(HARVESTER_VERSION)-$(COMMIT_SHA)
 IMAGE_PLATFORMS ?= linux/amd64
 IMAGE_OUTPUT_TYPE ?= docker

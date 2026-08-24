@@ -3,7 +3,7 @@ package nodes
 import (
 	"context"
 
-	pkgsuites "github.com/harvester/hperf/pkg/suites"
+	pkgsuites "github.com/harvester/hvperf/pkg/suites"
 )
 
 var _ pkgsuites.Suite = &NodeCapacitySuite{}

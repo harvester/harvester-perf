@@ -15,8 +15,8 @@ var (
 	// versionCmd represents the version command
 	versionCmd = &cobra.Command{
 		Use:   "version",
-		Short: "Display the version of hperf",
-		Long:  `Display the version of hperf.`,
+		Short: "Display the version of hvperf",
+		Long:  `Display the version of hvperf.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return printVersion()
 		},

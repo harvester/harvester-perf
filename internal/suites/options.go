@@ -3,7 +3,7 @@ package suites
 import (
 	"encoding/json"
 
-	"github.com/harvester/hperf/internal/suites/etcd"
+	"github.com/harvester/hvperf/internal/suites/etcd"
 )
 
 // FromOptions converts the given suites.Options to the specific options type V.

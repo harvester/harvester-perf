@@ -1,4 +1,4 @@
-module github.com/harvester/hperf
+module github.com/harvester/hvperf
 
 go 1.26.0
 

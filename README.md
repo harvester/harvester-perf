@@ -1,6 +1,6 @@
 # harvester-perf
 
-`hperf` is a CLI for running performance, capacity and benchmark test suites
+`hvperf` is a CLI for running performance, capacity and benchmark test suites
 against [SUSE Harvester](https://harvesterhci.io) clusters.
 
 Suites are driven from your workstation using an ordinary kubeconfig. Nothing is
@@ -14,20 +14,20 @@ etcd benchmark) schedule a short-lived helper pod and clean up after themselves.
 ## Quick start
 
 ```bash
-# build ./bin/hperf (runs the compiler inside a container, see Building)
+# build ./bin/hvperf (runs the compiler inside a container, see Building)
 make go/build
 
 # what can be run
-./bin/hperf list
+./bin/hvperf list
 
 # client and cluster versions
-./bin/hperf version
+./bin/hvperf version
 
 # run the read-only suites
-./bin/hperf run node-capacity
+./bin/hvperf run node-capacity
 
 # run every suite, including the ones that write to the cluster
-./bin/hperf run all --include-write
+./bin/hvperf run all --include-write
 ```
 
 Every command that talks to a cluster accepts the standard kubectl connection
@@ -35,10 +35,10 @@ flags (`--kubeconfig`, `--context`, `--namespace`, `--server`, `--as`, …), so
 targeting a specific cluster works the same way it does with `kubectl`:
 
 ```bash
-./bin/hperf run all --kubeconfig ~/.kube/harvester.yaml --context prod
+./bin/hvperf run all --kubeconfig ~/.kube/harvester.yaml --context prod
 ```
 
-The Dockerfile builds a container image with `hperf` and the tools the suites
+The Dockerfile builds a container image with `hvperf` and the tools the suites
 need to run in the cluster. For example, running the etcd suite from a locally
 built binary rather than the image will fail unless `etcdctl` and `benchmark` are
 present at `/usr/local/bin`. See [Container image](#container-image) for how to
@@ -48,19 +48,19 @@ build and run the image.
 
 | Command | Description |
 | --- | --- |
-| `hperf list` | List registered suites. `-o` accepts `table` (default), `name`, `json`, `yaml`. |
-| `hperf run <suite>...` | Run the named suites. Unknown names are ignored. |
-| `hperf run all [--include-write]` | Run all read-only suites; add `--include-write` to also run read-write suites. |
-| `hperf version [--client-only]` | Print the client version and, unless `--client-only` is set, the cluster's server version. |
-| `hperf report` | Placeholder — not implemented yet. |
+| `hvperf list` | List registered suites. `-o` accepts `table` (default), `name`, `json`, `yaml`. |
+| `hvperf run <suite>...` | Run the named suites. Unknown names are ignored. |
+| `hvperf run all [--include-write]` | Run all read-only suites; add `--include-write` to also run read-write suites. |
+| `hvperf version [--client-only]` | Print the client version and, unless `--client-only` is set, the cluster's server version. |
+| `hvperf report` | Placeholder — not implemented yet. |
 
 Results are written to stdout as table, JSON or YAML; suite progress is logged to
-stderr, so `hperf run ... > results.json` keeps the two streams separate.
+stderr, so `hvperf run ... > results.json` keeps the two streams separate.
 
 ## Test suites
 
 Suites are either **read-only** — they only query the API server — or
-**read-write**, meaning they create or modify cluster resources. `hperf run all`
+**read-write**, meaning they create or modify cluster resources. `hvperf run all`
 skips read-write suites unless `--include-write` is passed.
 
 | Suite | Mode | What it does |
@@ -76,7 +76,7 @@ the build container and output is written back as your own user, so no `sudo
 chown` dance afterwards.
 
 ```bash
-make go/build     # compile ./bin/hperf
+make go/build     # compile ./bin/hvperf
 make go/test      # go test -cover -race -shuffle=on ./...
 make go/tidy      # go mod tidy
 make clean        # remove ./bin
@@ -95,16 +95,16 @@ Useful overrides:
 GOOS=darwin GOARCH=arm64 make go/build
 ```
 
-To build natively instead, Go 1.26+ works directly: `go build -o bin/hperf .`
+To build natively instead, Go 1.26+ works directly: `go build -o bin/hvperf .`
 
 ## Container image
 
-The image bundles `hperf` with the tools the suites ship into the cluster:
+The image bundles `hvperf` with the tools the suites ship into the cluster:
 upstream `etcdctl` and `benchmark`, built from the etcd source at the version
 pinned in the Dockerfile (`ETCD_VERSION`, currently `v3.6.14`).
 
 ```bash
-make image/build                                    # -> hperf:<version>-<sha>
+make image/build                                    # -> hvperf:<version>-<sha>
 make image/run                                      # show version
 make image/run IMAGE_RUN_ARGS="list"                # mounts ~/.kube read-only
 make image/run IMAGE_RUN_ARGS="run etcd-benchmark"
@@ -125,7 +125,7 @@ Overrides: `IMAGE_NAME`, `IMAGE_TAG`, `IMAGE_PLATFORMS` (default
 │   ├── etcd/              # etcd-benchmark suite
 │   └── nodes/             # node-capacity suite
 ├── poc/                   # shell-based prototype this CLI is being ported from
-├── Dockerfile             # multi-stage: etcd tools + hperf -> BCI base runtime
+├── Dockerfile             # multi-stage: etcd tools + hvperf -> BCI base runtime
 └── Makefile               # containerised build, test and image targets
 ```
 

@@ -22,7 +22,7 @@ RUN git clone --depth 1 --branch "${ETCD_VERSION}" https://github.com/etcd-io/et
 # -------------------------------------------------------------------------------
 # build the harvester-perf binary
 # -------------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM registry.suse.com/bci/golang:${BCI_GO_TAG} AS hperf-builder
+FROM --platform=$BUILDPLATFORM registry.suse.com/bci/golang:${BCI_GO_TAG} AS hvperf-builder
 ARG TARGETOS \
   TARGETARCH
 ENV GOOS=${TARGETOS} \
@@ -40,7 +40,7 @@ COPY . .
 ARG CLI_VERSION
 RUN --mount=type=cache,target=/go/pkg/mod \
   --mount=type=cache,target=/root/.cache/go-build \
-  go build -ldflags "-X github.com/harvester/hperf/cmd.Version=${CLI_VERSION}" -o /out/hperf .
+  go build -ldflags "-X github.com/harvester/hvperf/cmd.Version=${CLI_VERSION}" -o /out/hvperf .
 
 # ---------------------------------------------------------------------------
 # build the harvester-perf image. this image includes all the performance and
@@ -60,12 +60,12 @@ RUN zypper --non-interactive --gpg-auto-import-keys refresh \
 
 COPY --from=etcd-builder /out/benchmark /usr/local/bin/benchmark
 COPY --from=etcd-builder /out/etcdctl /usr/local/bin/etcdctl
-COPY --from=hperf-builder /out/hperf /usr/local/bin/hperf
+COPY --from=hvperf-builder /out/hvperf /usr/local/bin/hvperf
 
 RUN set -eux ;\
   etcdctl version; \
   benchmark --help
 ENV KUBECONFIG=/root/.kube/config \
   ETCDCTL_API=3
-ENTRYPOINT ["/usr/local/bin/hperf"]
+ENTRYPOINT ["/usr/local/bin/hvperf"]
 CMD ["version"]

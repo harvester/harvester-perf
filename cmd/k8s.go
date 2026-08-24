@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/harvester/hperf/pkg/suites"
+	"github.com/harvester/hvperf/pkg/suites"
 	kcliopts "k8s.io/cli-runtime/pkg/genericclioptions"
 	discoveryclient "k8s.io/client-go/discovery"
 	k8sclient "k8s.io/client-go/kubernetes"
