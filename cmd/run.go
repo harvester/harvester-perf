@@ -41,7 +41,8 @@ run. These tests do not create or modify any resources in the cluster. To includ
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		suites := suites.Find(args)
+		argSuites := strings.Split(args[0], ",")
+		suites := suites.Find(argSuites)
 		outputFormat := *k8sPrintFlags.OutputFormat
 		results, err := runSuites(suites, outputFormat)
 		return outRun(results, outputFormat, err)
