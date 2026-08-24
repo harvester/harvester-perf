@@ -197,7 +197,7 @@ type BenchmarkOptions struct {
 
 func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
 	return &BenchmarkOptions{
-		TestRunID: time.Now().Format("20060102150405"),
+		TestRunID: time.Now().Format("20060102150405.000"),
 
 		EtcdBenchmarkLocalPath:  "/usr/local/bin/benchmark",
 		EtcdctlLocalPath:        "/usr/local/bin/etcdctl",
