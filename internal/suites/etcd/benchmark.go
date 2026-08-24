@@ -72,11 +72,17 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 	}
 
 	// issue exec command to run the etcdclt and benchmark tool in the job pod
-	out, outerr, err := s.execHealthcheck(ctx, pod, o)
+	healthOut, healthOutErr, err := s.execHealthcheck(ctx, pod, o, s.args(o)...)
+	if err != nil {
+		return pkgsuites.SuiteResult{}, err
+	}
+	benchOut, benchOutErr, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
 	if err != nil {
 		return pkgsuites.SuiteResult{}, err
 	}
 
+	out := healthOut + "\n" + benchOut
+	outerr := healthOutErr + "\n" + benchOutErr
 	return pkgsuites.SuiteResult{
 		TestSuiteName: s.Name(),
 		TestRunID:     o.TestRunID,
@@ -86,21 +92,26 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 	}, nil
 }
 
-func (s *BenchmarkSuite) execHealthcheck(
-	ctx context.Context,
-	pod *corev1.Pod,
-	opts *BenchmarkOptions,
-) (string, string, error) {
+func (s *BenchmarkSuite) args(opts *BenchmarkOptions) []string {
+	endpointsArgs := []string{
+		"--endpoints", opts.EtcdEndpoints,
+	}
 	tlsArgs := []string{
 		"--cacert", fmt.Sprintf("%s/server-ca.crt", opts.EtcdRemoteTLSCertDir),
 		"--cert", fmt.Sprintf("%s/server-client.crt", opts.EtcdRemoteTLSCertDir),
 		"--key", fmt.Sprintf("%s/server-client.key", opts.EtcdRemoteTLSCertDir),
 	}
+	return append(endpointsArgs, tlsArgs...)
+}
+
+func (s *BenchmarkSuite) execHealthcheck(
+	ctx context.Context,
+	pod *corev1.Pod,
+	opts *BenchmarkOptions,
+	args ...string,
+) (string, string, error) {
 	outArgs := []string{
 		"-w", opts.EtcdctlOutputFormat,
-	}
-	endpointsArgs := []string{
-		"--endpoints", opts.EtcdEndpoints,
 	}
 	cmds := [][]string{
 		{"etcdctl", "endpoint", "status"},
@@ -114,9 +125,90 @@ func (s *BenchmarkSuite) execHealthcheck(
 		bufErr = &bytes.Buffer{}
 	)
 	for _, cmd := range cmds {
-		cmd = append(cmd, endpointsArgs...)
-		cmd = append(cmd, tlsArgs...)
+		cmd = append(cmd, args...)
 		cmd = append(cmd, outArgs...)
+		req := s.K8sClientSet.CoreV1().RESTClient().
+			Post().
+			Resource("pods").
+			Name(pod.GetName()).
+			Namespace(pod.GetNamespace()).
+			SubResource("exec").
+			VersionedParams(&corev1.PodExecOptions{
+				Container: opts.JobPodContainerName,
+				Command:   cmd,
+				Stdin:     false,
+				Stdout:    true,
+				Stderr:    true,
+				TTY:       false,
+			}, scheme.ParameterCodec)
+		fmt.Fprintf(os.Stderr, "[info] remote exec to pod '%s'\n", pod.GetName())
+		fmt.Fprintf(os.Stderr, "[debug] exec cmd: %s\n", strings.Join(cmd, " "))
+
+		// setup spdy executor and exec the command in the pod
+		exec, err := remotecommand.NewSPDYExecutor(s.RestConfig, "POST", req.URL())
+		if err != nil {
+			return "", "", fmt.Errorf("failed to init SPDY executor: %w", err)
+		}
+
+		var (
+			bout = &bytes.Buffer{}
+			berr = &bytes.Buffer{}
+		)
+		if err := exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: bout,
+			Stderr: berr,
+		}); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to exec command '%s': %w", strings.Join(cmd, " "), err))
+			continue
+		}
+
+		// don't return on write-to-buffer error here, instead collect the stdout and
+		// stderr buffers for  all commands
+		if _, err := bufOut.Write(bout.Bytes()); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to write stdout buffer: %w", err))
+		}
+		if _, err := bufErr.Write(berr.Bytes()); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to write stderr buffer: %w", err))
+		}
+	}
+	return bufOut.String(), bufErr.String(), errs
+}
+
+func (s *BenchmarkSuite) execBenchmark(
+	ctx context.Context,
+	pod *corev1.Pod,
+	opts *BenchmarkOptions,
+	args ...string,
+) (string, string, error) {
+	cmds := [][]string{
+		{
+			"benchmark",
+			"--conns", fmt.Sprintf("%v", opts.GRPCConnCount),
+			"--clients", fmt.Sprintf("%v", opts.GRPCClientCount),
+			"put",
+			"--key-size", fmt.Sprintf("%v", "8"),
+			"--sequential-keys",
+			"--total", fmt.Sprintf("%v", opts.PutLoadSize),
+			"--val-size", fmt.Sprintf("%v", opts.PutValSize),
+		},
+		{
+			"benchmark",
+			"--conns", fmt.Sprintf("%v", opts.GRPCConnCount),
+			"--clients", fmt.Sprintf("%v", opts.GRPCClientCount),
+			"range",
+			"hvperf-probe",
+			"--consistency", opts.RangeConsistency,
+			"--total", fmt.Sprintf("%v", opts.PutLoadSize),
+		},
+	}
+
+	var (
+		errs   error
+		bufOut = &bytes.Buffer{}
+		bufErr = &bytes.Buffer{}
+	)
+	for _, cmd := range cmds {
+		cmd = append(cmd, args...)
 		req := s.K8sClientSet.CoreV1().RESTClient().
 			Post().
 			Resource("pods").
@@ -189,10 +281,11 @@ type BenchmarkOptions struct {
 	JobPodReadyTimeout     time.Duration
 	JobSuspend             bool
 
-	LoadSize   EtcdBenchmarkLoadSize
-	ConnSize   string
-	ClientSize string
-	ValSize    string
+	PutLoadSize      PutLoadSize
+	PutValSize       PutValSize
+	RangeConsistency string
+	GRPCConnCount    GRPCConnCount
+	GRPCClientCount  GRPCClientCount
 }
 
 func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
@@ -213,12 +306,36 @@ func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
 		JobPodNamespace:        "default",
 		JobPodReadyTimeout:     300 * time.Second,
 		JobPodTTLAfterFinished: 3600 * time.Second,
+
+		PutLoadSize:      DefaultLoadSize,
+		PutValSize:       DefaultPutValSize,
+		RangeConsistency: "l",
+		GRPCClientCount:  DefaultClientCount,
+		GRPCConnCount:    DefaultConnCount,
 	}
 }
 
-type EtcdBenchmarkLoadSize uint64
+type (
+	// PutLoadSize represents the total number of put requests
+	PutLoadSize uint64
+
+	// PutKeySize represents the size of the key in bytes for each put request
+	PutKeySize uint64
+
+	// PutValSize represents the size of the value in bytes for each put request
+	PutValSize uint64
+
+	// GRPCClientCount represents the number of grpc clients
+	GRPCClientCount uint64
+
+	// GRPCConnCount represents the number of grpc connections
+	GRPCConnCount uint64
+)
 
 const (
-	EtcdBenchmarkLoadSizeSmall  EtcdBenchmarkLoadSize = 10000
-	EtcdBenchmarkLoadSizeMedium EtcdBenchmarkLoadSize = 50000
+	DefaultLoadSize    PutLoadSize     = 10000
+	DefaultKeySize     PutKeySize      = 8
+	DefaultPutValSize  PutValSize      = 256
+	DefaultClientCount GRPCClientCount = 1
+	DefaultConnCount   GRPCConnCount   = 1
 )
