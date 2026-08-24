@@ -176,7 +176,7 @@ func (s *BenchmarkSuite) copyToolsToJobPod(ctx context.Context, pod *corev1.Pod,
 			return fmt.Errorf("failed to init SPDY executor: %w", err)
 		}
 
-		err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
+		err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 			Stdin:  &buf,
 			Stdout: os.Stdout,
 			Stderr: os.Stderr,

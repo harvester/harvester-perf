@@ -72,7 +72,7 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 	}
 
 	// issue exec command to run the etcdclt and benchmark tool in the job pod
-	out, outerr, err := s.execHealthcheck(pod, o)
+	out, outerr, err := s.execHealthcheck(ctx, pod, o)
 	if err != nil {
 		return pkgsuites.SuiteResult{}, err
 	}
@@ -87,6 +87,7 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 }
 
 func (s *BenchmarkSuite) execHealthcheck(
+	ctx context.Context,
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 ) (string, string, error) {
@@ -143,7 +144,7 @@ func (s *BenchmarkSuite) execHealthcheck(
 			bout = &bytes.Buffer{}
 			berr = &bytes.Buffer{}
 		)
-		if err := exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
+		if err := exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 			Stdout: bout,
 			Stderr: berr,
 		}); err != nil {
