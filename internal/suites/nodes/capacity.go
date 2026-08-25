@@ -33,7 +33,7 @@ func (s *NodeCapacitySuite) IsReadWrite() bool {
 
 func (s *NodeCapacitySuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgsuites.SuiteResult, error) {
 	return pkgsuites.SuiteResult{
-		TestSuiteName: s.Name(),
+		Name: s.Name(),
 	}, nil
 }
 

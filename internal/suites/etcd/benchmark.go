@@ -5,16 +5,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
+	"github.com/harvester/hvperf/pkg/suites"
 	pkgsuites "github.com/harvester/hvperf/pkg/suites"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/kubectl/pkg/scheme"
-
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/remotecommand"
+	"k8s.io/kubectl/pkg/scheme"
 )
 
 func init() {
@@ -71,24 +71,33 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 		return pkgsuites.SuiteResult{}, err
 	}
 
-	// issue exec command to run the etcdclt and benchmark tool in the job pod
+	// issue exec command to run the etcdctl tool in the job pod
+	var caseResults []*suites.CaseResult
 	healthOut, healthOutErr, err := s.execHealthcheck(ctx, pod, o, s.args(o)...)
-	if err != nil {
-		return pkgsuites.SuiteResult{}, err
-	}
-	benchOut, benchOutErr, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
-	if err != nil {
-		return pkgsuites.SuiteResult{}, err
-	}
+	caseResults = append(caseResults, &suites.CaseResult{
+		Description: "etcd healthcheck",
+		ObjMeta:     []metav1.Object{job, pod},
+		Success:     err != nil,
+		Out:         healthOut,
+		OutErr:      healthOutErr,
+		Err:         err,
+	})
 
-	out := healthOut + "\n" + benchOut
-	outerr := healthOutErr + "\n" + benchOutErr
+	// issue exec command to run the benchmark tool in the job pod
+	benchOut, benchOutErr, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
+	caseResults = append(caseResults, &suites.CaseResult{
+		Description: "etcd benchmark",
+		ObjMeta:     []metav1.Object{job, pod},
+		Success:     err != nil,
+		Out:         benchOut,
+		OutErr:      benchOutErr,
+		Err:         err,
+	})
+
 	return pkgsuites.SuiteResult{
-		TestSuiteName: s.Name(),
-		TestRunID:     o.TestRunID,
-		IsSuccess:     outerr == "",
-		Out:           out,
-		Err:           outerr,
+		Name:    s.Name(),
+		RunID:   o.TestRunID,
+		Results: caseResults,
 	}, nil
 }
 
