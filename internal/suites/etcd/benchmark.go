@@ -1,20 +1,17 @@
 package etcd
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"strings"
+	"io"
 	"time"
 
+	"github.com/harvester/hvperf/pkg/k8s"
 	pkgsuites "github.com/harvester/hvperf/pkg/suites"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/klog/v2"
-	"k8s.io/kubectl/pkg/scheme"
 )
 
 func init() {
@@ -58,36 +55,55 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 	// // TODO: merge custom options into defaults
 
 	// ensure the job is created and ready
-	job, pod, err := s.ensureJobReady(ctx, o, o.JobPodReadyTimeout)
+	job, pod, err := k8s.EnsureJobReady(ctx, s.Clients,
+		s.Name(),
+		o.TestRunID,
+		o.JobPodNamespace,
+		o.JobPodNode,
+		o.JobPodImageName+":"+o.JobPodImageTag,
+		o.JobActiveDeadline,
+		o.JobPodReadyTimeout,
+		o.JobPodTTLAfterFinished,
+		o.JobSuspend)
 	if err != nil {
 		return pkgsuites.SuiteResult{}, err
 	}
-	klog.V(3).Infof("job:'%s',pod:'%s',msg:'is now ready',phase:'%s'\n", job.GetName(), pod.GetName(), pod.Status.Phase)
+	klog.V(3).Infof("pod:'%s' is now ready, phase:'%s'\n", pod.GetName(), pod.Status.Phase)
 
 	// copy the etcdctl and benchmark binaries to the job pod. the job pod has a
 	// host mount to /var/lib/rancher, where the etcd tls certs are stored.
-	if err := s.copyToolsToJobPod(ctx, pod, o); err != nil {
+	klog.V(3).Infof("copying '%s' to pod '%s'\n",
+		fmt.Sprintf("%s,%s", o.EtcdctlLocalPath, o.EtcdBenchmarkLocalPath),
+		pod.GetName())
+	if err := k8s.CopyToJobPod(ctx,
+		s.Clients,
+		pod,
+		o.EtcdRemoteCopyTargetDir,
+		o.EtcdctlLocalPath,
+		o.EtcdBenchmarkLocalPath); err != nil {
 		return pkgsuites.SuiteResult{}, err
 	}
 
 	// issue exec command to run the etcdctl tool in the job pod
+	klog.V(3).Infof("running etcdctl healthcheck in pod '%s'\n", pod.GetName())
 	var caseResults []*pkgsuites.CaseResult
 	healthOut, err := s.execHealthcheck(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		Description: "etcd healthcheck",
 		ObjMeta:     []metav1.Object{job, pod},
 		Success:     err != nil,
-		Out:         healthOut,
+		Out:         string(healthOut),
 		Err:         err,
 	})
 
 	// issue exec command to run the benchmark tool in the job pod
+	klog.V(3).Infof("running etcd benchmark in pod '%s'\n", pod.GetName())
 	benchOut, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		Description: "etcd benchmark",
 		ObjMeta:     []metav1.Object{job, pod},
 		Success:     err != nil,
-		Out:         benchOut,
+		Out:         string(benchOut),
 		Err:         err,
 	})
 
@@ -115,7 +131,7 @@ func (s *BenchmarkSuite) execHealthcheck(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) (string, error) {
+) ([]byte, error) {
 	outArgs := []string{
 		"-w", opts.EtcdctlOutputFormat,
 	}
@@ -125,59 +141,17 @@ func (s *BenchmarkSuite) execHealthcheck(
 		{"etcdctl", "member", "list"},
 	}
 
-	var (
-		errs   error
-		bufOut = &bytes.Buffer{}
-		bufErr = &bytes.Buffer{}
-	)
+	cmdWithArgs := [][]string{}
 	for _, cmd := range cmds {
+		args = append(args, outArgs...)
 		cmd = append(cmd, args...)
-		cmd = append(cmd, outArgs...)
-		req := s.K8sClientSet.CoreV1().RESTClient().
-			Post().
-			Resource("pods").
-			Name(pod.GetName()).
-			Namespace(pod.GetNamespace()).
-			SubResource("exec").
-			VersionedParams(&corev1.PodExecOptions{
-				Container: opts.JobPodContainerName,
-				Command:   cmd,
-				Stdin:     false,
-				Stdout:    true,
-				Stderr:    true,
-				TTY:       false,
-			}, scheme.ParameterCodec)
-		klog.V(3).Infof("remote exec to pod '%s'\n", pod.GetName())
-		klog.V(3).Infof("exec cmd: %s\n", strings.Join(cmd, " "))
-
-		// setup spdy executor and exec the command in the pod
-		exec, err := remotecommand.NewSPDYExecutor(s.RestConfig, "POST", req.URL())
-		if err != nil {
-			return "", fmt.Errorf("failed to init SPDY executor: %w", err)
-		}
-
-		var (
-			bout = &bytes.Buffer{}
-			berr = &bytes.Buffer{}
-		)
-		if err := exec.StreamWithContext(ctx, remotecommand.StreamOptions{
-			Stdout: bout,
-			Stderr: berr,
-		}); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to exec command '%s': %w", strings.Join(cmd, " "), err))
-			continue
-		}
-
-		// don't return on write-to-buffer error here, instead collect the stdout and
-		// stderr buffers for  all commands
-		if _, err := bufOut.Write(bout.Bytes()); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to write stdout buffer: %w", err))
-		}
-		if _, err := bufErr.Write(berr.Bytes()); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to write stderr buffer: %w", err))
-		}
+		cmdWithArgs = append(cmdWithArgs, cmd)
 	}
-	return bufOut.String(), errs
+	r, err := k8s.ExecPod(ctx, s.Clients, pod, cmdWithArgs)
+	if err != nil {
+		return nil, err
+	}
+	return io.ReadAll(r)
 }
 
 func (s *BenchmarkSuite) execBenchmark(
@@ -185,7 +159,7 @@ func (s *BenchmarkSuite) execBenchmark(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) (string, error) {
+) ([]byte, error) {
 	cmds := [][]string{
 		{
 			"benchmark",
@@ -208,58 +182,16 @@ func (s *BenchmarkSuite) execBenchmark(
 		},
 	}
 
-	var (
-		errs   error
-		bufOut = &bytes.Buffer{}
-		bufErr = &bytes.Buffer{}
-	)
+	cmdWithArgs := [][]string{}
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
-		req := s.K8sClientSet.CoreV1().RESTClient().
-			Post().
-			Resource("pods").
-			Name(pod.GetName()).
-			Namespace(pod.GetNamespace()).
-			SubResource("exec").
-			VersionedParams(&corev1.PodExecOptions{
-				Container: opts.JobPodContainerName,
-				Command:   cmd,
-				Stdin:     false,
-				Stdout:    true,
-				Stderr:    true,
-				TTY:       false,
-			}, scheme.ParameterCodec)
-		klog.V(3).Infof("remote exec to pod '%s'\n", pod.GetName())
-		klog.V(3).Infof("exec cmd: %s\n", strings.Join(cmd, " "))
-
-		// setup spdy executor and exec the command in the pod
-		exec, err := remotecommand.NewSPDYExecutor(s.RestConfig, "POST", req.URL())
-		if err != nil {
-			return "", fmt.Errorf("failed to init SPDY executor: %w", err)
-		}
-
-		var (
-			bout = &bytes.Buffer{}
-			berr = &bytes.Buffer{}
-		)
-		if err := exec.StreamWithContext(ctx, remotecommand.StreamOptions{
-			Stdout: bout,
-			Stderr: berr,
-		}); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to exec command '%s': %w", strings.Join(cmd, " "), err))
-			continue
-		}
-
-		// don't return on write-to-buffer error here, instead collect the stdout and
-		// stderr buffers for  all commands
-		if _, err := bufOut.Write(bout.Bytes()); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to write stdout buffer: %w", err))
-		}
-		if _, err := bufErr.Write(berr.Bytes()); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to write stderr buffer: %w", err))
-		}
+		cmdWithArgs = append(cmdWithArgs, cmd)
 	}
-	return bufOut.String(), errs
+	r, err := k8s.ExecPod(ctx, s.Clients, pod, cmdWithArgs)
+	if err != nil {
+		return nil, err
+	}
+	return io.ReadAll(r)
 }
 
 func (s *BenchmarkSuite) SetClients(clients *pkgsuites.Clients) {
