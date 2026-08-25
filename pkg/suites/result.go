@@ -34,7 +34,6 @@ type CaseResult struct {
 	ObjMeta     []metav1.Object
 	Success     bool
 	Out         string
-	OutErr      string
 	Err         error
 }
 
@@ -59,8 +58,8 @@ func (c *CaseResult) String() string {
 	if c.Out != "" {
 		fmt.Fprintf(&b, "\n[stdout]\n%s", c.Out)
 	}
-	if c.OutErr != "" {
-		fmt.Fprintf(&b, "\n[stderr]\n%s", c.OutErr)
+	if c.Err != nil {
+		fmt.Fprintf(&b, "\n[err]\n%s", c.Err)
 	}
 
 	return b.String()

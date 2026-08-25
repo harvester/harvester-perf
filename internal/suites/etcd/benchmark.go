@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/remotecommand"
+	"k8s.io/klog/v2"
 	"k8s.io/kubectl/pkg/scheme"
 )
 
@@ -56,14 +56,13 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 	// 	return pkgsuites.SuiteResult{}, err
 	// }
 	// // TODO: merge custom options into defaults
-	// fmt.Fprintf(os.Stderr, "[info] test run ID: %s\n", custom.TestRunID)
 
 	// ensure the job is created and ready
 	job, pod, err := s.ensureJobReady(ctx, o, o.JobPodReadyTimeout)
 	if err != nil {
 		return pkgsuites.SuiteResult{}, err
 	}
-	fmt.Fprintf(os.Stderr, "[info] job:'%s',pod:'%s',msg:'is now ready',phase:'%s'\n", job.GetName(), pod.GetName(), pod.Status.Phase)
+	klog.V(3).Infof("job:'%s',pod:'%s',msg:'is now ready',phase:'%s'\n", job.GetName(), pod.GetName(), pod.Status.Phase)
 
 	// copy the etcdctl and benchmark binaries to the job pod. the job pod has a
 	// host mount to /var/lib/rancher, where the etcd tls certs are stored.
@@ -73,24 +72,22 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 
 	// issue exec command to run the etcdctl tool in the job pod
 	var caseResults []*pkgsuites.CaseResult
-	healthOut, healthOutErr, err := s.execHealthcheck(ctx, pod, o, s.args(o)...)
+	healthOut, err := s.execHealthcheck(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		Description: "etcd healthcheck",
 		ObjMeta:     []metav1.Object{job, pod},
 		Success:     err != nil,
 		Out:         healthOut,
-		OutErr:      healthOutErr,
 		Err:         err,
 	})
 
 	// issue exec command to run the benchmark tool in the job pod
-	benchOut, benchOutErr, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
+	benchOut, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		Description: "etcd benchmark",
 		ObjMeta:     []metav1.Object{job, pod},
 		Success:     err != nil,
 		Out:         benchOut,
-		OutErr:      benchOutErr,
 		Err:         err,
 	})
 
@@ -118,7 +115,7 @@ func (s *BenchmarkSuite) execHealthcheck(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) (string, string, error) {
+) (string, error) {
 	outArgs := []string{
 		"-w", opts.EtcdctlOutputFormat,
 	}
@@ -150,13 +147,13 @@ func (s *BenchmarkSuite) execHealthcheck(
 				Stderr:    true,
 				TTY:       false,
 			}, scheme.ParameterCodec)
-		fmt.Fprintf(os.Stderr, "[info] remote exec to pod '%s'\n", pod.GetName())
-		fmt.Fprintf(os.Stderr, "[debug] exec cmd: %s\n", strings.Join(cmd, " "))
+		klog.V(3).Infof("remote exec to pod '%s'\n", pod.GetName())
+		klog.V(3).Infof("exec cmd: %s\n", strings.Join(cmd, " "))
 
 		// setup spdy executor and exec the command in the pod
 		exec, err := remotecommand.NewSPDYExecutor(s.RestConfig, "POST", req.URL())
 		if err != nil {
-			return "", "", fmt.Errorf("failed to init SPDY executor: %w", err)
+			return "", fmt.Errorf("failed to init SPDY executor: %w", err)
 		}
 
 		var (
@@ -180,7 +177,7 @@ func (s *BenchmarkSuite) execHealthcheck(
 			errs = errors.Join(errs, fmt.Errorf("failed to write stderr buffer: %w", err))
 		}
 	}
-	return bufOut.String(), bufErr.String(), errs
+	return bufOut.String(), errs
 }
 
 func (s *BenchmarkSuite) execBenchmark(
@@ -188,7 +185,7 @@ func (s *BenchmarkSuite) execBenchmark(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) (string, string, error) {
+) (string, error) {
 	cmds := [][]string{
 		{
 			"benchmark",
@@ -232,13 +229,13 @@ func (s *BenchmarkSuite) execBenchmark(
 				Stderr:    true,
 				TTY:       false,
 			}, scheme.ParameterCodec)
-		fmt.Fprintf(os.Stderr, "[info] remote exec to pod '%s'\n", pod.GetName())
-		fmt.Fprintf(os.Stderr, "[debug] exec cmd: %s\n", strings.Join(cmd, " "))
+		klog.V(3).Infof("remote exec to pod '%s'\n", pod.GetName())
+		klog.V(3).Infof("exec cmd: %s\n", strings.Join(cmd, " "))
 
 		// setup spdy executor and exec the command in the pod
 		exec, err := remotecommand.NewSPDYExecutor(s.RestConfig, "POST", req.URL())
 		if err != nil {
-			return "", "", fmt.Errorf("failed to init SPDY executor: %w", err)
+			return "", fmt.Errorf("failed to init SPDY executor: %w", err)
 		}
 
 		var (
@@ -262,7 +259,7 @@ func (s *BenchmarkSuite) execBenchmark(
 			errs = errors.Join(errs, fmt.Errorf("failed to write stderr buffer: %w", err))
 		}
 	}
-	return bufOut.String(), bufErr.String(), errs
+	return bufOut.String(), errs
 }
 
 func (s *BenchmarkSuite) SetClients(clients *pkgsuites.Clients) {

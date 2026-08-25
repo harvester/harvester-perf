@@ -17,6 +17,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/client-go/tools/watch"
+	"k8s.io/klog/v2"
 	"k8s.io/kubectl/pkg/scheme"
 )
 
@@ -170,7 +171,7 @@ func (s *BenchmarkSuite) copyToolsToJobPod(ctx context.Context, pod *corev1.Pod,
 			}, scheme.ParameterCodec)
 
 		// setup spdy executor and stream the tar to the pod's stdin
-		fmt.Fprintf(os.Stderr, "[info] copying '%s' to pod '%s'\n", path, pod.GetName())
+		klog.V(3).Infof("copying '%s' to pod '%s'\n", path, pod.GetName())
 		exec, err := remotecommand.NewSPDYExecutor(s.RestConfig, "POST", req.URL())
 		if err != nil {
 			return fmt.Errorf("failed to init SPDY executor: %w", err)
