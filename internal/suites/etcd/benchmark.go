@@ -5,10 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
-	"github.com/harvester/hvperf/pkg/suites"
 	pkgsuites "github.com/harvester/hvperf/pkg/suites"
 
 	corev1 "k8s.io/api/core/v1"
@@ -72,9 +72,9 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 	}
 
 	// issue exec command to run the etcdctl tool in the job pod
-	var caseResults []*suites.CaseResult
+	var caseResults []*pkgsuites.CaseResult
 	healthOut, healthOutErr, err := s.execHealthcheck(ctx, pod, o, s.args(o)...)
-	caseResults = append(caseResults, &suites.CaseResult{
+	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		Description: "etcd healthcheck",
 		ObjMeta:     []metav1.Object{job, pod},
 		Success:     err != nil,
@@ -85,7 +85,7 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 
 	// issue exec command to run the benchmark tool in the job pod
 	benchOut, benchOutErr, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
-	caseResults = append(caseResults, &suites.CaseResult{
+	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		Description: "etcd benchmark",
 		ObjMeta:     []metav1.Object{job, pod},
 		Success:     err != nil,
