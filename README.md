@@ -1,5 +1,8 @@
 # harvester-perf
 
+This repository contains a collection of tools, pipelines and documentation for
+assessing Harvester performance and benchmark results.
+
 `hvperf` is a CLI for running performance, capacity and benchmark test suites
 against [SUSE Harvester](https://harvesterhci.io) clusters.
 
