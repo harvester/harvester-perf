@@ -47,7 +47,7 @@ func (s *BenchmarkSuite) IsReadWrite() bool {
 	return true
 }
 
-func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgsuites.SuiteResult, error) {
+func (s *BenchmarkSuite) RunE(ctx context.Context, runID string, opts pkgsuites.Options) (pkgsuites.SuiteResult, error) {
 	o := EtcdBenchmarkSuiteOptionsDefaults()
 	// custom, err := FromOptions(opts["etcd-benchmark"])
 	// if err != nil {
@@ -58,7 +58,7 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 	// ensure the job is created and ready
 	job, pod, err := k8s.EnsureJobReady(ctx, s.Clients,
 		s.Name(),
-		o.TestRunID,
+		runID,
 		o.JobPodNamespace,
 		o.JobPodNode,
 		o.JobPodImageName+":"+o.JobPodImageTag,
@@ -116,7 +116,7 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 
 	return pkgsuites.SuiteResult{
 		Name:    s.Name(),
-		RunID:   o.TestRunID,
+		RunID:   runID,
 		Results: caseResults,
 	}, nil
 }
@@ -210,8 +210,6 @@ func (s *BenchmarkSuite) SetClients(clients *pkgsuites.Clients) {
 }
 
 type BenchmarkOptions struct {
-	TestRunID string
-
 	EtcdBenchmarkLocalPath  string
 	EtcdctlLocalPath        string
 	EtcdctlOutputFormat     string
@@ -239,8 +237,6 @@ type BenchmarkOptions struct {
 
 func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
 	return &BenchmarkOptions{
-		TestRunID: time.Now().Format("20060102150405"),
-
 		EtcdBenchmarkLocalPath:  "/usr/local/bin/benchmark",
 		EtcdctlLocalPath:        "/usr/local/bin/etcdctl",
 		EtcdctlOutputFormat:     "simple",

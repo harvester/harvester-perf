@@ -12,7 +12,7 @@ type Suite interface {
 	Name() string
 	Description() string
 	IsReadWrite() bool
-	RunE(ctx context.Context, opt Options) (SuiteResult, error)
+	RunE(ctx context.Context, runID string, opt Options) (SuiteResult, error)
 	SetClients(clients *Clients)
 }
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/harvester/hvperf/pkg/suites"
 	"go.yaml.in/yaml/v4"
@@ -84,11 +85,12 @@ func runSuites(testSuites []suites.Suite, format string) ([]*suites.SuiteResult,
 	var (
 		results []*suites.SuiteResult
 		errs    error
+		runID   = time.Now().Format("20060102150405")
 	)
 	ctx := context.Background()
 	for _, suite := range testSuites {
 		suite = suites.WithClients(suite, runCmdClients)
-		result, err := runSuite(ctx, suite, suites.Options{})
+		result, err := runSuite(ctx, runID, suite, suites.Options{})
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to run test suite %q: %w", suite.Name(), err))
 			continue
@@ -98,8 +100,8 @@ func runSuites(testSuites []suites.Suite, format string) ([]*suites.SuiteResult,
 	return results, errs
 }
 
-func runSuite(ctx context.Context, testSuite suites.Suite, opts suites.Options) (suites.SuiteResult, error) {
-	return testSuite.RunE(ctx, opts)
+func runSuite(ctx context.Context, runID string, testSuite suites.Suite, opts suites.Options) (suites.SuiteResult, error) {
+	return testSuite.RunE(ctx, runID, opts)
 }
 
 // outRun outputs the results of the test suites in the specified format (json,
