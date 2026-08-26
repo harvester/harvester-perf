@@ -92,6 +92,7 @@ func EnsureJobReady(
 	if err != nil {
 		return nil, nil, err
 	}
+	created.SetGroupVersionKind(batchv1.SchemeGroupVersion.WithKind("Job"))
 
 	// wait till job pods are ready
 	labelSelector := batchv1.JobNameLabel
@@ -126,5 +127,6 @@ func EnsureJobReady(
 	}
 
 	jobPod := event.Object.(*corev1.Pod)
+	jobPod.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Pod"))
 	return created, jobPod, nil
 }

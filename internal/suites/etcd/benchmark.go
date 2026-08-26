@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -148,16 +149,18 @@ func (s *BenchmarkSuite) execHealthcheck(
 	}
 
 	cmdWithArgs := [][]string{}
+	args = append(args, outArgs...)
 	for _, cmd := range cmds {
-		args = append(args, outArgs...)
 		cmd = append(cmd, args...)
 		cmdWithArgs = append(cmdWithArgs, cmd)
 	}
 	r, err := k8s.ExecPod(ctx, s.Clients, pod, cmdWithArgs)
-	if err != nil {
-		return nil, err
+	// don't discard any partial outputs
+	if r != nil {
+		b, readErr := io.ReadAll(r)
+		return b, errors.Join(err, readErr)
 	}
-	return io.ReadAll(r)
+	return nil, err
 }
 
 func (s *BenchmarkSuite) execBenchmark(
@@ -194,10 +197,12 @@ func (s *BenchmarkSuite) execBenchmark(
 		cmdWithArgs = append(cmdWithArgs, cmd)
 	}
 	r, err := k8s.ExecPod(ctx, s.Clients, pod, cmdWithArgs)
-	if err != nil {
-		return nil, err
+	// don't discard any partial outputs
+	if r != nil {
+		b, readErr := io.ReadAll(r)
+		return b, errors.Join(err, readErr)
 	}
-	return io.ReadAll(r)
+	return nil, err
 }
 
 func (s *BenchmarkSuite) SetClients(clients *pkgsuites.Clients) {

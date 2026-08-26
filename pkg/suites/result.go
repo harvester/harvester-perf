@@ -72,7 +72,9 @@ func (c *CaseResult) String() string {
 	fmt.Fprintf(tab, "--- %s %s (%s)\n", result, c.CaseName, c.DateTimeEnd.Sub(c.DateTimeStart).Round(time.Millisecond))
 	fmt.Fprintf(tab, "%sStarted on:\t%s\n", indent, c.DateTimeStart.Format("2006-01-02T15:04:05Z07:00"))
 	fmt.Fprintf(tab, "%sEnded at:\t%s\n", indent, c.DateTimeEnd.Format("2006-01-02T15:04:05Z07:00"))
-	fmt.Fprintf(tab, "%sError:\t%v\n", indent, c.Err)
+	if c.Err != nil {
+		fmt.Fprintf(tab, "%sError:\t%v\n", indent, c.Err)
+	}
 
 	for i, obj := range c.Objects {
 		label := indent + "Objects:"
@@ -82,8 +84,13 @@ func (c *CaseResult) String() string {
 		fmt.Fprintf(tab, "%s\t%s\n", label, objectMeta(obj))
 	}
 
-	fmt.Fprintf(tab, "%sOutput:\n%s\n", indent, strings.TrimSpace(c.Out))
+	// flush the tabwriter before appending raw output, so the tabs within the raw
+	// output are treated as literal tabs, not column separators
 	tab.Flush()
+
+	if trimmed := strings.TrimSpace(c.Out); trimmed != "" {
+		fmt.Fprintf(&stringBuilder, "%sOutput:\n%s\n", indent, trimmed)
+	}
 	return stringBuilder.String()
 }
 
@@ -100,7 +107,7 @@ func objectMeta(obj runtime.Object) string {
 	}
 	ns := accessor.GetNamespace()
 	if ns == "" {
-		return fmt.Sprintf("%s (%s)", kind, accessor.GetName())
+		return fmt.Sprintf("(%s) %s", kind, accessor.GetName())
 	}
 	return fmt.Sprintf("(%s) %s/%s", kind, ns, accessor.GetName())
 }
