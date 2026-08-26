@@ -10,7 +10,7 @@ import (
 	pkgsuites "github.com/harvester/hvperf/pkg/suites"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 )
 
@@ -87,24 +87,30 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 	// issue exec command to run the etcdctl tool in the job pod
 	klog.V(3).Infof("running etcdctl healthcheck in pod '%s'\n", pod.GetName())
 	var caseResults []*pkgsuites.CaseResult
+	dateTimeStart := time.Now()
 	healthOut, err := s.execHealthcheck(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
-		CaseName: "etcd healthcheck",
-		ObjMeta:  []metav1.Object{job, pod},
-		Success:  err != nil,
-		Out:      string(healthOut),
-		Err:      err,
+		CaseName:      "etcd healthcheck",
+		DateTimeStart: dateTimeStart,
+		DateTimeEnd:   time.Now(),
+		Objects:       []runtime.Object{job, pod},
+		Success:       err == nil,
+		Out:           string(healthOut),
+		Err:           err,
 	})
 
 	// issue exec command to run the benchmark tool in the job pod
 	klog.V(3).Infof("running etcd benchmark in pod '%s'\n", pod.GetName())
+	dateTimeStart = time.Now()
 	benchOut, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
-		CaseName: "etcd benchmark",
-		ObjMeta:  []metav1.Object{job, pod},
-		Success:  err != nil,
-		Out:      string(benchOut),
-		Err:      err,
+		CaseName:      "etcd benchmark",
+		DateTimeStart: dateTimeStart,
+		DateTimeEnd:   time.Now(),
+		Objects:       []runtime.Object{job, pod},
+		Success:       err == nil,
+		Out:           string(benchOut),
+		Err:           err,
 	})
 
 	return pkgsuites.SuiteResult{
@@ -232,7 +238,7 @@ func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
 
 		EtcdBenchmarkLocalPath:  "/usr/local/bin/benchmark",
 		EtcdctlLocalPath:        "/usr/local/bin/etcdctl",
-		EtcdctlOutputFormat:     "json",
+		EtcdctlOutputFormat:     "simple",
 		EtcdEndpoints:           "https://127.0.0.1:2379",
 		EtcdRemoteCopyTargetDir: "/usr/local/bin/",
 		EtcdRemoteTLSCertDir:    "/host/rancher/rke2/server/tls/etcd",
