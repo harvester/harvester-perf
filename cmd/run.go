@@ -122,12 +122,12 @@ func outRun(results []*suites.SuiteResult, format string, runErr error) error {
 		for _, result := range results {
 			s = append(s, result.String())
 		}
-		out = []byte(strings.Join(s, "\n"))
+		out = []byte(strings.Join(s, "\n------------------------------------\n"))
 	}
 	if runErr != nil {
 		err = errors.Join(runErr, err)
 	}
-	if _, formatErr := fmt.Fprintf(os.Stdout, "%s\n", out); formatErr != nil {
+	if _, formatErr := fmt.Fprintf(os.Stdout, "%s", out); formatErr != nil {
 		err = errors.Join(formatErr, err)
 	}
 	return err

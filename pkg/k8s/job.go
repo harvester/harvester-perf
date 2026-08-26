@@ -126,5 +126,5 @@ func EnsureJobReady(
 	}
 
 	jobPod := event.Object.(*corev1.Pod)
-	return job, jobPod, nil
+	return created, jobPod, nil
 }

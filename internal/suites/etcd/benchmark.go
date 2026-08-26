@@ -89,22 +89,22 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgs
 	var caseResults []*pkgsuites.CaseResult
 	healthOut, err := s.execHealthcheck(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
-		Description: "etcd healthcheck",
-		ObjMeta:     []metav1.Object{job, pod},
-		Success:     err != nil,
-		Out:         string(healthOut),
-		Err:         err,
+		CaseName: "etcd healthcheck",
+		ObjMeta:  []metav1.Object{job, pod},
+		Success:  err != nil,
+		Out:      string(healthOut),
+		Err:      err,
 	})
 
 	// issue exec command to run the benchmark tool in the job pod
 	klog.V(3).Infof("running etcd benchmark in pod '%s'\n", pod.GetName())
 	benchOut, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
-		Description: "etcd benchmark",
-		ObjMeta:     []metav1.Object{job, pod},
-		Success:     err != nil,
-		Out:         string(benchOut),
-		Err:         err,
+		CaseName: "etcd benchmark",
+		ObjMeta:  []metav1.Object{job, pod},
+		Success:  err != nil,
+		Out:      string(benchOut),
+		Err:      err,
 	})
 
 	return pkgsuites.SuiteResult{

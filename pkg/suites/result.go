@@ -16,8 +16,8 @@ type SuiteResult struct {
 
 func (s *SuiteResult) String() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Name:%s\n", s.Name)
-	fmt.Fprintf(&b, "Name:%s\n", s.RunID)
+	fmt.Fprintf(&b, "Suite Name: %s\n", s.Name)
+	fmt.Fprintf(&b, "Run ID: %s\n", s.RunID)
 
 	var sr []string
 	for _, result := range s.Results {
@@ -30,16 +30,16 @@ func (s *SuiteResult) String() string {
 
 // CaseResult represents the result of a single test case execution.
 type CaseResult struct {
-	Description string
-	ObjMeta     []metav1.Object
-	Success     bool
-	Out         string
-	Err         error
+	CaseName string
+	ObjMeta  []metav1.Object
+	Success  bool
+	Out      string
+	Err      error
 }
 
 func (c *CaseResult) String() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Description: %s\n", c.Description)
+	fmt.Fprintf(&b, "Case Name: %s\n", c.CaseName)
 
 	result := "success"
 	if !c.Success {
@@ -56,7 +56,7 @@ func (c *CaseResult) String() string {
 	}
 
 	if c.Out != "" {
-		fmt.Fprintf(&b, "\n[stdout]\n%s", c.Out)
+		fmt.Fprintf(&b, "\n[stdout]\n%s", strings.TrimSpace(c.Out))
 	}
 	if c.Err != nil {
 		fmt.Fprintf(&b, "\n[err]\n%s", c.Err)
