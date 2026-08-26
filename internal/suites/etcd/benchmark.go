@@ -47,7 +47,12 @@ func (s *BenchmarkSuite) IsReadWrite() bool {
 	return true
 }
 
-func (s *BenchmarkSuite) RunE(ctx context.Context, runID string, opts pkgsuites.Options) (pkgsuites.SuiteResult, error) {
+func (s *BenchmarkSuite) RunE(
+	ctx context.Context,
+	runID string,
+	namespace string,
+	opts pkgsuites.Options,
+) (pkgsuites.SuiteResult, error) {
 	o := EtcdBenchmarkSuiteOptionsDefaults()
 	// custom, err := FromOptions(opts["etcd-benchmark"])
 	// if err != nil {
@@ -55,11 +60,17 @@ func (s *BenchmarkSuite) RunE(ctx context.Context, runID string, opts pkgsuites.
 	// }
 	// // TODO: merge custom options into defaults
 
+	nsReadyTimeout := 60 * time.Second
+	if _, err := k8s.EnsureNamespace(ctx, s.Clients, namespace, nsReadyTimeout); err != nil {
+		return pkgsuites.SuiteResult{}, err
+	}
+	klog.V(3).Infof("namespace:'%s' is now ready\n", namespace)
+
 	// ensure the job is created and ready
 	job, pod, err := k8s.EnsureJobReady(ctx, s.Clients,
 		s.Name(),
 		runID,
-		o.JobPodNamespace,
+		namespace,
 		o.JobPodNode,
 		o.JobPodImageName+":"+o.JobPodImageTag,
 		o.JobActiveDeadline,
@@ -222,7 +233,6 @@ type BenchmarkOptions struct {
 	JobPodContainerName    string
 	JobPodImageName        string
 	JobPodImageTag         string
-	JobPodNamespace        string
 	JobPodNode             string
 	JobPodTTLAfterFinished time.Duration
 	JobPodReadyTimeout     time.Duration
@@ -248,7 +258,6 @@ func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
 		JobPodContainerName:    "benchmark",
 		JobPodImageName:        "registry.suse.com/bci/bci-base",
 		JobPodImageTag:         "latest",
-		JobPodNamespace:        "default",
 		JobPodReadyTimeout:     300 * time.Second,
 		JobPodTTLAfterFinished: 3600 * time.Second,
 

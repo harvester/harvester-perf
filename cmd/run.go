@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/harvester/hvperf/pkg/k8s"
 	"github.com/harvester/hvperf/pkg/suites"
 	"go.yaml.in/yaml/v4"
 
@@ -83,14 +84,21 @@ func init() {
 
 func runSuites(testSuites []suites.Suite, format string) ([]*suites.SuiteResult, error) {
 	var (
-		results []*suites.SuiteResult
 		errs    error
-		runID   = time.Now().Format("20060102150405")
+		results []*suites.SuiteResult
+
+		ctx       = context.Background()
+		namespace = k8s.DefaultNamespace
+		runID     = time.Now().Format("20060102150405")
 	)
-	ctx := context.Background()
+
+	if k8sConfigFlags.Namespace != nil && *k8sConfigFlags.Namespace != "" {
+		namespace = *k8sConfigFlags.Namespace
+	}
+
 	for _, suite := range testSuites {
 		suite = suites.WithClients(suite, runCmdClients)
-		result, err := runSuite(ctx, runID, suite, suites.Options{})
+		result, err := runSuite(ctx, runID, namespace, suite, suites.Options{})
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to run test suite %q: %w", suite.Name(), err))
 			continue
@@ -100,8 +108,8 @@ func runSuites(testSuites []suites.Suite, format string) ([]*suites.SuiteResult,
 	return results, errs
 }
 
-func runSuite(ctx context.Context, runID string, testSuite suites.Suite, opts suites.Options) (suites.SuiteResult, error) {
-	return testSuite.RunE(ctx, runID, opts)
+func runSuite(ctx context.Context, runID, namespace string, testSuite suites.Suite, opts suites.Options) (suites.SuiteResult, error) {
+	return testSuite.RunE(ctx, runID, namespace, opts)
 }
 
 // outRun outputs the results of the test suites in the specified format (json,

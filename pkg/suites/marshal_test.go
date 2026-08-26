@@ -38,7 +38,7 @@ func (s *fakeSuite) IsReadWrite() bool {
 	return s.readWrite
 }
 
-func (s *fakeSuite) RunE(ctx context.Context, runID string, opts Options) (SuiteResult, error) {
+func (s *fakeSuite) RunE(ctx context.Context, runID, namespace string, opts Options) (SuiteResult, error) {
 	return SuiteResult{}, nil
 }
 
