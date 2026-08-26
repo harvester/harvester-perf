@@ -55,11 +55,11 @@ func (c *CaseResult) String() string {
 		fmt.Fprintf(&b, "\nObjectMeta:\n%s", strings.Join(metaStr, "\n"))
 	}
 
-	if c.Out != "" {
-		fmt.Fprintf(&b, "\n[stdout]\n%s", strings.TrimSpace(c.Out))
-	}
 	if c.Err != nil {
-		fmt.Fprintf(&b, "\n[err]\n%s", c.Err)
+		fmt.Fprintf(&b, "\nerr:\n%s", c.Err)
+	}
+	if c.Out != "" {
+		fmt.Fprintf(&b, "\n\n%s", strings.TrimSpace(c.Out))
 	}
 
 	return b.String()

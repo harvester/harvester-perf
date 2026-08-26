@@ -80,7 +80,7 @@ func CopyToJobPod(
 				TTY:       false,
 			}, scheme.ParameterCodec)
 
-		klog.V(5).Infof("exec cmd: %s\n", strings.Join(cmd, " "))
+		klog.V(5).Infof("exec cmd: %q\n", strings.Join(cmd, " "))
 
 		// setup spdy executor and stream the tar to the pod's stdin
 		exec, err := remotecommand.NewSPDYExecutor(c.RestConfig, "POST", req.URL())
@@ -111,7 +111,6 @@ func ExecPod(
 	var (
 		errs   error
 		bufOut = &bytes.Buffer{}
-		bufErr = &bytes.Buffer{}
 	)
 	for _, cmd := range cmdWithArgs {
 		req := c.K8sClientSet.CoreV1().RESTClient().
@@ -128,7 +127,7 @@ func ExecPod(
 				Stderr:    true,
 				TTY:       false,
 			}, scheme.ParameterCodec)
-		klog.V(5).Infof("exec cmd: %s\n", strings.Join(cmd, " "))
+		klog.V(5).Infof("exec cmd: %q\n", strings.Join(cmd, " "))
 
 		// setup spdy executor and exec the command in the pod
 		exec, err := remotecommand.NewSPDYExecutor(c.RestConfig, "POST", req.URL())
@@ -136,13 +135,17 @@ func ExecPod(
 			return nil, fmt.Errorf("failed to init SPDY executor: %w", err)
 		}
 
+		// buffer stdout of remote execution so that we can return it to the caller for
+		// rendering. meanwhile, stderr is streamed directly to klog to render progress
+		// of the command execution in real time.
 		var (
-			bout = &bytes.Buffer{}
-			berr = &bytes.Buffer{}
+			b = &bytes.Buffer{}
+			e = pipeToKlog(5)
 		)
+		defer closeWriter(e)
 		if err := exec.StreamWithContext(ctx, remotecommand.StreamOptions{
-			Stdout: bout,
-			Stderr: berr,
+			Stdout: b,
+			Stderr: e,
 		}); err != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to exec command '%s': %w", strings.Join(cmd, " "), err))
 			continue
@@ -150,11 +153,8 @@ func ExecPod(
 
 		// don't return on write-to-buffer error here, instead collect the stdout and
 		// stderr buffers for  all commands
-		if _, err := bufOut.Write(bout.Bytes()); err != nil {
+		if _, err := bufOut.Write(b.Bytes()); err != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to write stdout buffer: %w", err))
-		}
-		if _, err := bufErr.Write(berr.Bytes()); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to write stderr buffer: %w", err))
 		}
 	}
 	return bufOut, errs
