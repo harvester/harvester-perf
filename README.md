@@ -26,8 +26,11 @@ make go/build
 # client and cluster versions
 ./bin/hvperf version
 
-# run the read-only suites
+# run a single suite
 ./bin/hvperf run node-capacity
+
+# run several suites (one comma-separated argument, not a space-separated list)
+./bin/hvperf run node-capacity,etcd-benchmark
 
 # run every suite, including the ones that write to the cluster
 ./bin/hvperf run all --include-write
@@ -41,6 +44,10 @@ targeting a specific cluster works the same way it does with `kubectl`:
 ./bin/hvperf run all --kubeconfig ~/.kube/harvester.yaml --context prod
 ```
 
+Suites that create resources put them in the `harvester-system-perf` namespace,
+creating the namespace if it does not exist. Pass `--namespace` to use a
+different one.
+
 The Dockerfile builds a container image with `hvperf` and the tools the suites
 need to run in the cluster. For example, running the etcd suite from a locally
 built binary rather than the image will fail unless `etcdctl` and `benchmark` are
@@ -52,13 +59,15 @@ build and run the image.
 | Command | Description |
 | --- | --- |
 | `hvperf list` | List registered suites. `-o` accepts `table` (default), `name`, `json`, `yaml`. |
-| `hvperf run <suite>...` | Run the named suites. Unknown names are ignored. |
+| `hvperf run <suite>[,<suite>...]` | Run the named suites, given as a single comma-separated argument. Unknown names are ignored. `-o` accepts `text` (default), `json`, `yaml`. |
 | `hvperf run all [--include-write]` | Run all read-only suites; add `--include-write` to also run read-write suites. |
 | `hvperf version [--client-only]` | Print the client version and, unless `--client-only` is set, the cluster's server version. |
 | `hvperf report` | Placeholder — not implemented yet. |
 
-Results are written to stdout as table, JSON or YAML; suite progress is logged to
-stderr, so `hvperf run ... > results.json` keeps the two streams separate.
+Results are written to stdout; suite progress is logged to stderr, so
+`hvperf run ... -o json > results.json` keeps the two streams separate. Pass
+`-q`/`--quiet` to silence the progress logging, or `-v <level>` to raise it.
+Results are printed even when a suite fails, so partial output is not lost.
 
 ## Test suites
 
@@ -124,6 +133,7 @@ Overrides: `IMAGE_NAME`, `IMAGE_TAG`, `IMAGE_PLATFORMS` (default
 ├── main.go                # entry point; blank-imports internal/suites to register built-ins
 ├── cmd/                   # cobra command tree (root, list, run, report, version) and k8s client setup
 ├── pkg/suites/            # public API: Suite interface, registry, options, results, marshalling
+├── pkg/k8s/               # cluster helpers the suites share: namespaces, jobs, exec, logs
 ├── internal/suites/
 │   ├── etcd/              # etcd-benchmark suite
 │   └── nodes/             # node-capacity suite
@@ -146,12 +156,18 @@ Overrides: `IMAGE_NAME`, `IMAGE_TAG`, `IMAGE_PLATFORMS` (default
    func (s *MySuite) Name() string        { return "my-suite" }
    func (s *MySuite) Description() string { return "what it measures" }
    func (s *MySuite) IsReadWrite() bool   { return false }
-   func (s *MySuite) RunE(ctx context.Context, opts pkgsuites.Options) (pkgsuites.SuiteResult, error)
+   func (s *MySuite) RunE(ctx context.Context, runID, namespace string, opts pkgsuites.Options) (pkgsuites.SuiteResult, error)
    func (s *MySuite) SetClients(c *pkgsuites.Clients)
    ```
 
    Embedding `SuiteMarshaler` and setting `s.Marshal = s` at construction gives
    the suite its `list` table row and its JSON/YAML form for free.
+
+   `runID` is generated once per `hvperf run` invocation and shared by every
+   suite in it — use it to name and label anything the suite creates, and echo
+   it back in the `SuiteResult`. `namespace` is where those resources belong.
+   Record each check as a `CaseResult`; `Objects` is rendered as
+   `(Kind) namespace/name` in the text output.
 
 3. Register it from the package's `init()`:
 
