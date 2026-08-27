@@ -111,17 +111,33 @@ func (s *BenchmarkSuite) RunE(
 		Err:           err,
 	})
 
-	// issue exec command to run the benchmark tool in the job pod
-	klog.V(3).Infof("running etcd benchmark in pod '%s'\n", pod.GetName())
+	// issue exec commands to run the benchmark tool in the job pod
+	klog.V(3).Infof("running etcd benchmark (serial suite) in pod '%s'\n", pod.GetName())
 	dateTimeStart = time.Now()
-	benchOut, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
+	benchSerialOut, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd benchmark",
 		DateTimeStart: dateTimeStart,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
 		Success:       err == nil,
-		Out:           string(benchOut),
+		Out:           string(benchSerialOut),
+		Err:           err,
+	})
+
+	klog.V(3).Infof("running etcd benchmark (concurrent suite) in pod '%s'\n", pod.GetName())
+	dateTimeStart = time.Now()
+	o.PutLoadSize = DefaultConcurrentLoadSize
+	o.GRPCClientCount = DefaultConcurrentClientCount
+	o.GRPCConnCount = DefaultConcurrentConnCount
+	benchConcurrentOut, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
+	caseResults = append(caseResults, &pkgsuites.CaseResult{
+		CaseName:      "etcd benchmark",
+		DateTimeStart: dateTimeStart,
+		DateTimeEnd:   time.Now(),
+		Objects:       []runtime.Object{job, pod},
+		Success:       err == nil,
+		Out:           string(benchConcurrentOut),
 		Err:           err,
 	})
 
@@ -182,22 +198,34 @@ func (s *BenchmarkSuite) execBenchmark(
 ) ([]byte, error) {
 	cmds := [][]string{
 		{
+			// write serial
 			"benchmark",
 			"--conns", fmt.Sprintf("%v", opts.GRPCConnCount),
 			"--clients", fmt.Sprintf("%v", opts.GRPCClientCount),
 			"put",
-			"--key-size", fmt.Sprintf("%v", "8"),
+			"--key-size", fmt.Sprintf("%v", opts.PutKeySize),
 			"--sequential-keys",
 			"--total", fmt.Sprintf("%v", opts.PutLoadSize),
 			"--val-size", fmt.Sprintf("%v", opts.PutValSize),
 		},
 		{
+			// read linearizable
 			"benchmark",
 			"--conns", fmt.Sprintf("%v", opts.GRPCConnCount),
 			"--clients", fmt.Sprintf("%v", opts.GRPCClientCount),
 			"range",
 			"hvperf-probe",
-			"--consistency", opts.RangeConsistency,
+			"--consistency", DefaultRangeConsistencyLinearizable,
+			"--total", fmt.Sprintf("%v", opts.PutLoadSize),
+		},
+		{
+			// read serializable
+			"benchmark",
+			"--conns", fmt.Sprintf("%v", opts.GRPCConnCount),
+			"--clients", fmt.Sprintf("%v", opts.GRPCClientCount),
+			"range",
+			"hvperf-probe",
+			"--consistency", DefaultRangeConsistencySerializable,
 			"--total", fmt.Sprintf("%v", opts.PutLoadSize),
 		},
 	}
@@ -238,11 +266,11 @@ type BenchmarkOptions struct {
 	JobPodReadyTimeout     time.Duration
 	JobSuspend             bool
 
-	PutLoadSize      PutLoadSize
-	PutValSize       PutValSize
-	RangeConsistency string
-	GRPCConnCount    GRPCConnCount
-	GRPCClientCount  GRPCClientCount
+	PutLoadSize     PutLoadSize
+	PutKeySize      PutKeySize
+	PutValSize      PutValSize
+	GRPCConnCount   GRPCConnCount
+	GRPCClientCount GRPCClientCount
 }
 
 func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
@@ -261,11 +289,11 @@ func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
 		JobPodReadyTimeout:     300 * time.Second,
 		JobPodTTLAfterFinished: 3600 * time.Second,
 
-		PutLoadSize:      DefaultLoadSize,
-		PutValSize:       DefaultPutValSize,
-		RangeConsistency: "l",
-		GRPCClientCount:  DefaultClientCount,
-		GRPCConnCount:    DefaultConnCount,
+		PutLoadSize:     DefaultLoadSize,
+		PutKeySize:      DefaultKeySize,
+		PutValSize:      DefaultPutValSize,
+		GRPCClientCount: DefaultClientCount,
+		GRPCConnCount:   DefaultConnCount,
 	}
 }
 
@@ -287,9 +315,15 @@ type (
 )
 
 const (
-	DefaultLoadSize    PutLoadSize     = 10000
-	DefaultKeySize     PutKeySize      = 8
-	DefaultPutValSize  PutValSize      = 256
-	DefaultClientCount GRPCClientCount = 1
-	DefaultConnCount   GRPCConnCount   = 1
+	DefaultConcurrentClientCount        GRPCClientCount = 500
+	DefaultConcurrentConnCount          GRPCConnCount   = 100
+	DefaultConcurrentLoadSize           PutLoadSize     = 50000
+	DefaultRangeConsistencySerializable                 = "s"
+
+	DefaultClientCount                  GRPCClientCount = 1
+	DefaultConnCount                    GRPCConnCount   = 1
+	DefaultLoadSize                     PutLoadSize     = 10000
+	DefaultKeySize                      PutKeySize      = 8
+	DefaultPutValSize                   PutValSize      = 256
+	DefaultRangeConsistencyLinearizable                 = "l"
 )
