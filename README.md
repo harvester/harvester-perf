@@ -32,8 +32,8 @@ make go/build
 # run several suites (one comma-separated argument, not a space-separated list)
 ./bin/hvperf run node-capacity,etcd-benchmark
 
-# run every suite, including the ones that write to the cluster
-./bin/hvperf run all --include-write
+# run every registered suite
+./bin/hvperf run all
 ```
 
 Every command that talks to a cluster accepts the standard kubectl connection
@@ -60,7 +60,7 @@ build and run the image.
 | --- | --- |
 | `hvperf list` | List registered suites. `-o` accepts `table` (default), `name`, `json`, `yaml`. |
 | `hvperf run <suite>[,<suite>...]` | Run the named suites, given as a single comma-separated argument. Unknown names are ignored. `-o` accepts `text` (default), `json`, `yaml`. |
-| `hvperf run all [--include-write]` | Run all read-only suites; add `--include-write` to also run read-write suites. |
+| `hvperf run all` | Run every registered suite, read-only and read-write alike. |
 | `hvperf version [--client-only]` | Print the client version and, unless `--client-only` is set, the cluster's server version. |
 | `hvperf report` | Placeholder — not implemented yet. |
 
@@ -72,13 +72,14 @@ Results are printed even when a suite fails, so partial output is not lost.
 ## Test suites
 
 Suites are either **read-only** — they only query the API server — or
-**read-write**, meaning they create or modify cluster resources. `hvperf run all`
-skips read-write suites unless `--include-write` is passed.
+**read-write**, meaning they create or modify cluster resources. The mode is
+reported by `hvperf list`; it does not filter what `hvperf run all` runs, which
+is every registered suite.
 
 | Suite | Mode | What it does |
 | --- | --- | --- |
 | `node-capacity` | read-only | Assess node resource capacity. Registered and runnable, but the implementation is still a stub. |
-| `etcd-benchmark` | read-write | Inspects the cluster's etcd from a privileged `hostNetwork` job pod. |
+| `etcd-benchmark` | read-write | Exercises the cluster's etcd from a privileged `hostNetwork` job pod. |
 
 ## Building
 
@@ -120,7 +121,7 @@ make image/build                                    # -> hvperf:<version>-<sha>
 make image/run                                      # show version
 make image/run IMAGE_RUN_ARGS="list"                # mounts ~/.kube read-only
 make image/run IMAGE_RUN_ARGS="run etcd-benchmark"
-make image/run IMAGE_RUN_ARGS="run all --include-write"
+make image/run IMAGE_RUN_ARGS="run all"
 ```
 
 Overrides: `IMAGE_NAME`, `IMAGE_TAG`, `IMAGE_PLATFORMS` (default
@@ -136,7 +137,8 @@ Overrides: `IMAGE_NAME`, `IMAGE_TAG`, `IMAGE_PLATFORMS` (default
 ├── pkg/k8s/               # cluster helpers the suites share: namespaces, jobs, exec, logs
 ├── internal/suites/
 │   ├── etcd/              # etcd-benchmark suite
-│   └── nodes/             # node-capacity suite
+│   ├── nodes/             # node-capacity suite
+│   └── options/           # decodes the generic pkg/suites.Options into a suite's own options struct
 ├── poc/                   # shell-based prototype this CLI is being ported from
 ├── Dockerfile             # multi-stage: etcd tools + hvperf -> BCI base runtime
 └── Makefile               # containerised build, test and image targets

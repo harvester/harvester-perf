@@ -27,9 +27,8 @@ var runCmd = &cobra.Command{
 Works with a single test suite or multiple test suites. The test suites can be
 specified as a list of comma-separated arguments.
 
-Use 'all' to run all test suites. By default, only "read-only" test suites are
-run. These tests do not create or modify any resources in the cluster. To include 
-"read-write" test suites, use 'all --include-write' flag.`,
+Use 'all' to run every registered test suite, both "read-only" and "read-write".
+"read-write" test suites create or modify resources in the cluster.`,
 	Args: cobra.MinimumNArgs(1),
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		clientSets, err := configureClients()
@@ -53,9 +52,8 @@ var runAllCmd = &cobra.Command{
 	Short: "Run all the performance test suites",
 	Long: `Run all the performance test suites.
 
-By default, only "read-only" test suites are run. These tests do not create or
-modify any resources in the cluster. To include "read-write" test suites, use the
-'--include-write' flag.`,
+Every registered test suite is run, both "read-only" and "read-write".
+"read-write" test suites create or modify resources in the cluster.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		testSuites := suites.All()
 		outputFormat := *k8sPrintFlags.OutputFormat
