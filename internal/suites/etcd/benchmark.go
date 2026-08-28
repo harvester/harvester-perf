@@ -111,6 +111,17 @@ func (s *BenchmarkSuite) RunE(
 		Err:           err,
 	})
 
+	checkPerfOut, err := s.execCheckPerf(ctx, pod, o, s.args(o)...)
+	caseResults = append(caseResults, &pkgsuites.CaseResult{
+		CaseName:      "etcd check perf",
+		DateTimeStart: dateTimeStart,
+		DateTimeEnd:   time.Now(),
+		Objects:       []runtime.Object{job, pod},
+		Success:       err == nil,
+		Out:           string(checkPerfOut),
+		Err:           err,
+	})
+
 	// issue exec commands to run the benchmark tool in the job pod
 	klog.V(3).Infof("running etcd benchmark (serial suite) in pod '%s'\n", pod.GetName())
 	dateTimeStart = time.Now()
@@ -173,6 +184,35 @@ func (s *BenchmarkSuite) execHealthcheck(
 		{"etcdctl", "endpoint", "status"},
 		{"etcdctl", "endpoint", "health"},
 		{"etcdctl", "member", "list"},
+	}
+
+	cmdWithArgs := [][]string{}
+	args = append(args, outArgs...)
+	for _, cmd := range cmds {
+		cmd = append(cmd, args...)
+		cmdWithArgs = append(cmdWithArgs, cmd)
+	}
+	r, err := k8s.ExecPod(ctx, s.Clients, pod, cmdWithArgs)
+	// don't discard any partial outputs
+	if r != nil {
+		b, readErr := io.ReadAll(r)
+		return b, errors.Join(err, readErr)
+	}
+	return nil, err
+}
+
+func (s *BenchmarkSuite) execCheckPerf(
+	ctx context.Context,
+	pod *corev1.Pod,
+	opts *BenchmarkOptions,
+	args ...string,
+) ([]byte, error) {
+	outArgs := []string{
+		"-w", opts.EtcdctlOutputFormat,
+		"--load", opts.CheckPerfLoadSize,
+	}
+	cmds := [][]string{
+		{"etcdctl", "check", "perf"},
 	}
 
 	cmdWithArgs := [][]string{}
@@ -266,11 +306,12 @@ type BenchmarkOptions struct {
 	JobPodReadyTimeout     time.Duration
 	JobSuspend             bool
 
-	PutLoadSize     PutLoadSize
-	PutKeySize      PutKeySize
-	PutValSize      PutValSize
-	GRPCConnCount   GRPCConnCount
-	GRPCClientCount GRPCClientCount
+	CheckPerfLoadSize string
+	PutLoadSize       uint64
+	PutKeySize        uint64
+	PutValSize        uint64
+	GRPCConnCount     uint64
+	GRPCClientCount   uint64
 }
 
 func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
@@ -289,41 +330,26 @@ func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
 		JobPodReadyTimeout:     300 * time.Second,
 		JobPodTTLAfterFinished: 3600 * time.Second,
 
-		PutLoadSize:     DefaultLoadSize,
-		PutKeySize:      DefaultKeySize,
-		PutValSize:      DefaultPutValSize,
-		GRPCClientCount: DefaultClientCount,
-		GRPCConnCount:   DefaultConnCount,
+		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
+		PutLoadSize:       DefaultLoadSize,
+		PutKeySize:        DefaultKeySize,
+		PutValSize:        DefaultPutValSize,
+		GRPCClientCount:   DefaultClientCount,
+		GRPCConnCount:     DefaultConnCount,
 	}
 }
 
-type (
-	// PutLoadSize represents the total number of put requests
-	PutLoadSize uint64
-
-	// PutKeySize represents the size of the key in bytes for each put request
-	PutKeySize uint64
-
-	// PutValSize represents the size of the value in bytes for each put request
-	PutValSize uint64
-
-	// GRPCClientCount represents the number of grpc clients
-	GRPCClientCount uint64
-
-	// GRPCConnCount represents the number of grpc connections
-	GRPCConnCount uint64
-)
-
 const (
-	DefaultConcurrentClientCount        GRPCClientCount = 500
-	DefaultConcurrentConnCount          GRPCConnCount   = 100
-	DefaultConcurrentLoadSize           PutLoadSize     = 50000
-	DefaultRangeConsistencySerializable                 = "s"
+	DefaultConcurrentClientCount        = 500
+	DefaultConcurrentConnCount          = 100
+	DefaultConcurrentLoadSize           = 50000
+	DefaultRangeConsistencySerializable = "s"
 
-	DefaultClientCount                  GRPCClientCount = 1
-	DefaultConnCount                    GRPCConnCount   = 1
-	DefaultLoadSize                     PutLoadSize     = 10000
-	DefaultKeySize                      PutKeySize      = 8
-	DefaultPutValSize                   PutValSize      = 256
-	DefaultRangeConsistencyLinearizable                 = "l"
+	DefaultCheckPerfLoadSize            = "s"
+	DefaultClientCount                  = 1
+	DefaultConnCount                    = 1
+	DefaultLoadSize                     = 10000
+	DefaultKeySize                      = 8
+	DefaultPutValSize                   = 256
+	DefaultRangeConsistencyLinearizable = "l"
 )
