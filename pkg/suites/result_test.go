@@ -2,6 +2,8 @@ package suites
 
 import (
 	"errors"
+	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +24,111 @@ func newPod(namespace, name string) *corev1.Pod {
 	return &corev1.Pod{
 		TypeMeta:   metav1.TypeMeta{Kind: "Pod", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
+	}
+}
+
+// fakeOptions stands in for a suite's options struct, such as the
+// etcd suite's BenchmarkOptions. Only the primitive field kinds that the
+// options structs use are covered.
+type fakeOptions struct {
+	EtcdEndpoints      string
+	EtcdMetricsPort    int
+	PutLoadSize        uint64
+	JobSuspend         bool
+	JobPodReadyTimeout time.Duration
+	unexported         string //nolint:unused // asserts that ToSuiteParams skips it
+}
+
+func TestToSuiteParams(t *testing.T) {
+	opts := fakeOptions{
+		EtcdEndpoints:      "https://127.0.0.1:2379",
+		EtcdMetricsPort:    2381,
+		PutLoadSize:        10000,
+		JobSuspend:         true,
+		JobPodReadyTimeout: 90 * time.Second,
+		unexported:         "hidden",
+	}
+	expected := []*SuiteParam{
+		{Key: "EtcdEndpoints", Value: "https://127.0.0.1:2379"},
+		{Key: "EtcdMetricsPort", Value: "2381"},
+		{Key: "PutLoadSize", Value: "10000"},
+		{Key: "JobSuspend", Value: "true"},
+		{Key: "JobPodReadyTimeout", Value: "1m30s"},
+	}
+
+	testCases := []struct {
+		name     string
+		opts     any
+		expected []*SuiteParam
+	}{
+		{
+			name:     "struct value",
+			opts:     opts,
+			expected: expected,
+		},
+		{
+			name:     "pointer to struct is dereferenced",
+			opts:     &opts,
+			expected: expected,
+		},
+		{
+			name: "zero value struct",
+			opts: fakeOptions{},
+			expected: []*SuiteParam{
+				{Key: "EtcdEndpoints", Value: ""},
+				{Key: "EtcdMetricsPort", Value: "0"},
+				{Key: "PutLoadSize", Value: "0"},
+				{Key: "JobSuspend", Value: "false"},
+				{Key: "JobPodReadyTimeout", Value: "0s"},
+			},
+		},
+		{
+			name:     "empty struct",
+			opts:     struct{}{},
+			expected: []*SuiteParam{},
+		},
+		{
+			name:     "nil pointer",
+			opts:     (*fakeOptions)(nil),
+			expected: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ToSuiteParams(tc.opts)
+			if err != nil {
+				t.Fatalf("ToSuiteParams() error = %v, want nil", err)
+			}
+			if !reflect.DeepEqual(got, tc.expected) {
+				t.Errorf("ToSuiteParams() = %+v, want %+v", got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestToSuiteParamsAndString(t *testing.T) {
+	opts := fakeOptions{
+		EtcdEndpoints:      "https://127.0.0.1:2379",
+		EtcdMetricsPort:    2381,
+		PutLoadSize:        10000,
+		JobSuspend:         true,
+		JobPodReadyTimeout: 90 * time.Second,
+		unexported:         "hidden",
+	}
+	actual, err := ToSuiteParams(opts) // just to see the output in the test log
+	if err != nil {
+		t.Fatalf("ToSuiteParams() error = %v, want nil", err)
+	}
+	expected := []string{
+		"EtcdEndpoints=https://127.0.0.1:2379",
+		"EtcdMetricsPort=2381",
+		"PutLoadSize=10000",
+		"JobSuspend=true",
+		"JobPodReadyTimeout=1m30s",
+	}
+	if !reflect.DeepEqual(fmt.Sprint(actual), fmt.Sprint(expected)) {
+		t.Errorf("ToSuiteParamsAndString() = %s, want %s", actual, expected)
 	}
 }
 

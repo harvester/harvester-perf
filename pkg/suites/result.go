@@ -2,6 +2,7 @@ package suites
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -15,6 +16,7 @@ const indent = "    "
 // SuiteResult represents the result of a test suite execution.
 type SuiteResult struct {
 	Name    string
+	Params  []*SuiteParam
 	RunID   string
 	Results []*CaseResult
 }
@@ -26,6 +28,14 @@ func (s *SuiteResult) String() string {
 	)
 
 	fmt.Fprintf(&stringBuilder, "=== SUITE %s (run %s)\n", s.Name, s.RunID)
+	for i, param := range s.Params {
+		label := indent + "Params:"
+		if i > 0 {
+			label = indent
+		}
+		fmt.Fprintf(&stringBuilder, "%s\t%s\n", label, param)
+	}
+
 	for _, result := range s.Results {
 		results = append(results, result.String())
 	}
@@ -48,9 +58,51 @@ func (s *SuiteResult) summary() (passed int, failed int, total int) {
 	return
 }
 
+// SuiteParam represents the parameters used to configure a test suite. They are
+// derived from the suite's internal options struct, used for reporting purposes only.
+type SuiteParam struct {
+	Key   string
+	Value string
+}
+
+func (s *SuiteParam) String() string {
+	return fmt.Sprintf("%s=%s", s.Key, s.Value)
+}
+
+// ToSuiteParams converts a struct of options into a slice of SuiteParams for
+// reporting purposes. For example, in the `etcd#BenchmarkSuite`, opts would be
+// the `etcd#BenchmarkSuiteOptions` struct.
+func ToSuiteParams(opts any) ([]*SuiteParam, error) {
+	val := reflect.ValueOf(opts)
+	for val.Kind() == reflect.Pointer {
+		if val.IsNil() {
+			return nil, nil
+		}
+		val = val.Elem()
+	}
+	if val.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("can't generate []SuiteParams. expected a struct, got %s", val.Kind())
+	}
+
+	valType := val.Type()
+	params := []*SuiteParam{}
+	for i := 0; i < valType.NumField(); i++ {
+		field := valType.Field(i)
+		if !field.IsExported() {
+			continue
+		}
+		params = append(params, &SuiteParam{
+			Key:   field.Name,
+			Value: fmt.Sprintf("%v", val.Field(i)),
+		})
+	}
+	return params, nil
+}
+
 // CaseResult represents the result of a single test case execution.
 type CaseResult struct {
 	CaseName      string
+	Cmds          [][]string
 	DateTimeStart time.Time
 	DateTimeEnd   time.Time
 	Objects       []runtime.Object
@@ -72,6 +124,13 @@ func (c *CaseResult) String() string {
 	fmt.Fprintf(tab, "--- %s %s (%s)\n", result, c.CaseName, c.DateTimeEnd.Sub(c.DateTimeStart).Round(time.Millisecond))
 	fmt.Fprintf(tab, "%sStarted on:\t%s\n", indent, c.DateTimeStart.Format("2006-01-02T15:04:05Z07:00"))
 	fmt.Fprintf(tab, "%sEnded at:\t%s\n", indent, c.DateTimeEnd.Format("2006-01-02T15:04:05Z07:00"))
+	for i, cmd := range c.Cmds {
+		label := indent + "Cmds:"
+		if i > 0 {
+			label = indent
+		}
+		fmt.Fprintf(tab, "%s\t%s\n", label, strings.Join(cmd, " "))
+	}
 	if c.Err != nil {
 		fmt.Fprintf(tab, "%sError:\t%v\n", indent, c.Err)
 	}

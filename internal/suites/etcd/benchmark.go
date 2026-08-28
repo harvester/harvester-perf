@@ -105,9 +105,10 @@ func (s *BenchmarkSuite) RunE(
 	klog.V(3).Infof("running etcdctl healthcheck in pod '%s'\n", pod.GetName())
 	var caseResults []*pkgsuites.CaseResult
 	dateTimeStart := time.Now()
-	healthOut, err := s.execHealthcheck(ctx, pod, o, s.args(o)...)
+	healthOut, cmds, err := s.execHealthcheck(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd healthcheck",
+		Cmds:          cmds,
 		DateTimeStart: dateTimeStart,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
@@ -116,9 +117,10 @@ func (s *BenchmarkSuite) RunE(
 		Err:           err,
 	})
 
-	checkPerfOut, err := s.execCheckPerf(ctx, pod, o, s.args(o)...)
+	checkPerfOut, cmds, err := s.execCheckPerf(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd check perf",
+		Cmds:          cmds,
 		DateTimeStart: dateTimeStart,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
@@ -130,9 +132,10 @@ func (s *BenchmarkSuite) RunE(
 	// issue exec commands to run the benchmark tool in the job pod
 	klog.V(3).Infof("running etcd benchmark (serial suite) in pod '%s'\n", pod.GetName())
 	dateTimeStart = time.Now()
-	benchSerialOut, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
+	benchSerialOut, cmds, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd benchmark",
+		Cmds:          cmds,
 		DateTimeStart: dateTimeStart,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
@@ -146,9 +149,10 @@ func (s *BenchmarkSuite) RunE(
 	o.PutLoadSize = DefaultConcurrentLoadSize
 	o.GRPCClientCount = DefaultConcurrentClientCount
 	o.GRPCConnCount = DefaultConcurrentConnCount
-	benchConcurrentOut, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
+	benchConcurrentOut, cmds, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd benchmark",
+		Cmds:          cmds,
 		DateTimeStart: dateTimeStart,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
@@ -157,8 +161,15 @@ func (s *BenchmarkSuite) RunE(
 		Err:           err,
 	})
 
+	suiteParams, err := pkgsuites.ToSuiteParams(o)
+	if err != nil {
+		// just log the params conversion error, don't fail the suite. the only effect
+		// is that the suite params won't be reported in the results.
+		klog.V(3).ErrorS(err, "failed to convert suite options to suite params\n")
+	}
 	return pkgsuites.SuiteResult{
 		Name:    s.Name(),
+		Params:  suiteParams,
 		RunID:   runID,
 		Results: caseResults,
 	}, nil
@@ -181,7 +192,7 @@ func (s *BenchmarkSuite) execHealthcheck(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) ([]byte, error) {
+) ([]byte, [][]string, error) {
 	outArgs := []string{
 		"-w", opts.EtcdctlOutputFormat,
 	}
@@ -201,9 +212,9 @@ func (s *BenchmarkSuite) execHealthcheck(
 	// don't discard any partial outputs
 	if r != nil {
 		b, readErr := io.ReadAll(r)
-		return b, errors.Join(err, readErr)
+		return b, cmdWithArgs, errors.Join(err, readErr)
 	}
-	return nil, err
+	return nil, cmdWithArgs, err
 }
 
 func (s *BenchmarkSuite) execCheckPerf(
@@ -211,7 +222,7 @@ func (s *BenchmarkSuite) execCheckPerf(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) ([]byte, error) {
+) ([]byte, [][]string, error) {
 	outArgs := []string{
 		"-w", opts.EtcdctlOutputFormat,
 		"--load", opts.CheckPerfLoadSize,
@@ -230,9 +241,9 @@ func (s *BenchmarkSuite) execCheckPerf(
 	// don't discard any partial outputs
 	if r != nil {
 		b, readErr := io.ReadAll(r)
-		return b, errors.Join(err, readErr)
+		return b, cmdWithArgs, errors.Join(err, readErr)
 	}
-	return nil, err
+	return nil, cmdWithArgs, err
 }
 
 func (s *BenchmarkSuite) execBenchmark(
@@ -240,7 +251,7 @@ func (s *BenchmarkSuite) execBenchmark(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) ([]byte, error) {
+) ([]byte, [][]string, error) {
 	cmds := [][]string{
 		{
 			// write serial
@@ -284,9 +295,9 @@ func (s *BenchmarkSuite) execBenchmark(
 	// don't discard any partial outputs
 	if r != nil {
 		b, readErr := io.ReadAll(r)
-		return b, errors.Join(err, readErr)
+		return b, cmdWithArgs, errors.Join(err, readErr)
 	}
-	return nil, err
+	return nil, cmdWithArgs, err
 }
 
 func (s *BenchmarkSuite) SetClients(clients *pkgsuites.Clients) {
