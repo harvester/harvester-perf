@@ -7,6 +7,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/harvester/hvperf/internal/suites/options"
 	"github.com/harvester/hvperf/pkg/k8s"
 	pkgsuites "github.com/harvester/hvperf/pkg/suites"
 
@@ -53,12 +54,16 @@ func (s *BenchmarkSuite) RunE(
 	namespace string,
 	opts pkgsuites.Options,
 ) (pkgsuites.SuiteResult, error) {
-	o := EtcdBenchmarkSuiteOptionsDefaults()
-	// custom, err := FromOptions(opts["etcd-benchmark"])
+	o, err := BenchmarkOptionsDefaults()
+	if err != nil {
+		return pkgsuites.SuiteResult{}, err
+	}
+
+	// TODO: merge custom options
+	// custom, err := FromOptions(opts)
 	// if err != nil {
 	// 	return pkgsuites.SuiteResult{}, err
 	// }
-	// // TODO: merge custom options into defaults
 
 	nsReadyTimeout := 60 * time.Second
 	if _, err := k8s.EnsureNamespace(ctx, s.Clients, namespace, nsReadyTimeout); err != nil {
@@ -298,6 +303,7 @@ type BenchmarkOptions struct {
 	EtcdRemoteCopyTargetDir string
 
 	JobActiveDeadline      time.Duration
+	JobKeepAlive           bool
 	JobPodContainerName    string
 	JobPodImageName        string
 	JobPodImageTag         string
@@ -314,8 +320,17 @@ type BenchmarkOptions struct {
 	GRPCClientCount   uint64
 }
 
-func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
-	return &BenchmarkOptions{
+// BenchmarkOptionsDefaults returns the default options for the etcd benchmark
+// suite. It merges suite-specific options with the default global options for
+// the all test suites.
+func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
+	sysOpts, err := options.FromOptions[*BenchmarkOptions](pkgsuites.DefaultGlobalOptions())
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO find a better way to merge the two structs
+	benchmarkOptions := &BenchmarkOptions{
 		EtcdBenchmarkLocalPath:  "/usr/local/bin/benchmark",
 		EtcdctlLocalPath:        "/usr/local/bin/etcdctl",
 		EtcdctlOutputFormat:     "simple",
@@ -323,12 +338,15 @@ func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
 		EtcdRemoteCopyTargetDir: "/usr/local/bin/",
 		EtcdRemoteTLSCertDir:    "/host/rancher/rke2/server/tls/etcd",
 
-		JobActiveDeadline:      3600 * time.Second,
-		JobPodContainerName:    "benchmark",
-		JobPodImageName:        "registry.suse.com/bci/bci-base",
-		JobPodImageTag:         "latest",
-		JobPodReadyTimeout:     300 * time.Second,
-		JobPodTTLAfterFinished: 3600 * time.Second,
+		JobActiveDeadline:      sysOpts.JobActiveDeadline,
+		JobKeepAlive:           sysOpts.JobKeepAlive,
+		JobPodContainerName:    sysOpts.JobPodContainerName,
+		JobPodImageName:        sysOpts.JobPodImageName,
+		JobPodImageTag:         sysOpts.JobPodImageTag,
+		JobPodNode:             sysOpts.JobPodNode,
+		JobPodTTLAfterFinished: sysOpts.JobPodTTLAfterFinished,
+		JobPodReadyTimeout:     sysOpts.JobPodReadyTimeout,
+		JobSuspend:             sysOpts.JobSuspend,
 
 		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
 		PutLoadSize:       DefaultLoadSize,
@@ -337,6 +355,8 @@ func EtcdBenchmarkSuiteOptionsDefaults() *BenchmarkOptions {
 		GRPCClientCount:   DefaultClientCount,
 		GRPCConnCount:     DefaultConnCount,
 	}
+
+	return benchmarkOptions, nil
 }
 
 const (
