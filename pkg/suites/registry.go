@@ -19,15 +19,11 @@ type Registry struct {
 	suites map[string]Suite
 }
 
-// All returns all registered test suites. If includeRW is true, it returns all
-// read-write and read-only test suites. Otherwise, it returns only read-only
-// test suites.
-func All(includeReadWrite bool) []Suite {
+// All returns all registered test suites.
+func All() []Suite {
 	suites := []Suite{}
 	for _, s := range r.suites {
-		if includeReadWrite || !s.IsReadWrite() {
-			suites = append(suites, s)
-		}
+		suites = append(suites, s)
 	}
 	return suites
 }

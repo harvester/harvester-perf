@@ -33,7 +33,7 @@ func init() {
 }
 
 func outList(format string) error {
-	suites := suites.All(true)
+	suites := suites.All()
 
 	var (
 		data []byte

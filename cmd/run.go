@@ -16,10 +16,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	runCmdClients *suites.Clients
-	includeWrite  bool
-)
+var runCmdClients *suites.Clients
 
 // runCmd represents the run command
 var runCmd = &cobra.Command{
@@ -60,7 +57,7 @@ By default, only "read-only" test suites are run. These tests do not create or
 modify any resources in the cluster. To include "read-write" test suites, use the
 '--include-write' flag.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		testSuites := suites.All(includeWrite)
+		testSuites := suites.All()
 		outputFormat := *k8sPrintFlags.OutputFormat
 		results, err := runSuites(testSuites, outputFormat)
 		return outRun(results, outputFormat, err)
@@ -74,7 +71,6 @@ func init() {
 	runCmd.SilenceUsage = true
 	runAllCmd.SilenceUsage = true
 
-	runAllCmd.Flags().BoolVar(&includeWrite, "include-write", false, "Include read-write test suites")
 	k8sConfigFlags.AddFlags(runCmd.PersistentFlags())
 	k8sPrintFlags.AddFlags(runCmd)
 	for _, c := range runCmd.Commands() {

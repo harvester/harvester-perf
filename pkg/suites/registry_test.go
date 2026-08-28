@@ -31,20 +31,7 @@ func TestMain(m *testing.M) {
 // TestAll checks that All returns only read-only and read-write test suites
 // based on the parameter passed.
 func TestAll(t *testing.T) {
-	readOnly := All(false)
-	sort.Slice(readOnly, func(i, j int) bool {
-		return readOnly[i].Name() < readOnly[j].Name()
-	})
-	for _, s := range readOnly {
-		if s.IsReadWrite() {
-			t.Errorf("All(false) returned read-write suite %q", s.Name())
-		}
-	}
-	if !reflect.DeepEqual(readOnly, []Suite{readOnlySuite0, readOnlySuite1}) {
-		t.Errorf("All(false) = %v, want [%v, %v]", readOnly, readOnlySuite0.Name(), readOnlySuite1.Name())
-	}
-
-	every := All(true)
+	every := All()
 	sort.Slice(every, func(i, j int) bool {
 		return every[i].Name() < every[j].Name()
 	})
