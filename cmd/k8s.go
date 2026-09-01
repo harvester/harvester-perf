@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"github.com/harvester/hvperf/pkg/suites"
+	monclient "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
 	kcliopts "k8s.io/cli-runtime/pkg/genericclioptions"
 	discoveryclient "k8s.io/client-go/discovery"
+	dynclient "k8s.io/client-go/dynamic"
 	k8sclient "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -23,6 +25,22 @@ func k8sClientSet() (k8sclient.Interface, error) {
 		return nil, err
 	}
 	return k8sclient.NewForConfig(restConfig)
+}
+
+func dynClientSet() (dynclient.Interface, error) {
+	restConfig, err := restConfig()
+	if err != nil {
+		return nil, err
+	}
+	return dynclient.NewForConfig(restConfig)
+}
+
+func monClientSet() (monclient.Interface, error) {
+	restConfig, err := restConfig()
+	if err != nil {
+		return nil, err
+	}
+	return monclient.NewForConfig(restConfig)
 }
 
 func discoveryClient() (discoveryclient.DiscoveryInterface, error) {
@@ -47,5 +65,16 @@ func configureClients() (*suites.Clients, error) {
 	if err != nil {
 		return nil, err
 	}
-	return suites.NewClients(k8sClientSet, restConfig), nil
+
+	dynClientSet, err := dynClientSet()
+	if err != nil {
+		return nil, err
+	}
+
+	monClientSet, err := monClientSet()
+	if err != nil {
+		return nil, err
+	}
+
+	return suites.NewClients(k8sClientSet, dynClientSet, monClientSet, restConfig), nil
 }

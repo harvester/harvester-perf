@@ -44,6 +44,7 @@ func EnsureJobReady(
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					HostNetwork:   true,
+					DNSPolicy:     corev1.DNSClusterFirstWithHostNet,
 					NodeName:      node,
 					RestartPolicy: corev1.RestartPolicyNever,
 					Containers: []corev1.Container{

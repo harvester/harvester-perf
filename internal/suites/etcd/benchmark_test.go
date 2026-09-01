@@ -14,8 +14,10 @@ func TestBenchmarkOptionsDefaults(t *testing.T) {
 		t.Fatalf("Failed to convert default global options to BenchmarkOptions: %v", err)
 	}
 	expected := &BenchmarkOptions{
-		EtcdBenchmarkLocalPath:  "/usr/local/bin/benchmark",
-		EtcdctlLocalPath:        "/usr/local/bin/etcdctl",
+		EtcdBenchmarkLocalPath: "/usr/local/bin/benchmark",
+		EtcdctlLocalPath:       "/usr/local/bin/etcdctl",
+		PromtoolLocalPath:      "/usr/local/bin/promtool",
+
 		EtcdctlOutputFormat:     "simple",
 		EtcdEndpoints:           "https://127.0.0.1:2379",
 		EtcdRemoteCopyTargetDir: "/usr/local/bin/",
@@ -30,6 +32,8 @@ func TestBenchmarkOptionsDefaults(t *testing.T) {
 		JobPodTTLAfterFinished: sysOpts.JobPodTTLAfterFinished,
 		JobPodReadyTimeout:     sysOpts.JobPodReadyTimeout,
 		JobSuspend:             sysOpts.JobSuspend,
+
+		PrometheusURL: sysOpts.PrometheusURL,
 
 		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
 		PutLoadSize:       DefaultLoadSize,

@@ -17,5 +17,6 @@ func DefaultGlobalOptions() *Options {
 		"JobPodTTLAfterFinished": 300 * time.Second,
 		"JobPodReadyTimeout":     3600 * time.Second,
 		"JobSuspend":             false,
+		"PrometheusURL":          "http://rancher-monitoring-prometheus.cattle-monitoring-system:9090",
 	}
 }

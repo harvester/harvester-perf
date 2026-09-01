@@ -3,7 +3,10 @@ package suites
 import (
 	"context"
 
+	monclient "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
+	dynclient "k8s.io/client-go/dynamic"
 	k8sclient "k8s.io/client-go/kubernetes"
+
 	"k8s.io/client-go/rest"
 )
 
@@ -20,13 +23,22 @@ type Suite interface {
 // to interact with the cluster.
 type Clients struct {
 	K8sClientSet k8sclient.Interface
+	DynClientSet dynclient.Interface
+	MonClientSet monclient.Interface
 	RestConfig   *rest.Config
 }
 
 // NewClients creates a new ClientSets with the provided K8s client set.
-func NewClients(k8sClientSet k8sclient.Interface, restConfig *rest.Config) *Clients {
+func NewClients(
+	k8sClientSet k8sclient.Interface,
+	dynClientSet dynclient.Interface,
+	monClientSet monclient.Interface,
+	restConfig *rest.Config,
+) *Clients {
 	return &Clients{
 		K8sClientSet: k8sClientSet,
+		DynClientSet: dynClientSet,
+		MonClientSet: monClientSet,
 		RestConfig:   restConfig,
 	}
 }

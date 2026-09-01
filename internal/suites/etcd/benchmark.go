@@ -92,12 +92,15 @@ func (s *BenchmarkSuite) RunE(
 	klog.V(3).Infof("copying '%s' to pod '%s'\n",
 		fmt.Sprintf("%s,%s", o.EtcdctlLocalPath, o.EtcdBenchmarkLocalPath),
 		pod.GetName())
-	if err := k8s.CopyToJobPod(ctx,
+	if err := k8s.CopyToJobPod(
+		ctx,
 		s.Clients,
 		pod,
 		o.EtcdRemoteCopyTargetDir,
 		o.EtcdctlLocalPath,
-		o.EtcdBenchmarkLocalPath); err != nil {
+		o.EtcdBenchmarkLocalPath,
+		o.PromtoolLocalPath,
+	); err != nil {
 		return pkgsuites.SuiteResult{}, err
 	}
 
@@ -160,6 +163,30 @@ func (s *BenchmarkSuite) RunE(
 		Out:           string(benchConcurrentOut),
 		Err:           err,
 	})
+
+	// don't fail promql execution because not all clusters have monitoring enabled.
+	// just log the error and skip the promql execution.
+	klog.V(3).Infof("running etcd monitoring (promql suite) in pod '%s'\n", pod.GetName())
+	if !o.PrometheusSkip {
+		ready, err := k8s.MonitoringEnabled(ctx, s.Clients)
+		if err != nil || !ready {
+			klog.V(3).Error(err, "prometheus monitoring is not ready, skipping prometheus metrics collection: %v\n")
+		} else {
+			if ready {
+				promqlOut, cmds, err := s.execPromql(ctx, pod, o)
+				caseResults = append(caseResults, &pkgsuites.CaseResult{
+					CaseName:      "etcd monitoring (promql)",
+					Cmds:          cmds,
+					DateTimeStart: dateTimeStart,
+					DateTimeEnd:   time.Now(),
+					Objects:       []runtime.Object{job, pod},
+					Success:       err == nil,
+					Out:           string(promqlOut),
+					Err:           err,
+				})
+			}
+		}
+	}
 
 	suiteParams, err := pkgsuites.ToSuiteParams(o)
 	if err != nil {
@@ -300,13 +327,58 @@ func (s *BenchmarkSuite) execBenchmark(
 	return nil, cmdWithArgs, err
 }
 
+func (s *BenchmarkSuite) execPromql(
+	ctx context.Context,
+	pod *corev1.Pod,
+	opts *BenchmarkOptions,
+	args ...string,
+) ([]byte, [][]string, error) {
+	// etcd metrics are not exposed by default, so we need to ensure that the pod
+	// monitor is created
+	podMon, err := k8s.EnsurePodMonitor(ctx, s.Clients, s.Name(), pod.GetNamespace(), opts.JobPodReadyTimeout)
+	if err != nil {
+		klog.V(3).ErrorS(err, "failed to ensure pod monitor: %s/%s\n", podMon.GetNamespace(), podMon.GetName())
+		return nil, nil, err
+	}
+	defer func() {
+		if err := k8s.DeletePodMonitor(ctx, s.Clients, podMon.GetName(), podMon.GetNamespace()); err != nil {
+			klog.V(3).ErrorS(err, "failed to delete pod monitor: %s/%s\n", podMon.GetNamespace(), podMon.GetName())
+		}
+	}()
+
+	cmds := [][]string{
+		{
+			"promtool",
+			"query",
+			"instant",
+			opts.PrometheusURL,
+			"up{job='etcd'}",
+		},
+	}
+
+	cmdWithArgs := [][]string{}
+	for _, cmd := range cmds {
+		cmd = append(cmd, args...)
+		cmdWithArgs = append(cmdWithArgs, cmd)
+	}
+	r, err := k8s.ExecPod(ctx, s.Clients, pod, cmdWithArgs)
+	// don't discard any partial outputs
+	if r != nil {
+		b, readErr := io.ReadAll(r)
+		return b, cmdWithArgs, errors.Join(err, readErr)
+	}
+	return nil, cmdWithArgs, err
+}
+
 func (s *BenchmarkSuite) SetClients(clients *pkgsuites.Clients) {
 	s.Clients = clients
 }
 
 type BenchmarkOptions struct {
-	EtcdBenchmarkLocalPath  string
-	EtcdctlLocalPath        string
+	EtcdBenchmarkLocalPath string
+	EtcdctlLocalPath       string
+	PromtoolLocalPath      string
+
 	EtcdctlOutputFormat     string
 	EtcdEndpoints           string
 	EtcdMetricsPort         int
@@ -329,6 +401,9 @@ type BenchmarkOptions struct {
 	PutValSize        uint64
 	GRPCConnCount     uint64
 	GRPCClientCount   uint64
+
+	PrometheusURL  string
+	PrometheusSkip bool
 }
 
 // BenchmarkOptionsDefaults returns the default options for the etcd benchmark
@@ -342,8 +417,10 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 
 	// TODO find a better way to merge the two structs
 	benchmarkOptions := &BenchmarkOptions{
-		EtcdBenchmarkLocalPath:  "/usr/local/bin/benchmark",
-		EtcdctlLocalPath:        "/usr/local/bin/etcdctl",
+		EtcdBenchmarkLocalPath: "/usr/local/bin/benchmark",
+		EtcdctlLocalPath:       "/usr/local/bin/etcdctl",
+		PromtoolLocalPath:      "/usr/local/bin/promtool",
+
 		EtcdctlOutputFormat:     "simple",
 		EtcdEndpoints:           "https://127.0.0.1:2379",
 		EtcdRemoteCopyTargetDir: "/usr/local/bin/",
@@ -358,6 +435,8 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 		JobPodTTLAfterFinished: sysOpts.JobPodTTLAfterFinished,
 		JobPodReadyTimeout:     sysOpts.JobPodReadyTimeout,
 		JobSuspend:             sysOpts.JobSuspend,
+
+		PrometheusURL: sysOpts.PrometheusURL,
 
 		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
 		PutLoadSize:       DefaultLoadSize,
