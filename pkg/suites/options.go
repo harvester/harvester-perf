@@ -9,6 +9,7 @@ type Options map[string]any
 // DefaultGlobalOptions returns the default options for the system test suite.
 func DefaultGlobalOptions() *Options {
 	return &Options{
+		"DefaultNamespace":       "harvester-perf-system",
 		"JobActiveDeadline":      3600 * time.Second,
 		"JobKeepAlive":           true,
 		"JobPodContainerName":    "benchmark",
@@ -18,5 +19,8 @@ func DefaultGlobalOptions() *Options {
 		"JobPodReadyTimeout":     3600 * time.Second,
 		"JobSuspend":             false,
 		"PrometheusURL":          "http://rancher-monitoring-prometheus.cattle-monitoring-system:9090",
+		"EtcdNamespace":          "kube-system",
+		"MonitoringNamespace":    "cattle-monitoring-system",
+		"MonitoringAddonName":    "rancher-monitoring",
 	}
 }

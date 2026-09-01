@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/harvester/hvperf/pkg/k8s"
 	"github.com/harvester/hvperf/pkg/suites"
 	"go.yaml.in/yaml/v4"
 
@@ -78,12 +77,12 @@ func init() {
 
 func runSuites(testSuites []suites.Suite, format string) ([]*suites.SuiteResult, error) {
 	var (
-		errs    error
-		results []*suites.SuiteResult
+		errs      error
+		namespace string
+		results   []*suites.SuiteResult
 
-		ctx       = context.Background()
-		namespace = k8s.DefaultNamespace
-		runID     = time.Now().Format("20060102150405")
+		ctx   = context.Background()
+		runID = time.Now().Format("20060102150405")
 	)
 
 	if k8sConfigFlags.Namespace != nil && *k8sConfigFlags.Namespace != "" {
