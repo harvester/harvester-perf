@@ -1,0 +1,38 @@
+name: CI / Benchmark run
+description: Track a CI benchmark execution or pipeline task
+title: "[CI] "
+type: "Task"
+labels: ["kind/task", "area/ci"]
+assignees:
+-
+body:
+- type: textarea
+  attributes:
+    label: Benchmark suite
+    description: Which suite(s) to run?
+    placeholder: |
+      e.g. vm-density, storage-throughput
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Target environment
+    value: |
+      - Harvester version:
+      - Node spec (CPU/RAM/storage):
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Result / Report link
+    description: Link to CI run or result artifact after completion.
+  validations:
+    required: false
+
+- type: textarea
+  attributes:
+    label: Additional context
+  validations:
+    required: false

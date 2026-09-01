@@ -1,0 +1,20 @@
+name: Documentation
+description: Add or update benchmark documentation
+title: "[DOC] "
+type: "Doc"
+labels: ["kind/doc"]
+assignees:
+-
+body:
+- type: textarea
+  attributes:
+    label: What needs to be documented?
+    description: Describe the gap or the doc to be created/updated.
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Additional context
+  validations:
+    required: false
