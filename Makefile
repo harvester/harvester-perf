@@ -63,10 +63,15 @@ IMAGE_TAG ?= $(HARVESTER_VERSION)-$(COMMIT_SHA)
 IMAGE_PLATFORMS ?= linux/amd64
 IMAGE_OUTPUT_TYPE ?= docker
 
-image/run:
+image/cmd:
 	@$(DOCKER) run --rm \
 		--mount type=bind,src=$(HOME)/.kube,dst=/root/.kube,ro=true \
-		$(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_RUN_ARGS)
+		$(IMAGE_NAME):$(IMAGE_TAG) run $(IMAGE_CMD_ARGS)
+
+image/run_all:
+	@$(DOCKER) run --rm \
+		--mount type=bind,src=$(HOME)/.kube,dst=/root/.kube,ro=true \
+		$(IMAGE_NAME):$(IMAGE_TAG) run all
 
 image/build:
 	$(DOCKER) build --rm --pull \

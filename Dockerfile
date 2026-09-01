@@ -3,6 +3,7 @@
 ARG BCI_TAG=16.0
 ARG BCI_GO_TAG=1.26
 ARG ETCD_VERSION=v3.6.14
+ARG PROMETHEUS_VERSION=3.14.0
 
 # -------------------------------------------------------------------------------
 # etcd benchmark tool is not shipped in the release tarball, so build it from src
@@ -18,6 +19,17 @@ ENV GOOS=${TARGETOS} \
 RUN git clone --depth 1 --branch "${ETCD_VERSION}" https://github.com/etcd-io/etcd.git /src \
   && go build -C /src/tools/benchmark -o /out/benchmark \
   && go build -C /src/etcdctl -o /out/etcdctl
+
+FROM --platform=$BUILDPLATFORM registry.suse.com/bci/golang:${BCI_GO_TAG} AS promtool-builder
+ARG PROMETHEUS_VERSION \
+  TARGETOS \
+  TARGETARCH
+ENV GOOS=${TARGETOS} \
+  GOARCH=${TARGETARCH} \
+  CGO_ENABLED=0 \
+  GOFLAGS=-trimpath
+ADD --unpack https://github.com/prometheus/prometheus/releases/download/v"${PROMETHEUS_VERSION}"/prometheus-"${PROMETHEUS_VERSION}".${TARGETOS}-${TARGETARCH}.tar.gz /src
+RUN mkdir -p /out && cp /src/prometheus-"${PROMETHEUS_VERSION}"."${TARGETOS}"-"${TARGETARCH}"/promtool /out/
 
 # -------------------------------------------------------------------------------
 # build the harvester-perf binary
@@ -60,6 +72,7 @@ RUN zypper --non-interactive --gpg-auto-import-keys refresh \
 
 COPY --from=etcd-builder /out/benchmark /usr/local/bin/benchmark
 COPY --from=etcd-builder /out/etcdctl /usr/local/bin/etcdctl
+COPY --from=promtool-builder /out/promtool /usr/local/bin/promtool
 COPY --from=hvperf-builder /out/hvperf /usr/local/bin/hvperf
 
 RUN set -eux ;\
