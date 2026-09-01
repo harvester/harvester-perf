@@ -1,0 +1,27 @@
+name: Epic
+description: Group of related benchmark tasks or suites
+title: "[EPIC] "
+type: "Epic"
+labels: ["Epic"]
+assignees:
+-
+body:
+- type: textarea
+  attributes:
+    label: Goal
+    description: What benchmark objective does this Epic achieve?
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Sub-tasks
+    description: List related issues or tasks. Link them here once created.
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Additional context
+  validations:
+    required: false

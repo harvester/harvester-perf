@@ -1,0 +1,46 @@
+name: Bug report
+description: Report a benchmark bug or unexpected result
+title: "[BUG] "
+type: "Bug"
+labels: ["kind/bug"]
+assignees:
+-
+body:
+- type: textarea
+  attributes:
+    label: Describe the Bug
+    description: What went wrong? (unexpected result, crash, wrong metric, etc.)
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: To Reproduce
+    description: Command or steps to reproduce.
+    placeholder: |
+      harvester-perf run <suite> --flags
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Expected vs Actual
+    description: Expected result / metric vs what actually happened.
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Environment
+    value: |
+      - harvester-perf version:
+      - Harvester version:
+      - Node spec (CPU/RAM/storage):
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Additional context
+  validations:
+    required: false

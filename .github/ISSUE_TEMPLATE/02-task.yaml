@@ -1,0 +1,20 @@
+name: Task
+description: A benchmark-related task
+title: "[TASK] "
+type: "Task"
+labels: ["kind/task"]
+assignees:
+-
+body:
+- type: textarea
+  attributes:
+    label: Task description
+    description: What needs to be done?
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Additional context
+  validations:
+    required: false
