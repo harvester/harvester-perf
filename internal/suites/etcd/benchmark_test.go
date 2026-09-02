@@ -27,7 +27,6 @@ func TestBenchmarkOptionsDefaults(t *testing.T) {
 		EtcdRemoteTLSCertDir:    "/host/rancher/rke2/server/tls/etcd",
 
 		JobActiveDeadline:      sysOpts.JobActiveDeadline,
-		JobKeepAlive:           sysOpts.JobKeepAlive,
 		JobPodContainerName:    sysOpts.JobPodContainerName,
 		JobPodImageName:        sysOpts.JobPodImageName,
 		JobPodImageTag:         sysOpts.JobPodImageTag,

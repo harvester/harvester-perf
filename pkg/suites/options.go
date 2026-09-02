@@ -2,6 +2,8 @@ package suites
 
 import "time"
 
+const DefaultNamespace = "harvester-perf-system"
+
 // Options contains custom options for test suites. The keys are the names of the
 // test suites, and the values are the options for each suite.
 type Options map[string]any
@@ -9,9 +11,8 @@ type Options map[string]any
 // DefaultGlobalOptions returns the default options for the system test suite.
 func DefaultGlobalOptions() *Options {
 	return &Options{
-		"DefaultNamespace":       "harvester-perf-system",
+		"DefaultNamespace":       DefaultNamespace,
 		"JobActiveDeadline":      3600 * time.Second,
-		"JobKeepAlive":           true,
 		"JobPodContainerName":    "benchmark",
 		"JobPodImageName":        "registry.suse.com/bci/bci-base",
 		"JobPodImageTag":         "latest",

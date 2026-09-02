@@ -9,13 +9,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/harvester/hvperf/pkg/suites"
-	"go.yaml.in/yaml/v4"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/harvester/hvperf/pkg/suites"
 	"github.com/spf13/cobra"
+	"go.yaml.in/yaml/v4"
 )
 
-var runCmdClients *suites.Clients
+var (
+	runCmdClients *suites.Clients
+	keepAlive     bool
+)
 
 // runCmd represents the run command
 var runCmd = &cobra.Command{
@@ -68,6 +72,9 @@ func init() {
 	runCmd.SilenceUsage = true
 	runAllCmd.SilenceUsage = true
 
+	runCmd.PersistentFlags().BoolVar(&keepAlive, "keep-alive", true,
+		fmt.Sprintf("Keep the test namespace and all its resources after test suite execution. Only works if the namespace is %s", suites.DefaultNamespace))
+
 	k8sConfigFlags.AddFlags(runCmd.PersistentFlags())
 	k8sPrintFlags.AddFlags(runCmd)
 	for _, c := range runCmd.Commands() {
@@ -77,17 +84,24 @@ func init() {
 
 func runSuites(testSuites []suites.Suite, format string) ([]*suites.SuiteResult, error) {
 	var (
-		errs      error
-		namespace string
-		results   []*suites.SuiteResult
+		errs    error
+		results []*suites.SuiteResult
 
 		ctx   = context.Background()
 		runID = time.Now().Format("20060102150405")
 	)
 
+	namespace := suites.DefaultNamespace
 	if k8sConfigFlags.Namespace != nil && *k8sConfigFlags.Namespace != "" {
 		namespace = *k8sConfigFlags.Namespace
 	}
+
+	defer func() {
+		if !keepAlive && namespace == suites.DefaultNamespace {
+			//nolint:errcheck
+			runCmdClients.K8sClientSet.CoreV1().Namespaces().Delete(context.Background(), namespace, metav1.DeleteOptions{})
+		}
+	}()
 
 	for _, suite := range testSuites {
 		suite = suites.WithClients(suite, runCmdClients)

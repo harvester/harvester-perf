@@ -488,7 +488,6 @@ type BenchmarkOptions struct {
 	EtcdRemoteCopyTargetDir string
 
 	JobActiveDeadline      time.Duration
-	JobKeepAlive           bool
 	JobPodContainerName    string
 	JobPodImageName        string
 	JobPodImageTag         string
@@ -535,7 +534,6 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 		EtcdRemoteTLSCertDir:    "/host/rancher/rke2/server/tls/etcd",
 
 		JobActiveDeadline:      sysOpts.JobActiveDeadline,
-		JobKeepAlive:           sysOpts.JobKeepAlive,
 		JobPodContainerName:    sysOpts.JobPodContainerName,
 		JobPodImageName:        sysOpts.JobPodImageName,
 		JobPodImageTag:         sysOpts.JobPodImageTag,
