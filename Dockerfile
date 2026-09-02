@@ -24,10 +24,6 @@ FROM --platform=$BUILDPLATFORM registry.suse.com/bci/golang:${BCI_GO_TAG} AS pro
 ARG PROMETHEUS_VERSION \
   TARGETOS \
   TARGETARCH
-ENV GOOS=${TARGETOS} \
-  GOARCH=${TARGETARCH} \
-  CGO_ENABLED=0 \
-  GOFLAGS=-trimpath
 ADD --unpack https://github.com/prometheus/prometheus/releases/download/v"${PROMETHEUS_VERSION}"/prometheus-"${PROMETHEUS_VERSION}".${TARGETOS}-${TARGETARCH}.tar.gz /src
 RUN mkdir -p /out && cp /src/prometheus-"${PROMETHEUS_VERSION}"."${TARGETOS}"-"${TARGETARCH}"/promtool /out/
 
@@ -59,11 +55,13 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # benchmarking tools needed to run the tests
 # ---------------------------------------------------------------------------
 FROM registry.suse.com/bci/bci-base:${BCI_TAG}
+ARG CLI_VERSION
 ARG ETCD_VERSION
+ARG PROMETHEUS_VERSION
 LABEL org.opencontainers.image.title="harvester-perf" \
   org.opencontainers.image.description="Performance and capacity benchmarks for SUSE Harvester" \
   org.opencontainers.image.source="https://github.com/harvester/harvester-perf" \
-  io.harvesterhci.image.tools="benchmark:${ETCD_VERSION},etcdctl:${ETCD_VERSION}"
+  io.harvesterhci.image.tools="benchmark:${ETCD_VERSION},etcdctl:${ETCD_VERSION},promtool:${PROMETHEUS_VERSION},hvperf:${CLI_VERSION}" 
 
 RUN zypper --non-interactive --gpg-auto-import-keys refresh \
   && zypper --non-interactive install --no-recommends \

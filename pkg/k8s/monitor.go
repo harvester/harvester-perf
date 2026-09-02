@@ -36,8 +36,11 @@ func MonitoringEnabled(ctx context.Context, c *suites.Clients, namespace, name s
 	}
 
 	enabled, found, err := unstructured.NestedBool(addon.Object, "spec", "enabled")
-	if err != nil || !found {
-		return false, fmt.Errorf("reading spec.enabled: found=%v: %w", found, err)
+	if err != nil {
+		return false, fmt.Errorf("monitoring addon reading spec.enabled: found=%v: %w", found, err)
+	}
+	if !found {
+		return false, nil
 	}
 	return enabled, nil
 }

@@ -66,7 +66,7 @@ IMAGE_OUTPUT_TYPE ?= docker
 image/cmd:
 	@$(DOCKER) run --rm \
 		--mount type=bind,src=$(HOME)/.kube,dst=/root/.kube,ro=true \
-		$(IMAGE_NAME):$(IMAGE_TAG) run $(IMAGE_CMD_ARGS)
+		$(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_CMD_ARGS)
 
 image/run_all:
 	@$(DOCKER) run --rm \
@@ -80,4 +80,4 @@ image/build:
 		--output=type=$(IMAGE_OUTPUT_TYPE) \
 		-t $(IMAGE_NAME):$(IMAGE_TAG) .
 
-.PHONY: go/build go/test clean image/run image/build
+.PHONY: go/build go/test clean image/run_all image/build image/cmd

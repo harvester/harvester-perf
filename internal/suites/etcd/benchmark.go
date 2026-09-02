@@ -169,6 +169,7 @@ func (s *BenchmarkSuite) RunE(
 	})
 
 	klog.V(3).Infof("running etcd monitoring (promql suite) in pod '%s'\n", pod.GetName())
+	dateTimeStart = time.Now()
 	promqlOut, cmds, skipped, err := s.monitoring(ctx, pod, o)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd monitoring (promql)",
