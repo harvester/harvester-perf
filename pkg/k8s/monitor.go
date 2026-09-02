@@ -51,19 +51,20 @@ func EnsurePodMonitor(
 	clients *suites.Clients,
 	name string,
 	namespace string,
+	metricsPortName string,
+	metricsPath string,
+	scheme string,
 	targetNamespace string,
+	labelSelector map[string]string,
 ) (*monv1.PodMonitor, error) {
 	var (
 		applyConfig       = monv1apply.PodMonitor(name, namespace)
 		namespaceSelector = monv1apply.NamespaceSelector().WithMatchNames(targetNamespace)
-		selector          = metav1apply.LabelSelector().WithMatchLabels(map[string]string{
-			"component": "etcd",
-			"tier":      "control-plane",
-		})
-		metricsEndpoints = monv1apply.PodMetricsEndpoint().
-					WithPort("metrics").
-					WithPath("/metrics").
-					WithScheme("http").
+		selector          = metav1apply.LabelSelector().WithMatchLabels(labelSelector)
+		metricsEndpoints  = monv1apply.PodMetricsEndpoint().
+					WithPort(metricsPortName).
+					WithPath(metricsPath).
+					WithScheme(monv1.Scheme(scheme)).
 					WithScrapeTimeout("10s")
 	)
 	applyConfigSpec := monv1apply.PodMonitorSpec().
@@ -75,9 +76,4 @@ func EnsurePodMonitor(
 	return clients.MonClientSet.MonitoringV1().PodMonitors(namespace).Apply(ctx, applyConfig, metav1.ApplyOptions{
 		FieldManager: DefaultSSAFieldManager,
 	})
-}
-
-// DeletePodMonitor deletes the specified PodMonitor.
-func DeletePodMonitor(ctx context.Context, clients *suites.Clients, name string, namespace string) error {
-	return clients.MonClientSet.MonitoringV1().PodMonitors(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }

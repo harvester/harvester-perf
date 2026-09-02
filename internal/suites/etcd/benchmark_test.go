@@ -23,6 +23,9 @@ func TestBenchmarkOptionsDefaults(t *testing.T) {
 		EtcdNamespace:           sysOpts.EtcdNamespace,
 		EtcdctlOutputFormat:     "simple",
 		EtcdEndpoints:           "https://127.0.0.1:2379",
+		EtcdMetricsPath:         "/metrics",
+		EtcdMetricsPortName:     "metrics",
+		EtcdMetricsScheme:       "http",
 		EtcdRemoteCopyTargetDir: "/usr/local/bin/",
 		EtcdRemoteTLSCertDir:    "/host/rancher/rke2/server/tls/etcd",
 

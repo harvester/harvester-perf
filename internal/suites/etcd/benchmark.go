@@ -343,7 +343,11 @@ func (s *BenchmarkSuite) monitoring(
 
 	// etcd metrics are not exposed by default, so we need to ensure that the pod
 	// monitor is created
-	podMon, err := k8s.EnsurePodMonitor(ctx, s.Clients, s.Name(), pod.GetNamespace(), opts.EtcdNamespace)
+	labelSelector := map[string]string{
+		"component": "etcd",
+		"tier":      "control-plane",
+	}
+	podMon, err := k8s.EnsurePodMonitor(ctx, s.Clients, s.Name(), pod.GetNamespace(), opts.EtcdMetricsPortName, opts.EtcdMetricsPath, opts.EtcdMetricsScheme, opts.EtcdNamespace, labelSelector)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -491,7 +495,9 @@ type BenchmarkOptions struct {
 
 	EtcdctlOutputFormat     string
 	EtcdEndpoints           string
-	EtcdMetricsPort         int
+	EtcdMetricsPath         string
+	EtcdMetricsPortName     string
+	EtcdMetricsScheme       string
 	EtcdNamespace           string
 	EtcdRemoteTLSCertDir    string
 	EtcdRemoteCopyTargetDir string
@@ -537,6 +543,9 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 
 		EtcdctlOutputFormat:     "simple",
 		EtcdEndpoints:           "https://127.0.0.1:2379",
+		EtcdMetricsPath:         "/metrics",
+		EtcdMetricsPortName:     "metrics",
+		EtcdMetricsScheme:       "http",
 		EtcdNamespace:           sysOpts.EtcdNamespace,
 		EtcdRemoteCopyTargetDir: "/usr/local/bin/",
 		EtcdRemoteTLSCertDir:    "/host/rancher/rke2/server/tls/etcd",
