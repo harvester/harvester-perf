@@ -38,10 +38,11 @@ func TestBenchmarkOptionsDefaults(t *testing.T) {
 		JobPodReadyTimeout:     sysOpts.JobPodReadyTimeout,
 		JobSuspend:             sysOpts.JobSuspend,
 
-		MonitoringAddonName:    sysOpts.MonitoringAddonName,
-		MonitoringNamespace:    sysOpts.MonitoringNamespace,
-		MonitoringServiceURL:   sysOpts.MonitoringServiceURL,
-		MonitoringOutputFormat: "promql",
+		MonitoringAddonName:             sysOpts.MonitoringAddonName,
+		MonitoringNamespace:             sysOpts.MonitoringNamespace,
+		MonitoringServiceURL:            sysOpts.MonitoringServiceURL,
+		MonitoringOutputFormat:          "promql",
+		MonitoringWaitPodMonitorTimeout: sysOpts.MonitoringWaitPodMonitorTimeout,
 
 		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
 		PutLoadSize:       DefaultLoadSize,

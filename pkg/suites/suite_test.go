@@ -93,7 +93,7 @@ func TestNewClients(t *testing.T) {
 				t.Errorf("DynClientSet = %v, want %v", c.DynClientSet, tc.dynClientSet)
 			}
 			if c.MonClientSet != tc.monClientSet {
-				t.Errorf("DynClientSet = %v, want %v", c.DynClientSet, tc.dynClientSet)
+				t.Errorf("MonClientSet = %v, want %v", c.MonClientSet, tc.monClientSet)
 			}
 			if c.RestConfig != tc.restConfig {
 				t.Errorf("RestConfig = %v, want %v", c.RestConfig, tc.restConfig)

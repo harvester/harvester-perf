@@ -348,7 +348,7 @@ func (s *BenchmarkSuite) monitoring(
 		"tier":      "control-plane",
 	}
 	waitTimeout := 3 * time.Minute
-	podMon, err := k8s.EnsurePodMonitor(
+	if err := k8s.EnsurePodMonitor(
 		ctx,
 		s.Clients,
 		s.Name(),
@@ -361,13 +361,11 @@ func (s *BenchmarkSuite) monitoring(
 		labelSelector,
 		pod,
 		waitTimeout,
-	)
-	if err != nil {
+	); err != nil {
 		return nil, nil, false, err
 	}
 
-	jobName := fmt.Sprintf("%s/%s", podMon.GetNamespace(), podMon.GetName())
-	out, cmds, err := s.execPromQL(ctx, pod, jobName, opts, args...)
+	out, cmds, err := s.execPromQL(ctx, pod, opts, args...)
 	if err != nil {
 		return out, cmds, false, err
 	}
@@ -378,7 +376,6 @@ func (s *BenchmarkSuite) monitoring(
 func (s *BenchmarkSuite) execPromQL(
 	ctx context.Context,
 	pod *corev1.Pod,
-	jobName string,
 	opts *BenchmarkOptions,
 	args ...string,
 ) ([]byte, [][]string, error) {
@@ -514,10 +511,11 @@ type BenchmarkOptions struct {
 	JobPodReadyTimeout     time.Duration
 	JobSuspend             bool
 
-	MonitoringAddonName    string
-	MonitoringNamespace    string
-	MonitoringServiceURL   string
-	MonitoringOutputFormat string
+	MonitoringAddonName             string
+	MonitoringNamespace             string
+	MonitoringServiceURL            string
+	MonitoringOutputFormat          string
+	MonitoringWaitPodMonitorTimeout time.Duration
 
 	CheckPerfLoadSize string
 	PutLoadSize       uint64
@@ -562,10 +560,11 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 		JobPodReadyTimeout:     sysOpts.JobPodReadyTimeout,
 		JobSuspend:             sysOpts.JobSuspend,
 
-		MonitoringAddonName:    sysOpts.MonitoringAddonName,
-		MonitoringNamespace:    sysOpts.MonitoringNamespace,
-		MonitoringServiceURL:   sysOpts.MonitoringServiceURL,
-		MonitoringOutputFormat: "promql",
+		MonitoringAddonName:             sysOpts.MonitoringAddonName,
+		MonitoringNamespace:             sysOpts.MonitoringNamespace,
+		MonitoringServiceURL:            sysOpts.MonitoringServiceURL,
+		MonitoringOutputFormat:          "promql",
+		MonitoringWaitPodMonitorTimeout: sysOpts.MonitoringWaitPodMonitorTimeout,
 
 		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
 		PutLoadSize:       DefaultLoadSize,

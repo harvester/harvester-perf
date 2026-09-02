@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -64,7 +65,7 @@ func EnsurePodMonitor(
 	labelSelector map[string]string,
 	jobPod *corev1.Pod,
 	waitTimeout time.Duration,
-) (*monv1.PodMonitor, error) {
+) error {
 	var (
 		applyConfig       = monv1apply.PodMonitor(name, namespace)
 		namespaceSelector = monv1apply.NamespaceSelector().WithMatchNames(targetNamespace)
@@ -81,11 +82,10 @@ func EnsurePodMonitor(
 		WithPodMetricsEndpoints(metricsEndpoints)
 
 	applyConfig = applyConfig.WithSpec(applyConfigSpec)
-	created, err := clients.MonClientSet.MonitoringV1().PodMonitors(namespace).Apply(ctx, applyConfig, metav1.ApplyOptions{
+	if _, err := clients.MonClientSet.MonitoringV1().PodMonitors(namespace).Apply(ctx, applyConfig, metav1.ApplyOptions{
 		FieldManager: DefaultSSAFieldManager,
-	})
-	if err != nil {
-		return nil, err
+	}); err != nil {
+		return err
 	}
 
 	jobName := fmt.Sprintf("%s/%s", namespace, name)
@@ -101,23 +101,26 @@ func EnsurePodMonitor(
 		},
 	}
 
+	var waitErr error
 	if err := wait.PollUntilContextTimeout(ctx, time.Second*30, waitTimeout, true, func(ctx context.Context) (done bool, err error) {
 		// keep polling for the etcd job to be ready until timeout expired,
 		// ignoring any errors
 		var r io.Reader
 		r, err = ExecPod(ctx, clients, jobPod, cmd)
 		if err != nil {
+			waitErr = err
 			return false, nil
 		}
 
 		b, readErr := io.ReadAll(r)
 		if readErr != nil {
+			waitErr = err
 			return false, nil
 		}
 
 		return strings.Contains(string(b), "1"), nil
 	}); err != nil {
-		return nil, err
+		return errors.Join(waitErr, err)
 	}
-	return created, nil
+	return nil
 }
