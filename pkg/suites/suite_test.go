@@ -5,6 +5,7 @@ import (
 
 	monclient "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
 	monfake "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned/fake"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	dynclient "k8s.io/client-go/dynamic"
 	dynfake "k8s.io/client-go/dynamic/fake"
@@ -14,6 +15,11 @@ import (
 )
 
 var _ Suite = &recordingSuite{}
+
+// fakeProm satisfies promv1.API without implementing any methods. Calling any
+// method on it panics, which is fine — these tests only check that the value
+// is stored, never that it is called.
+type fakeProm struct{ promv1.API }
 
 var emptyScheme = runtime.NewScheme()
 
@@ -41,6 +47,7 @@ func TestNewClients(t *testing.T) {
 		dynClientSet = dynfake.NewSimpleDynamicClient(emptyScheme)
 		monClientSet = monfake.NewSimpleClientset()
 		restConfig   = &rest.Config{Host: "https://harvester.example.com:6443"}
+		promClient   = &fakeProm{}
 	)
 
 	testCases := []struct {
@@ -49,13 +56,15 @@ func TestNewClients(t *testing.T) {
 		dynClientSet dynclient.Interface
 		monClientSet monclient.Interface
 		restConfig   *rest.Config
+		promClient   promv1.API
 	}{
 		{
-			name:         "clients set and rest config",
+			name:         "all fields set",
 			k8sClientSet: k8sClientSet,
 			dynClientSet: dynClientSet,
 			monClientSet: monClientSet,
 			restConfig:   restConfig,
+			promClient:   promClient,
 		},
 		{
 			name:         "nil rest config",
@@ -82,7 +91,7 @@ func TestNewClients(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			c := NewClients(tc.k8sClientSet, tc.dynClientSet, tc.monClientSet, tc.restConfig)
+			c := NewClients(tc.k8sClientSet, tc.dynClientSet, tc.monClientSet, tc.restConfig, tc.promClient)
 			if c == nil {
 				t.Fatal("NewClients() returned nil, want non-nil *Clients")
 			}
@@ -93,10 +102,13 @@ func TestNewClients(t *testing.T) {
 				t.Errorf("DynClientSet = %v, want %v", c.DynClientSet, tc.dynClientSet)
 			}
 			if c.MonClientSet != tc.monClientSet {
-				t.Errorf("DynClientSet = %v, want %v", c.DynClientSet, tc.dynClientSet)
+				t.Errorf("MonClientSet = %v, want %v", c.MonClientSet, tc.monClientSet)
 			}
 			if c.RestConfig != tc.restConfig {
 				t.Errorf("RestConfig = %v, want %v", c.RestConfig, tc.restConfig)
+			}
+			if c.PrometheusClient != tc.promClient {
+				t.Errorf("PrometheusClient = %v, want %v", c.PrometheusClient, tc.promClient)
 			}
 		})
 	}
@@ -105,23 +117,47 @@ func TestNewClients(t *testing.T) {
 // TestWithClients checks that WithClients hands the clients to the suite and
 // returns the same suite instance.
 func TestWithClients(t *testing.T) {
-	s := newRecordingSuite("test-fake-with-clients")
-	clients := NewClients(
-		k8sfake.NewClientset(),
-		dynfake.NewSimpleDynamicClient(emptyScheme),
-		monfake.NewSimpleClientset(),
-		&rest.Config{Host: "https://harvester.example.com:6443"},
+	var (
+		clients1 = NewClients(k8sfake.NewClientset(), nil, nil, &rest.Config{Host: "https://harvester.example.com:6443"}, nil)
+		clients2 = NewClients(k8sfake.NewClientset(), nil, nil, &rest.Config{Host: "https://harvester2.example.com:6443"}, &fakeProm{})
 	)
 
-	got := WithClients(s, clients)
+	testCases := []struct {
+		name            string
+		clients         []*Clients
+		wantSetCalls    int
+		wantLastClients *Clients
+	}{
+		{
+			name:            "single call",
+			clients:         []*Clients{clients1},
+			wantSetCalls:    1,
+			wantLastClients: clients1,
+		},
+		{
+			name:            "second call overwrites first",
+			clients:         []*Clients{clients1, clients2},
+			wantSetCalls:    2,
+			wantLastClients: clients2,
+		},
+	}
 
-	if got != Suite(s) {
-		t.Errorf("WithClients() = %v, want the same suite instance %v", got, s)
-	}
-	if s.setCalls != 1 {
-		t.Errorf("SetClients called %d times, want 1", s.setCalls)
-	}
-	if s.clients != clients {
-		t.Errorf("SetClients received %v, want %v", s.clients, clients)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newRecordingSuite("test-fake-with-clients")
+			var got Suite
+			for _, c := range tc.clients {
+				got = WithClients(s, c)
+			}
+			if got != Suite(s) {
+				t.Errorf("WithClients() = %v, want the same suite instance %v", got, s)
+			}
+			if s.setCalls != tc.wantSetCalls {
+				t.Errorf("SetClients called %d times, want %d", s.setCalls, tc.wantSetCalls)
+			}
+			if s.clients != tc.wantLastClients {
+				t.Errorf("SetClients received %v, want %v", s.clients, tc.wantLastClients)
+			}
+		})
 	}
 }

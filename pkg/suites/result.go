@@ -1,6 +1,7 @@
 package suites
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -15,10 +16,10 @@ const indent = "    "
 
 // SuiteResult represents the result of a test suite execution.
 type SuiteResult struct {
-	Name    string
-	Params  []*SuiteParam
-	RunID   string
-	Results []*CaseResult
+	Name    string        `json:"name"`
+	Params  []*SuiteParam `json:"params,omitempty"`
+	RunID   string        `json:"runID"`
+	Results []*CaseResult `json:"results"`
 }
 
 func (s *SuiteResult) String() string {
@@ -61,8 +62,8 @@ func (s *SuiteResult) summary() (passed int, failed int, total int) {
 // SuiteParam represents the parameters used to configure a test suite. They are
 // derived from the suite's internal options struct, used for reporting purposes only.
 type SuiteParam struct {
-	Key   string
-	Value string
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 func (s *SuiteParam) String() string {
@@ -109,7 +110,32 @@ type CaseResult struct {
 	Skipped       bool
 	Success       bool
 	Out           string
+	Data          any
 	Err           error
+}
+
+func (c *CaseResult) MarshalJSON() ([]byte, error) {
+	type wire struct {
+		Name      string     `json:"name"`
+		Success   bool       `json:"success"`
+		StartedAt time.Time  `json:"startedAt"`
+		EndedAt   time.Time  `json:"endedAt"`
+		Cmds      [][]string `json:"cmds,omitempty"`
+		Data      any        `json:"data,omitempty"`
+		Error     string     `json:"error,omitempty"`
+	}
+	w := wire{
+		Name:      c.CaseName,
+		Success:   c.Success,
+		StartedAt: c.DateTimeStart,
+		EndedAt:   c.DateTimeEnd,
+		Cmds:      c.Cmds,
+		Data:      c.Data,
+	}
+	if c.Err != nil {
+		w.Error = c.Err.Error()
+	}
+	return json.Marshal(w)
 }
 
 func (c *CaseResult) String() string {

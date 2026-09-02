@@ -4,6 +4,7 @@ import (
 	"context"
 
 	monclient "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	dynclient "k8s.io/client-go/dynamic"
 	k8sclient "k8s.io/client-go/kubernetes"
 
@@ -22,10 +23,11 @@ type Suite interface {
 // Clients holds the K8s API client sets that are used by the test suites
 // to interact with the cluster.
 type Clients struct {
-	K8sClientSet k8sclient.Interface
-	DynClientSet dynclient.Interface
-	MonClientSet monclient.Interface
-	RestConfig   *rest.Config
+	K8sClientSet     k8sclient.Interface
+	DynClientSet     dynclient.Interface
+	MonClientSet     monclient.Interface
+	RestConfig       *rest.Config
+	PrometheusClient promv1.API
 }
 
 // NewClients creates a new ClientSets with the provided K8s client set.
@@ -33,13 +35,14 @@ func NewClients(
 	k8sClientSet k8sclient.Interface,
 	dynClientSet dynclient.Interface,
 	monClientSet monclient.Interface,
-	restConfig *rest.Config,
+	restConfig *rest.Config, prometheusClient promv1.API,
 ) *Clients {
 	return &Clients{
-		K8sClientSet: k8sClientSet,
-		DynClientSet: dynClientSet,
-		MonClientSet: monClientSet,
-		RestConfig:   restConfig,
+		K8sClientSet:     k8sClientSet,
+		DynClientSet:     dynClientSet,
+		MonClientSet:     monClientSet,
+		RestConfig:       restConfig,
+		PrometheusClient: prometheusClient,
 	}
 }
 

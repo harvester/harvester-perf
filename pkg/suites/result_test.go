@@ -1,6 +1,7 @@
 package suites
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -409,5 +410,91 @@ func TestSuiteResultString(t *testing.T) {
 				t.Errorf("String() =\n%q\nwant\n%q", got, tc.expected)
 			}
 		})
+	}
+}
+
+func TestCaseResultMarshalJSON(t *testing.T) {
+	type row struct {
+		Node string `json:"node"`
+		CPU  string `json:"cpu"`
+	}
+
+	c := &CaseResult{
+		CaseName:      "node cpu and memory usage",
+		DateTimeStart: testStart,
+		DateTimeEnd:   testEnd,
+		Success:       true,
+		Data:          []row{{Node: "harvester-node-0", CPU: "1800m"}},
+	}
+
+	b, err := json.Marshal(c)
+	if err != nil {
+		t.Fatalf("MarshalJSON() error = %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+
+	if got["name"] != "node cpu and memory usage" {
+		t.Errorf("name = %v, want %q", got["name"], "node cpu and memory usage")
+	}
+	if got["success"] != true {
+		t.Errorf("success = %v, want true", got["success"])
+	}
+	if _, ok := got["data"]; !ok {
+		t.Error("data field missing from JSON output")
+	}
+	if _, ok := got["error"]; ok {
+		t.Error("error field should be absent when Err is nil")
+	}
+
+	cErr := &CaseResult{
+		CaseName: "failing case",
+		Success:  false,
+		Err:      errors.New("connection refused"),
+	}
+	b, err = json.Marshal(cErr)
+	if err != nil {
+		t.Fatalf("MarshalJSON() error = %v", err)
+	}
+	var gotErr map[string]any
+	if err := json.Unmarshal(b, &gotErr); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if gotErr["error"] != "connection refused" {
+		t.Errorf("error = %v, want %q", gotErr["error"], "connection refused")
+	}
+}
+
+func TestSuiteResultMarshalJSON(t *testing.T) {
+	s := &SuiteResult{
+		Name:  "resource-footprint",
+		RunID: "20260902095830",
+		Results: []*CaseResult{
+			{CaseName: "node cpu and memory usage", Success: true},
+		},
+	}
+
+	b, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("MarshalJSON() error = %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+
+	if got["name"] != "resource-footprint" {
+		t.Errorf("name = %v, want %q", got["name"], "resource-footprint")
+	}
+	if got["runID"] != "20260902095830" {
+		t.Errorf("runID = %v, want %q", got["runID"], "20260902095830")
+	}
+	results, ok := got["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Errorf("results = %v, want a 1-element array", got["results"])
 	}
 }
