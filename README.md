@@ -8,7 +8,8 @@ against [SUSE Harvester](https://harvesterhci.io) clusters.
 
 Suites are driven from your workstation using an ordinary kubeconfig. Nothing is
 installed on the Harvester nodes; suites that need on-node access (such as the
-etcd benchmark) schedule a short-lived helper pod and clean up after themselves.
+etcd benchmark) schedule a short-lived helper job in a namespace of their own,
+which `--keep-alive=false` tears down once the run is over.
 
 > **Status:** early development. The suite registry, CLI and etcd job plumbing
 > are in place; individual suites are still being filled in. See
@@ -44,15 +45,15 @@ targeting a specific cluster works the same way it does with `kubectl`:
 ./bin/hvperf run all --kubeconfig ~/.kube/harvester.yaml --context prod
 ```
 
-Suites that create resources put them in the `harvester-system-perf` namespace,
+Suites that create resources put them in the `harvester-perf-system` namespace,
 creating the namespace if it does not exist. Pass `--namespace` to use a
 different one.
 
 The Dockerfile builds a container image with `hvperf` and the tools the suites
 need to run in the cluster. For example, running the etcd suite from a locally
-built binary rather than the image will fail unless `etcdctl` and `benchmark` are
-present at `/usr/local/bin`. See [Container image](#container-image) for how to
-build and run the image.
+built binary rather than the image will fail unless `etcdctl`, `benchmark` and
+`promtool` are present at `/usr/local/bin`. See
+[Container image](#container-image) for how to build and run the image.
 
 ## Commands
 
@@ -63,6 +64,11 @@ build and run the image.
 | `hvperf run all` | Run every registered suite, read-only and read-write alike. |
 | `hvperf version [--client-only]` | Print the client version and, unless `--client-only` is set, the cluster's server version. |
 | `hvperf report` | Placeholder — not implemented yet. |
+
+`run` also takes `--keep-alive` (default `true`), which decides what happens to
+the test namespace once the run finishes. With `--keep-alive=false` the
+namespace and everything in it is deleted afterwards — but only when it is the
+default `harvester-perf-system`.
 
 Results are written to stdout; suite progress is logged to stderr, so
 `hvperf run ... -o json > results.json` keeps the two streams separate. Pass
@@ -114,15 +120,20 @@ To build natively instead, Go 1.26+ works directly: `go build -o bin/hvperf .`
 
 The image bundles `hvperf` with the tools the suites ship into the cluster:
 upstream `etcdctl` and `benchmark`, built from the etcd source at the version
-pinned in the Dockerfile (`ETCD_VERSION`, currently `v3.6.14`).
+pinned in the Dockerfile (`ETCD_VERSION`, currently `v3.6.14`), and `promtool`
+from the Prometheus release tarball (`PROMETHEUS_VERSION`, currently `3.14.0`).
+The runtime base is `registry.suse.com/bci/bci-base` at `BCI_TAG` (`16.0`).
 
 ```bash
 make image/build                                    # -> hvperf:<version>-<sha>
-make image/run                                      # show version
-make image/run IMAGE_RUN_ARGS="list"                # mounts ~/.kube read-only
-make image/run IMAGE_RUN_ARGS="run etcd-benchmark"
-make image/run IMAGE_RUN_ARGS="run all"
+make image/cmd                                      # mounts ~/.kube read-only
+make image/cmd IMAGE_CMD_ARGS="list"
+make image/cmd IMAGE_CMD_ARGS="run etcd-benchmark"
+make image/run_all                                  # shorthand for "run all"
 ```
+
+The image defaults to `hvperf version`, and expects a kubeconfig at
+`/root/.kube/config` — which is where the `image/*` targets bind-mount `~/.kube`.
 
 Overrides: `IMAGE_NAME`, `IMAGE_TAG`, `IMAGE_PLATFORMS` (default
 `linux/amd64`), `IMAGE_OUTPUT_TYPE`.
@@ -134,13 +145,14 @@ Overrides: `IMAGE_NAME`, `IMAGE_TAG`, `IMAGE_PLATFORMS` (default
 ├── main.go                # entry point; blank-imports internal/suites to register built-ins
 ├── cmd/                   # cobra command tree (root, list, run, report, version) and k8s client setup
 ├── pkg/suites/            # public API: Suite interface, registry, options, results, marshalling
-├── pkg/k8s/               # cluster helpers the suites share: namespaces, jobs, exec, logs
+├── pkg/k8s/               # cluster helpers the suites share: namespaces, jobs, exec, logs, pod monitors
 ├── internal/suites/
 │   ├── etcd/              # etcd-benchmark suite
 │   ├── nodes/             # node-capacity suite
 │   └── options/           # decodes the generic pkg/suites.Options into a suite's own options struct
 ├── poc/                   # shell-based prototype this CLI is being ported from
-├── Dockerfile             # multi-stage: etcd tools + hvperf -> BCI base runtime
+├── METRICS.md             # the metrics the suites collect and how to read them
+├── Dockerfile             # multi-stage: etcd tools + promtool + hvperf -> BCI base runtime
 └── Makefile               # containerised build, test and image targets
 ```
 
@@ -169,15 +181,24 @@ Overrides: `IMAGE_NAME`, `IMAGE_TAG`, `IMAGE_PLATFORMS` (default
    suite in it — use it to name and label anything the suite creates, and echo
    it back in the `SuiteResult`. `namespace` is where those resources belong.
    Record each check as a `CaseResult`; `Objects` is rendered as
-   `(Kind) namespace/name` in the text output.
+   `(Kind) namespace/name` in the text output, and a case that could not be run
+   for an environmental reason should set `Skipped` instead of failing.
 
-3. Register it from the package's `init()`:
+3. Give the suite an options struct. Settings shared across suites — the default
+   namespace, job pod image and timeouts, the monitoring addon coordinates —
+   live in `pkgsuites.DefaultGlobalOptions()`; decode them into your own struct
+   with `internal/suites/options.FromOptions[*MyOptions]` and layer the
+   suite-specific defaults on top. Passing that struct through
+   `pkgsuites.ToSuiteParams` into `SuiteResult.Params` records the effective
+   configuration in the results.
+
+4. Register it from the package's `init()`:
 
    ```go
    func init() { pkgsuites.Register(NewMySuite()) }
    ```
 
-4. Blank-import the package from `internal/suites/register.go` so `main` pulls
+5. Blank-import the package from `internal/suites/register.go` so `main` pulls
    it in.
 
 Names are the registry key — two suites with the same `Name()` silently
@@ -197,6 +218,8 @@ ported. See [`poc/README.md`](poc/README.md).
 - A kubeconfig with cluster-admin on the target Harvester cluster.
 - Docker (or a compatible runtime) for the build and image targets.
 - Go 1.26+ only if you build outside the container.
+- The `rancher-monitoring` addon, only for the metrics cases; suites skip those
+  cases when it is not enabled.
 
 ## License
 
