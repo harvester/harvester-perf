@@ -56,25 +56,17 @@ func MonitoringEnabled(ctx context.Context, c *suites.Clients, namespace, name s
 func EnsurePodMonitor(
 	ctx context.Context,
 	clients *suites.Clients,
-	name string,
-	namespace string,
-	metricsPortName string,
-	metricsPath string,
-	scheme string,
-	targetNamespace string,
-	monitoringServiceURL string,
-	labelSelector map[string]string,
+	opts *PodMonitorOption,
 	jobPod *corev1.Pod,
-	waitTimeout time.Duration,
 ) error {
 	var (
-		applyConfig       = monv1apply.PodMonitor(name, namespace)
-		namespaceSelector = monv1apply.NamespaceSelector().WithMatchNames(targetNamespace)
-		selector          = metav1apply.LabelSelector().WithMatchLabels(labelSelector)
+		applyConfig       = monv1apply.PodMonitor(opts.Name, opts.Namespace)
+		namespaceSelector = monv1apply.NamespaceSelector().WithMatchNames(opts.TargetNamespace)
+		selector          = metav1apply.LabelSelector().WithMatchLabels(opts.LabelSelector)
 		metricsEndpoints  = monv1apply.PodMetricsEndpoint().
-					WithPort(metricsPortName).
-					WithPath(metricsPath).
-					WithScheme(monv1.Scheme(scheme)).
+					WithPort(opts.MetricsPortName).
+					WithPath(opts.MetricsPath).
+					WithScheme(monv1.Scheme(opts.EndpointScheme)).
 					WithScrapeTimeout("10s")
 	)
 	applyConfigSpec := monv1apply.PodMonitorSpec().
@@ -83,13 +75,13 @@ func EnsurePodMonitor(
 		WithPodMetricsEndpoints(metricsEndpoints)
 
 	applyConfig = applyConfig.WithSpec(applyConfigSpec)
-	if _, err := clients.MonClientSet.MonitoringV1().PodMonitors(namespace).Apply(ctx, applyConfig, metav1.ApplyOptions{
+	if _, err := clients.MonClientSet.MonitoringV1().PodMonitors(opts.Namespace).Apply(ctx, applyConfig, metav1.ApplyOptions{
 		FieldManager: DefaultSSAFieldManager,
 	}); err != nil {
 		return err
 	}
 
-	jobName := fmt.Sprintf("%s/%s", namespace, name)
+	jobName := fmt.Sprintf("%s/%s", opts.Namespace, opts.Name)
 	cmd := [][]string{
 		{
 			// check if the prom job is ready. the job's default name is set to the
@@ -99,13 +91,13 @@ func EnsurePodMonitor(
 			"instant",
 			"-o",
 			"json",
-			monitoringServiceURL,
+			opts.MonitoringServiceURL,
 			fmt.Sprintf("up{job='%s'}", jobName),
 		},
 	}
 
 	var waitErr error
-	if err := wait.PollUntilContextTimeout(ctx, time.Second*30, waitTimeout, true, func(ctx context.Context) (done bool, err error) {
+	if err := wait.PollUntilContextTimeout(ctx, time.Second*30, opts.WaitTimeout, true, func(ctx context.Context) (done bool, err error) {
 		// keep polling for the etcd job to be ready until timeout expired,
 		// ignoring any errors
 		var r io.Reader
@@ -127,9 +119,21 @@ func EnsurePodMonitor(
 			return false, nil
 		}
 
-		return samples[0] != nil && samples[0].Value == 1, nil
+		return len(samples) > 0 && samples[0] != nil && samples[0].Value == 1, nil
 	}); err != nil {
 		return errors.Join(waitErr, err)
 	}
 	return nil
+}
+
+type PodMonitorOption struct {
+	Name                 string
+	Namespace            string
+	MetricsPortName      string
+	MetricsPath          string
+	EndpointScheme       string
+	TargetNamespace      string
+	MonitoringServiceURL string
+	LabelSelector        map[string]string
+	WaitTimeout          time.Duration
 }

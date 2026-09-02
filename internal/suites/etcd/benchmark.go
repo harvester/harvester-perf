@@ -344,24 +344,24 @@ func (s *BenchmarkSuite) monitoring(
 
 	// etcd metrics are not exposed by default, so we need to ensure that the pod
 	// monitor is created
-	labelSelector := map[string]string{
-		"component": "etcd",
-		"tier":      "control-plane",
+	podMonitorOpts := &k8s.PodMonitorOption{
+		Name:                 s.Name(),
+		Namespace:            pod.GetNamespace(),
+		MetricsPortName:      opts.EtcdMetricsPortName,
+		MetricsPath:          opts.EtcdMetricsPath,
+		EndpointScheme:       opts.EtcdMetricsScheme,
+		MonitoringServiceURL: opts.MonitoringServiceURL,
+		LabelSelector: map[string]string{
+			"component": "etcd",
+			"tier":      "control-plane",
+		},
+		WaitTimeout: opts.MonitoringWaitPodMonitorTimeout,
 	}
-	waitTimeout := 3 * time.Minute
 	if err := k8s.EnsurePodMonitor(
 		ctx,
 		s.Clients,
-		s.Name(),
-		pod.GetNamespace(),
-		opts.EtcdMetricsPortName,
-		opts.EtcdMetricsPath,
-		opts.EtcdMetricsScheme,
-		opts.EtcdNamespace,
-		opts.MonitoringServiceURL,
-		labelSelector,
+		podMonitorOpts,
 		pod,
-		waitTimeout,
 	); err != nil {
 		return nil, nil, false, err
 	}

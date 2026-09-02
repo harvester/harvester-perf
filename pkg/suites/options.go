@@ -23,6 +23,6 @@ func DefaultGlobalOptions() *Options {
 		"MonitoringAddonName":             "rancher-monitoring",
 		"MonitoringNamespace":             "cattle-monitoring-system",
 		"MonitoringServiceURL":            "http://rancher-monitoring-prometheus.cattle-monitoring-system:9090",
-		"MonitoringWaitPodMonitorTimeout": 180 * time.Second,
+		"MonitoringWaitPodMonitorTimeout": 300 * time.Second,
 	}
 }
