@@ -106,13 +106,13 @@ func ExecPod(
 	ctx context.Context,
 	c *suites.Clients,
 	pod *corev1.Pod,
-	cmdWithArgs [][]string,
+	cmds [][]string,
 ) (io.Reader, error) {
 	var (
 		errs   error
 		bufOut = &bytes.Buffer{}
 	)
-	for _, cmd := range cmdWithArgs {
+	for _, cmd := range cmds {
 		req := c.K8sClientSet.CoreV1().RESTClient().
 			Post().
 			Resource("pods").

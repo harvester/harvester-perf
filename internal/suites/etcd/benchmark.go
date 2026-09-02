@@ -65,6 +65,10 @@ func (s *BenchmarkSuite) RunE(
 	// 	return pkgsuites.SuiteResult{}, err
 	// }
 
+	if namespace == "" {
+		namespace = o.DefaultNamespace
+	}
+
 	nsReadyTimeout := 60 * time.Second
 	if _, err := k8s.EnsureNamespace(ctx, s.Clients, namespace, nsReadyTimeout); err != nil {
 		return pkgsuites.SuiteResult{}, err
@@ -164,28 +168,19 @@ func (s *BenchmarkSuite) RunE(
 		Err:           err,
 	})
 
-	// don't fail promql execution because not all clusters have monitoring enabled.
-	// just log the error and skip the promql execution.
 	klog.V(3).Infof("running etcd monitoring (promql suite) in pod '%s'\n", pod.GetName())
-	if !o.PrometheusSkip {
-		ready, err := k8s.MonitoringEnabled(ctx, s.Clients)
-		if err != nil || !ready {
-			klog.V(3).Error(err, "prometheus monitoring is not ready, skipping prometheus metrics collection: %v\n")
-		} else {
-			if ready {
-				promqlOut, cmds, err := s.execPromql(ctx, pod, o)
-				caseResults = append(caseResults, &pkgsuites.CaseResult{
-					CaseName:      "etcd monitoring (promql)",
-					Cmds:          cmds,
-					DateTimeStart: dateTimeStart,
-					DateTimeEnd:   time.Now(),
-					Objects:       []runtime.Object{job, pod},
-					Success:       err == nil,
-					Out:           string(promqlOut),
-					Err:           err,
-				})
-			}
-		}
+	if !o.MonitoringSkip {
+		promqlOut, cmds, err := s.monitoring(ctx, pod, o)
+		caseResults = append(caseResults, &pkgsuites.CaseResult{
+			CaseName:      "etcd monitoring (promql)",
+			Cmds:          cmds,
+			DateTimeStart: dateTimeStart,
+			DateTimeEnd:   time.Now(),
+			Objects:       []runtime.Object{job, pod},
+			Success:       err == nil,
+			Out:           string(promqlOut),
+			Err:           err,
+		})
 	}
 
 	suiteParams, err := pkgsuites.ToSuiteParams(o)
@@ -229,19 +224,19 @@ func (s *BenchmarkSuite) execHealthcheck(
 		{"etcdctl", "member", "list"},
 	}
 
-	cmdWithArgs := [][]string{}
+	runCmds := [][]string{}
 	args = append(args, outArgs...)
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
-		cmdWithArgs = append(cmdWithArgs, cmd)
+		runCmds = append(runCmds, cmd)
 	}
-	r, err := k8s.ExecPod(ctx, s.Clients, pod, cmdWithArgs)
+	r, err := k8s.ExecPod(ctx, s.Clients, pod, runCmds)
 	// don't discard any partial outputs
 	if r != nil {
 		b, readErr := io.ReadAll(r)
-		return b, cmdWithArgs, errors.Join(err, readErr)
+		return b, runCmds, errors.Join(err, readErr)
 	}
-	return nil, cmdWithArgs, err
+	return nil, runCmds, err
 }
 
 func (s *BenchmarkSuite) execCheckPerf(
@@ -258,19 +253,19 @@ func (s *BenchmarkSuite) execCheckPerf(
 		{"etcdctl", "check", "perf"},
 	}
 
-	cmdWithArgs := [][]string{}
+	runCmds := [][]string{}
 	args = append(args, outArgs...)
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
-		cmdWithArgs = append(cmdWithArgs, cmd)
+		runCmds = append(runCmds, cmd)
 	}
-	r, err := k8s.ExecPod(ctx, s.Clients, pod, cmdWithArgs)
+	r, err := k8s.ExecPod(ctx, s.Clients, pod, runCmds)
 	// don't discard any partial outputs
 	if r != nil {
 		b, readErr := io.ReadAll(r)
-		return b, cmdWithArgs, errors.Join(err, readErr)
+		return b, runCmds, errors.Join(err, readErr)
 	}
-	return nil, cmdWithArgs, err
+	return nil, runCmds, err
 }
 
 func (s *BenchmarkSuite) execBenchmark(
@@ -313,61 +308,165 @@ func (s *BenchmarkSuite) execBenchmark(
 		},
 	}
 
-	cmdWithArgs := [][]string{}
+	runCmds := [][]string{}
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
-		cmdWithArgs = append(cmdWithArgs, cmd)
+		runCmds = append(runCmds, cmd)
 	}
-	r, err := k8s.ExecPod(ctx, s.Clients, pod, cmdWithArgs)
+	r, err := k8s.ExecPod(ctx, s.Clients, pod, runCmds)
 	// don't discard any partial outputs
 	if r != nil {
 		b, readErr := io.ReadAll(r)
-		return b, cmdWithArgs, errors.Join(err, readErr)
+		return b, runCmds, errors.Join(err, readErr)
 	}
-	return nil, cmdWithArgs, err
+	return nil, runCmds, err
 }
 
-func (s *BenchmarkSuite) execPromql(
+func (s *BenchmarkSuite) monitoring(
 	ctx context.Context,
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
 ) ([]byte, [][]string, error) {
+	// check if monitoring addon is enabled and ready. if not, skip the promql
+	// execution.
+	ready, err := k8s.MonitoringEnabled(ctx, s.Clients, opts.MonitoringNamespace, opts.MonitoringAddonName)
+	if err != nil || !ready {
+		klog.V(3).ErrorS(err, "prometheus monitoring is not ready, skipping prometheus metrics collection: %v\n")
+		return nil, nil, err
+	}
+
 	// etcd metrics are not exposed by default, so we need to ensure that the pod
 	// monitor is created
-	podMon, err := k8s.EnsurePodMonitor(ctx, s.Clients, s.Name(), pod.GetNamespace(), opts.JobPodReadyTimeout)
+	podMon, err := k8s.EnsurePodMonitor(ctx, s.Clients, s.Name(), pod.GetNamespace(), opts.EtcdNamespace, opts.JobPodReadyTimeout)
 	if err != nil {
 		klog.V(3).ErrorS(err, "failed to ensure pod monitor: %s/%s\n", podMon.GetNamespace(), podMon.GetName())
 		return nil, nil, err
 	}
-	defer func() {
-		if err := k8s.DeletePodMonitor(ctx, s.Clients, podMon.GetName(), podMon.GetNamespace()); err != nil {
-			klog.V(3).ErrorS(err, "failed to delete pod monitor: %s/%s\n", podMon.GetNamespace(), podMon.GetName())
-		}
-	}()
 
+	jobName := fmt.Sprintf("%s/%s", podMon.GetNamespace(), podMon.GetName())
+	return s.execPromQL(ctx, pod, jobName, opts, args...)
+}
+
+func (s *BenchmarkSuite) execPromQL(
+	ctx context.Context,
+	pod *corev1.Pod,
+	jobName string,
+	opts *BenchmarkOptions,
+	args ...string,
+) ([]byte, [][]string, error) {
 	cmds := [][]string{
 		{
+			// check if the prom job is ready. the job's default name is set to the
+			// namespace and name of the pod monitor
 			"promtool",
 			"query",
 			"instant",
-			opts.PrometheusURL,
-			"up{job='etcd'}",
+			"-o",
+			opts.MonitoringOutputFormat,
+			opts.MonitoringServiceURL,
+			fmt.Sprintf("up{job='%s'}", jobName),
+		},
+		{
+			// p99 WAL fsync
+			"promtool",
+			"query",
+			"instant",
+			"-o",
+			opts.MonitoringOutputFormat,
+			opts.MonitoringServiceURL,
+			fmt.Sprintf(`histogram_quantile(
+				0.99,
+				sum by (le, pod) (
+					rate(etcd_disk_wal_fsync_duration_seconds_bucket{namespace='%s'}[5m])
+				)
+			)`, opts.EtcdNamespace),
+		},
+		{
+			// p99 backend commit
+			"promtool",
+			"query",
+			"instant",
+			"-o",
+			opts.MonitoringOutputFormat,
+			opts.MonitoringServiceURL,
+			fmt.Sprintf(`histogram_quantile(0.99, 
+				sum by (le, pod) (
+					rate(etcd_disk_backend_commit_duration_seconds_bucket{namespace='%s'}[5m])
+				)
+			)`, opts.EtcdNamespace),
+		},
+		{
+			// rate of WAL write bytes
+			"promtool",
+			"query",
+			"instant",
+			"-o",
+			opts.MonitoringOutputFormat,
+			opts.MonitoringServiceURL,
+			fmt.Sprintf(`sum by (pod) (
+				rate(etcd_disk_wal_write_bytes_total{namespace='%s'}[5m])
+			)`, opts.EtcdNamespace),
+		},
+		{
+			// p99 peer round-trip time
+			// query for ROUND_TRIPPER_RAFT_MESSAGE connection type to fetch small
+			// heartbeat/consensus traffic which dictates election-timeout risk
+			"promtool",
+			"query",
+			"instant",
+			"-o",
+			opts.MonitoringOutputFormat,
+			opts.MonitoringServiceURL,
+			fmt.Sprintf(`histogram_quantile(
+				0.99,
+				sum by (le, pod, To) (
+					rate(etcd_network_peer_round_trip_time_seconds_bucket{namespace='%s', ConnectionType='ROUND_TRIPPER_RAFT_MESSAGE'}[5m])
+				)
+			)`, opts.EtcdNamespace),
+		},
+		{
+			// peer send failure rates for multi-node cluster
+			// use the 'To' group-by to obtain the per peer node rates, instead of the
+			// cluster-wide rate
+			"promtool",
+			"query",
+			"instant",
+			"-o",
+			opts.MonitoringOutputFormat,
+			opts.MonitoringServiceURL,
+			fmt.Sprintf(`sum by (pod, To) (
+				rate(etcd_network_peer_sent_failures_total{namespace="%s"}[5m])
+				)`, opts.EtcdNamespace),
+		},
+		{
+			// peer receive failure rates for multi-node cluster
+			// use the 'To' group-by to obtain the per peer node rates, instead of the
+			// cluster-wide rate
+			"promtool",
+			"query",
+			"instant",
+			"-o",
+			opts.MonitoringOutputFormat,
+			opts.MonitoringServiceURL,
+			fmt.Sprintf(`sum by (pod, To) (
+				rate(etcd_network_peer_received_failures_total{namespace="%s"}[5m])
+				)`, opts.EtcdNamespace),
 		},
 	}
 
-	cmdWithArgs := [][]string{}
+	runCmds := [][]string{}
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
-		cmdWithArgs = append(cmdWithArgs, cmd)
+		runCmds = append(runCmds, cmd)
 	}
-	r, err := k8s.ExecPod(ctx, s.Clients, pod, cmdWithArgs)
+	r, err := k8s.ExecPod(ctx, s.Clients, pod, runCmds)
 	// don't discard any partial outputs
 	if r != nil {
 		b, readErr := io.ReadAll(r)
-		return b, cmdWithArgs, errors.Join(err, readErr)
+		return b, runCmds, errors.Join(err, readErr)
 	}
-	return nil, cmdWithArgs, err
+	return nil, runCmds, err
 }
 
 func (s *BenchmarkSuite) SetClients(clients *pkgsuites.Clients) {
@@ -375,6 +474,8 @@ func (s *BenchmarkSuite) SetClients(clients *pkgsuites.Clients) {
 }
 
 type BenchmarkOptions struct {
+	DefaultNamespace string
+
 	EtcdBenchmarkLocalPath string
 	EtcdctlLocalPath       string
 	PromtoolLocalPath      string
@@ -382,6 +483,7 @@ type BenchmarkOptions struct {
 	EtcdctlOutputFormat     string
 	EtcdEndpoints           string
 	EtcdMetricsPort         int
+	EtcdNamespace           string
 	EtcdRemoteTLSCertDir    string
 	EtcdRemoteCopyTargetDir string
 
@@ -395,15 +497,18 @@ type BenchmarkOptions struct {
 	JobPodReadyTimeout     time.Duration
 	JobSuspend             bool
 
+	MonitoringAddonName    string
+	MonitoringNamespace    string
+	MonitoringServiceURL   string
+	MonitoringSkip         bool
+	MonitoringOutputFormat string
+
 	CheckPerfLoadSize string
 	PutLoadSize       uint64
 	PutKeySize        uint64
 	PutValSize        uint64
 	GRPCConnCount     uint64
 	GRPCClientCount   uint64
-
-	PrometheusURL  string
-	PrometheusSkip bool
 }
 
 // BenchmarkOptionsDefaults returns the default options for the etcd benchmark
@@ -417,12 +522,15 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 
 	// TODO find a better way to merge the two structs
 	benchmarkOptions := &BenchmarkOptions{
+		DefaultNamespace: sysOpts.DefaultNamespace,
+
 		EtcdBenchmarkLocalPath: "/usr/local/bin/benchmark",
 		EtcdctlLocalPath:       "/usr/local/bin/etcdctl",
 		PromtoolLocalPath:      "/usr/local/bin/promtool",
 
 		EtcdctlOutputFormat:     "simple",
 		EtcdEndpoints:           "https://127.0.0.1:2379",
+		EtcdNamespace:           sysOpts.EtcdNamespace,
 		EtcdRemoteCopyTargetDir: "/usr/local/bin/",
 		EtcdRemoteTLSCertDir:    "/host/rancher/rke2/server/tls/etcd",
 
@@ -436,7 +544,11 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 		JobPodReadyTimeout:     sysOpts.JobPodReadyTimeout,
 		JobSuspend:             sysOpts.JobSuspend,
 
-		PrometheusURL: sysOpts.PrometheusURL,
+		MonitoringAddonName:    sysOpts.MonitoringAddonName,
+		MonitoringNamespace:    sysOpts.MonitoringNamespace,
+		MonitoringServiceURL:   sysOpts.MonitoringServiceURL,
+		MonitoringSkip:         sysOpts.MonitoringSkip,
+		MonitoringOutputFormat: "promql",
 
 		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
 		PutLoadSize:       DefaultLoadSize,

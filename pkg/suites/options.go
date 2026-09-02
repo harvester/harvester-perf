@@ -18,9 +18,9 @@ func DefaultGlobalOptions() *Options {
 		"JobPodTTLAfterFinished": 300 * time.Second,
 		"JobPodReadyTimeout":     3600 * time.Second,
 		"JobSuspend":             false,
-		"PrometheusURL":          "http://rancher-monitoring-prometheus.cattle-monitoring-system:9090",
 		"EtcdNamespace":          "kube-system",
-		"MonitoringNamespace":    "cattle-monitoring-system",
 		"MonitoringAddonName":    "rancher-monitoring",
+		"MonitoringNamespace":    "cattle-monitoring-system",
+		"MonitoringServiceURL":   "http://rancher-monitoring-prometheus.cattle-monitoring-system:9090",
 	}
 }

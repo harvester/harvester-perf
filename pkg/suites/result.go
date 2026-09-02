@@ -29,7 +29,7 @@ func (s *SuiteResult) String() string {
 
 	fmt.Fprintf(&stringBuilder, "=== SUITE %s (run %s)\n", s.Name, s.RunID)
 	for i, param := range s.Params {
-		label := indent + "Params:"
+		label := indent + "Params:\n"
 		if i > 0 {
 			label = indent
 		}
