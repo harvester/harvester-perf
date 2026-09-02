@@ -347,7 +347,21 @@ func (s *BenchmarkSuite) monitoring(
 		"component": "etcd",
 		"tier":      "control-plane",
 	}
-	podMon, err := k8s.EnsurePodMonitor(ctx, s.Clients, s.Name(), pod.GetNamespace(), opts.EtcdMetricsPortName, opts.EtcdMetricsPath, opts.EtcdMetricsScheme, opts.EtcdNamespace, labelSelector)
+	waitTimeout := 3 * time.Minute
+	podMon, err := k8s.EnsurePodMonitor(
+		ctx,
+		s.Clients,
+		s.Name(),
+		pod.GetNamespace(),
+		opts.EtcdMetricsPortName,
+		opts.EtcdMetricsPath,
+		opts.EtcdMetricsScheme,
+		opts.EtcdNamespace,
+		opts.MonitoringServiceURL,
+		labelSelector,
+		pod,
+		waitTimeout,
+	)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -369,17 +383,6 @@ func (s *BenchmarkSuite) execPromQL(
 	args ...string,
 ) ([]byte, [][]string, error) {
 	cmds := [][]string{
-		{
-			// check if the prom job is ready. the job's default name is set to the
-			// namespace and name of the pod monitor
-			"promtool",
-			"query",
-			"instant",
-			"-o",
-			opts.MonitoringOutputFormat,
-			opts.MonitoringServiceURL,
-			fmt.Sprintf("up{job='%s'}", jobName),
-		},
 		{
 			// p99 WAL fsync
 			"promtool",

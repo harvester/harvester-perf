@@ -3,12 +3,17 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"io"
+	"strings"
+	"time"
 
 	"github.com/harvester/hvperf/pkg/suites"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
 	metav1apply "k8s.io/client-go/applyconfigurations/meta/v1"
 
 	monv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -55,7 +60,10 @@ func EnsurePodMonitor(
 	metricsPath string,
 	scheme string,
 	targetNamespace string,
+	monitoringServiceURL string,
 	labelSelector map[string]string,
+	jobPod *corev1.Pod,
+	waitTimeout time.Duration,
 ) (*monv1.PodMonitor, error) {
 	var (
 		applyConfig       = monv1apply.PodMonitor(name, namespace)
@@ -73,7 +81,43 @@ func EnsurePodMonitor(
 		WithPodMetricsEndpoints(metricsEndpoints)
 
 	applyConfig = applyConfig.WithSpec(applyConfigSpec)
-	return clients.MonClientSet.MonitoringV1().PodMonitors(namespace).Apply(ctx, applyConfig, metav1.ApplyOptions{
+	created, err := clients.MonClientSet.MonitoringV1().PodMonitors(namespace).Apply(ctx, applyConfig, metav1.ApplyOptions{
 		FieldManager: DefaultSSAFieldManager,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	jobName := fmt.Sprintf("%s/%s", namespace, name)
+	cmd := [][]string{
+		{
+			// check if the prom job is ready. the job's default name is set to the
+			// namespace and name of the pod monitor
+			"promtool",
+			"query",
+			"instant",
+			monitoringServiceURL,
+			fmt.Sprintf("up{job='%s'}", jobName),
+		},
+	}
+
+	if err := wait.PollUntilContextTimeout(ctx, time.Second*30, waitTimeout, true, func(ctx context.Context) (done bool, err error) {
+		// keep polling for the etcd job to be ready until timeout expired,
+		// ignoring any errors
+		var r io.Reader
+		r, err = ExecPod(ctx, clients, jobPod, cmd)
+		if err != nil {
+			return false, nil
+		}
+
+		b, readErr := io.ReadAll(r)
+		if readErr != nil {
+			return false, nil
+		}
+
+		return strings.Contains(string(b), "1"), nil
+	}); err != nil {
+		return nil, err
+	}
+	return created, nil
 }
