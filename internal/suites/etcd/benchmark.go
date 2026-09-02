@@ -369,7 +369,7 @@ func (s *BenchmarkSuite) monitoring(
 	jobName := fmt.Sprintf("%s/%s", podMon.GetNamespace(), podMon.GetName())
 	out, cmds, err := s.execPromQL(ctx, pod, jobName, opts, args...)
 	if err != nil {
-		return nil, nil, false, err
+		return out, cmds, false, err
 	}
 
 	return out, cmds, false, err

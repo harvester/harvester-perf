@@ -38,14 +38,18 @@ func (s *SuiteResult) String() string {
 	}
 	fmt.Fprint(&stringBuilder, strings.Join(results, "\n"))
 
-	passed, failed, total := s.summary()
-	fmt.Fprintf(&stringBuilder, "\n=== %s: %d failed, %d passed (%d total)\n", s.Name, failed, passed, total)
+	passed, failed, skipped, total := s.summary()
+	fmt.Fprintf(&stringBuilder, "\n=== %s: %d failed, %d passed, %d skipped (%d total)\n", s.Name, failed, passed, skipped, total)
 	return stringBuilder.String()
 }
 
-func (s *SuiteResult) summary() (passed int, failed int, total int) {
+func (s *SuiteResult) summary() (passed int, failed int, skipped int, total int) {
 	total = len(s.Results)
 	for _, result := range s.Results {
+		if result.Skipped {
+			skipped++
+			continue
+		}
 		if result.Success {
 			passed++
 			continue
