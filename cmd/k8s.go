@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	pkgprom "github.com/harvester/hvperf/pkg/prometheus"
 	"github.com/harvester/hvperf/pkg/suites"
 	monclient "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
 	kcliopts "k8s.io/cli-runtime/pkg/genericclioptions"
@@ -76,5 +77,11 @@ func configureClients() (*suites.Clients, error) {
 		return nil, err
 	}
 
-	return suites.NewClients(k8sClientSet, dynClientSet, monClientSet, restConfig), nil
+	promClient, err := pkgprom.NewPrometheusClient(restConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	clients := suites.NewClients(k8sClientSet, dynClientSet, monClientSet, restConfig, promClient)
+	return clients, nil
 }
