@@ -101,14 +101,15 @@ func EnsurePodMonitor(
 		// keep polling for the etcd job to be ready until timeout expired,
 		// ignoring any errors
 		var r io.Reader
+		waitErr = nil
 		r, err = ExecPod(ctx, clients, jobPod, cmd)
 		if err != nil {
 			waitErr = err
 			return false, nil
 		}
 
-		b, readErr := io.ReadAll(r)
-		if readErr != nil {
+		b, err := io.ReadAll(r)
+		if err != nil {
 			waitErr = err
 			return false, nil
 		}
@@ -119,7 +120,15 @@ func EnsurePodMonitor(
 			return false, nil
 		}
 
-		return len(samples) > 0 && samples[0] != nil && samples[0].Value == 1, nil
+		// set to ready only if all etcd jobs are ready
+		ready := len(samples) > 0
+		for _, sample := range samples {
+			if sample.Value != 1 {
+				ready = false
+				break
+			}
+		}
+		return ready, nil
 	}); err != nil {
 		return errors.Join(waitErr, err)
 	}

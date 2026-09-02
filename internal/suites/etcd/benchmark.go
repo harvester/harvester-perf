@@ -350,6 +350,7 @@ func (s *BenchmarkSuite) monitoring(
 		MetricsPortName:      opts.EtcdMetricsPortName,
 		MetricsPath:          opts.EtcdMetricsPath,
 		EndpointScheme:       opts.EtcdMetricsScheme,
+		TargetNamespace:      opts.EtcdNamespace,
 		MonitoringServiceURL: opts.MonitoringServiceURL,
 		LabelSelector: map[string]string{
 			"component": "etcd",
@@ -357,19 +358,20 @@ func (s *BenchmarkSuite) monitoring(
 		},
 		WaitTimeout: opts.MonitoringWaitPodMonitorTimeout,
 	}
-	if err := k8s.EnsurePodMonitor(
+	podMonErr := k8s.EnsurePodMonitor(
 		ctx,
 		s.Clients,
 		podMonitorOpts,
 		pod,
-	); err != nil {
-		return nil, nil, false, err
-	}
+	)
 	defer func() {
-		if err := s.MonClientSet.MonitoringV1().PodMonitors(pod.GetNamespace()).Delete(ctx, s.Name(), metav1.DeleteOptions{}); err != nil {
+		if err := s.MonClientSet.MonitoringV1().PodMonitors(pod.GetNamespace()).Delete(context.Background(), s.Name(), metav1.DeleteOptions{}); err != nil {
 			klog.V(3).ErrorS(err, "failed to delete pod monitor", "name", s.Name(), "namespace", pod.GetNamespace())
 		}
 	}()
+	if podMonErr != nil {
+		return nil, nil, false, podMonErr
+	}
 
 	out, cmds, err := s.execPromQL(ctx, pod, opts, args...)
 	if err != nil {
