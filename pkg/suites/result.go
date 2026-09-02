@@ -28,8 +28,10 @@ func (s *SuiteResult) String() string {
 	)
 
 	fmt.Fprintf(&stringBuilder, "=== SUITE %s (run %s)\n", s.Name, s.RunID)
-	fmt.Fprintf(&stringBuilder, "%sParams:\n", indent)
-	for _, param := range s.Params {
+	for i, param := range s.Params {
+		if i == 0 {
+			fmt.Fprintf(&stringBuilder, "%sParams:\n", indent)
+		}
 		fmt.Fprintf(&stringBuilder, "%s\t%s\n", indent, param)
 	}
 

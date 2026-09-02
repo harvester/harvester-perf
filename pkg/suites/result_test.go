@@ -305,9 +305,9 @@ func TestCaseResultStringOutputTabs(t *testing.T) {
 
 func TestSuiteResultSummary(t *testing.T) {
 	testCases := []struct {
-		name                            string
-		results                         []*CaseResult
-		wantPassed, wantFailed, wantTot int
+		name                                         string
+		results                                      []*CaseResult
+		wantPassed, wantFailed, wantSkipped, wantTot int
 	}{
 		{
 			name:    "no results",
@@ -326,11 +326,18 @@ func TestSuiteResultSummary(t *testing.T) {
 			wantTot:    2,
 		},
 		{
-			name:       "mixed",
-			results:    []*CaseResult{{Success: true}, {Success: false}, {Success: true}},
-			wantPassed: 2,
-			wantFailed: 1,
-			wantTot:    3,
+			name:        "all skipped",
+			results:     []*CaseResult{{Skipped: true}, {Skipped: true}},
+			wantSkipped: 2,
+			wantTot:     2,
+		},
+		{
+			name:        "mixed",
+			results:     []*CaseResult{{Success: true}, {Success: false}, {Success: true}, {Skipped: true}},
+			wantPassed:  2,
+			wantFailed:  1,
+			wantSkipped: 1,
+			wantTot:     4,
 		},
 	}
 
@@ -338,18 +345,21 @@ func TestSuiteResultSummary(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &SuiteResult{Name: "etcd-benchmark", RunID: "abc123", Results: tc.results}
 
-			passed, failed, total := s.summary()
+			passed, failed, skipped, total := s.summary()
 			if passed != tc.wantPassed {
 				t.Errorf("summary() passed = %d, want %d", passed, tc.wantPassed)
 			}
 			if failed != tc.wantFailed {
 				t.Errorf("summary() failed = %d, want %d", failed, tc.wantFailed)
 			}
+			if skipped != tc.wantSkipped {
+				t.Errorf("summary() skipped = %d, want %d", skipped, tc.wantSkipped)
+			}
 			if total != tc.wantTot {
 				t.Errorf("summary() total = %d, want %d", total, tc.wantTot)
 			}
-			if passed+failed != total {
-				t.Errorf("summary() passed+failed = %d, want total %d", passed+failed, total)
+			if passed+failed+skipped != total {
+				t.Errorf("summary() passed+failed+skipped = %d, want total %d", passed+failed+skipped, total)
 			}
 		})
 	}
@@ -369,6 +379,10 @@ func TestSuiteResultString(t *testing.T) {
 		Success:       false,
 		Err:           errors.New("connection refused"),
 	}
+	skipped := &CaseResult{
+		CaseName: "list-pods",
+		Skipped:  true,
+	}
 
 	testCases := []struct {
 		name     string
@@ -379,27 +393,27 @@ func TestSuiteResultString(t *testing.T) {
 			name:   "no case results",
 			result: &SuiteResult{Name: "node-capacity", RunID: "abc123"},
 			expected: "=== SUITE node-capacity (run abc123)\n" +
-				"\n=== node-capacity: 0 failed, 0 passed (0 total)\n",
+				"\n=== node-capacity: 0 failed, 0 passed, 0 skipped (0 total)\n",
 		},
 		{
 			name:   "single passing case",
 			result: &SuiteResult{Name: "node-capacity", RunID: "abc123", Results: []*CaseResult{passing}},
 			expected: "=== SUITE node-capacity (run abc123)\n" +
 				passing.String() +
-				"\n=== node-capacity: 0 failed, 1 passed (1 total)\n",
+				"\n=== node-capacity: 0 failed, 1 passed, 0 skipped (1 total)\n",
 		},
 		{
 			name:   "mixed cases are joined by a newline",
-			result: &SuiteResult{Name: "node-capacity", RunID: "abc123", Results: []*CaseResult{passing, failing}},
+			result: &SuiteResult{Name: "node-capacity", RunID: "abc123", Results: []*CaseResult{passing, failing, skipped}},
 			expected: "=== SUITE node-capacity (run abc123)\n" +
-				passing.String() + "\n" + failing.String() +
-				"\n=== node-capacity: 1 failed, 1 passed (2 total)\n",
+				passing.String() + "\n" + failing.String() + "\n" + skipped.String() +
+				"\n=== node-capacity: 1 failed, 1 passed, 1 skipped (3 total)\n",
 		},
 		{
 			name:   "zero value suite result still renders",
 			result: &SuiteResult{},
 			expected: "=== SUITE  (run )\n" +
-				"\n=== : 0 failed, 0 passed (0 total)\n",
+				"\n=== : 0 failed, 0 passed, 0 skipped (0 total)\n",
 		},
 	}
 
