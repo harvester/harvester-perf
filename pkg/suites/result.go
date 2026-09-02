@@ -106,6 +106,7 @@ type CaseResult struct {
 	DateTimeStart time.Time
 	DateTimeEnd   time.Time
 	Objects       []runtime.Object
+	Skipped       bool
 	Success       bool
 	Out           string
 	Err           error
@@ -121,7 +122,14 @@ func (c *CaseResult) String() string {
 	if !c.Success {
 		result = "FAIL"
 	}
+	if c.Skipped {
+		result = "SKIPPED"
+	}
+
 	fmt.Fprintf(tab, "--- %s %s (%s)\n", result, c.CaseName, c.DateTimeEnd.Sub(c.DateTimeStart).Round(time.Millisecond))
+	if c.Skipped {
+		return stringBuilder.String()
+	}
 	fmt.Fprintf(tab, "%sStarted on:\t%s\n", indent, c.DateTimeStart.Format("2006-01-02T15:04:05Z07:00"))
 	fmt.Fprintf(tab, "%sEnded at:\t%s\n", indent, c.DateTimeEnd.Format("2006-01-02T15:04:05Z07:00"))
 	for i, cmd := range c.Cmds {

@@ -38,7 +38,6 @@ func TestBenchmarkOptionsDefaults(t *testing.T) {
 		MonitoringAddonName:    sysOpts.MonitoringAddonName,
 		MonitoringNamespace:    sysOpts.MonitoringNamespace,
 		MonitoringServiceURL:   sysOpts.MonitoringServiceURL,
-		MonitoringSkip:         sysOpts.MonitoringSkip,
 		MonitoringOutputFormat: "promql",
 
 		CheckPerfLoadSize: DefaultCheckPerfLoadSize,

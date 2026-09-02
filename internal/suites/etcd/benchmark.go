@@ -169,19 +169,18 @@ func (s *BenchmarkSuite) RunE(
 	})
 
 	klog.V(3).Infof("running etcd monitoring (promql suite) in pod '%s'\n", pod.GetName())
-	if !o.MonitoringSkip {
-		promqlOut, cmds, err := s.monitoring(ctx, pod, o)
-		caseResults = append(caseResults, &pkgsuites.CaseResult{
-			CaseName:      "etcd monitoring (promql)",
-			Cmds:          cmds,
-			DateTimeStart: dateTimeStart,
-			DateTimeEnd:   time.Now(),
-			Objects:       []runtime.Object{job, pod},
-			Success:       err == nil,
-			Out:           string(promqlOut),
-			Err:           err,
-		})
-	}
+	promqlOut, cmds, skipped, err := s.monitoring(ctx, pod, o)
+	caseResults = append(caseResults, &pkgsuites.CaseResult{
+		CaseName:      "etcd monitoring (promql)",
+		Cmds:          cmds,
+		DateTimeStart: dateTimeStart,
+		DateTimeEnd:   time.Now(),
+		Objects:       []runtime.Object{job, pod},
+		Skipped:       skipped,
+		Success:       err == nil,
+		Out:           string(promqlOut),
+		Err:           err,
+	})
 
 	suiteParams, err := pkgsuites.ToSuiteParams(o)
 	if err != nil {
@@ -327,25 +326,34 @@ func (s *BenchmarkSuite) monitoring(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) ([]byte, [][]string, error) {
+) ([]byte, [][]string, bool, error) {
 	// check if monitoring addon is enabled and ready. if not, skip the promql
 	// execution.
 	ready, err := k8s.MonitoringEnabled(ctx, s.Clients, opts.MonitoringNamespace, opts.MonitoringAddonName)
-	if err != nil || !ready {
-		klog.V(3).ErrorS(err, "prometheus monitoring is not ready, skipping prometheus metrics collection: %v\n")
-		return nil, nil, err
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	// skip if not ready
+	if !ready {
+		klog.V(3).Infof("monitoring addon '%s' is not enabled in namespace '%s', skipping promql execution\n", opts.MonitoringNamespace, opts.MonitoringAddonName)
+		return nil, nil, true, nil
 	}
 
 	// etcd metrics are not exposed by default, so we need to ensure that the pod
 	// monitor is created
-	podMon, err := k8s.EnsurePodMonitor(ctx, s.Clients, s.Name(), pod.GetNamespace(), opts.EtcdNamespace, opts.JobPodReadyTimeout)
+	podMon, err := k8s.EnsurePodMonitor(ctx, s.Clients, s.Name(), pod.GetNamespace(), opts.EtcdNamespace)
 	if err != nil {
-		klog.V(3).ErrorS(err, "failed to ensure pod monitor: %s/%s\n", podMon.GetNamespace(), podMon.GetName())
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 
 	jobName := fmt.Sprintf("%s/%s", podMon.GetNamespace(), podMon.GetName())
-	return s.execPromQL(ctx, pod, jobName, opts, args...)
+	out, cmds, err := s.execPromQL(ctx, pod, jobName, opts, args...)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	return out, cmds, false, err
 }
 
 func (s *BenchmarkSuite) execPromQL(
@@ -499,7 +507,6 @@ type BenchmarkOptions struct {
 	MonitoringAddonName    string
 	MonitoringNamespace    string
 	MonitoringServiceURL   string
-	MonitoringSkip         bool
 	MonitoringOutputFormat string
 
 	CheckPerfLoadSize string
@@ -545,7 +552,6 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 		MonitoringAddonName:    sysOpts.MonitoringAddonName,
 		MonitoringNamespace:    sysOpts.MonitoringNamespace,
 		MonitoringServiceURL:   sysOpts.MonitoringServiceURL,
-		MonitoringSkip:         sysOpts.MonitoringSkip,
 		MonitoringOutputFormat: "promql",
 
 		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
