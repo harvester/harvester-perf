@@ -90,7 +90,10 @@ func TestNewClients(t *testing.T) {
 				t.Errorf("K8sClientSet = %v, want %v", c.K8sClientSet, tc.k8sClientSet)
 			}
 			if c.DynClientSet != tc.dynClientSet {
-				t.Errorf("K8sClientSet = %v, want %v", c.DynClientSet, tc.dynClientSet)
+				t.Errorf("DynClientSet = %v, want %v", c.DynClientSet, tc.dynClientSet)
+			}
+			if c.MonClientSet != tc.monClientSet {
+				t.Errorf("DynClientSet = %v, want %v", c.DynClientSet, tc.dynClientSet)
 			}
 			if c.RestConfig != tc.restConfig {
 				t.Errorf("RestConfig = %v, want %v", c.RestConfig, tc.restConfig)

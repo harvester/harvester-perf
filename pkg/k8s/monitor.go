@@ -3,7 +3,6 @@ package k8s
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/harvester/hvperf/pkg/suites"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -50,7 +49,6 @@ func EnsurePodMonitor(
 	name string,
 	namespace string,
 	targetNamespace string,
-	readyTimeout time.Duration,
 ) (*monv1.PodMonitor, error) {
 	var (
 		applyConfig       = monv1apply.PodMonitor(name, namespace)
