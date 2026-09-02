@@ -12,6 +12,7 @@ import (
 	pkgsuites "github.com/harvester/hvperf/pkg/suites"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 )
@@ -364,6 +365,11 @@ func (s *BenchmarkSuite) monitoring(
 	); err != nil {
 		return nil, nil, false, err
 	}
+	defer func() {
+		if err := s.MonClientSet.MonitoringV1().PodMonitors(pod.GetNamespace()).Delete(ctx, s.Name(), metav1.DeleteOptions{}); err != nil {
+			klog.V(3).ErrorS(err, "failed to delete pod monitor", "name", s.Name(), "namespace", pod.GetNamespace())
+		}
+	}()
 
 	out, cmds, err := s.execPromQL(ctx, pod, opts, args...)
 	if err != nil {
