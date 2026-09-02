@@ -2,10 +2,10 @@ package k8s
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	"github.com/harvester/hvperf/pkg/suites"
@@ -19,6 +19,7 @@ import (
 
 	monv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	monv1apply "github.com/prometheus-operator/prometheus-operator/pkg/client/applyconfiguration/monitoring/v1"
+	"github.com/prometheus/common/model"
 )
 
 var addonGVR = schema.GroupVersionResource{
@@ -96,6 +97,8 @@ func EnsurePodMonitor(
 			"promtool",
 			"query",
 			"instant",
+			"-o",
+			"json",
 			monitoringServiceURL,
 			fmt.Sprintf("up{job='%s'}", jobName),
 		},
@@ -118,7 +121,13 @@ func EnsurePodMonitor(
 			return false, nil
 		}
 
-		return strings.Contains(string(b), "1"), nil
+		var samples model.Samples
+		if err := json.Unmarshal(b, &samples); err != nil {
+			waitErr = err
+			return false, nil
+		}
+
+		return samples[0] != nil && samples[0].Value == 1, nil
 	}); err != nil {
 		return errors.Join(waitErr, err)
 	}
