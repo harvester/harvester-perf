@@ -132,6 +132,15 @@ func EnsurePodMonitor(
 	}); err != nil {
 		return errors.Join(waitErr, err)
 	}
+
+	// wait for the next scrape interval so that prometheus has scraped the metrics
+	// at least once
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(opts.ScrapeInterval):
+	}
+
 	return nil
 }
 
@@ -145,4 +154,5 @@ type PodMonitorOption struct {
 	MonitoringServiceURL string
 	LabelSelector        map[string]string
 	WaitTimeout          time.Duration
+	ScrapeInterval       time.Duration
 }

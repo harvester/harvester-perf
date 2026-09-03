@@ -357,7 +357,8 @@ func (s *BenchmarkSuite) monitoring(
 			"component": "etcd",
 			"tier":      "control-plane",
 		},
-		WaitTimeout: opts.MonitoringWaitPodMonitorTimeout,
+		WaitTimeout:    opts.MonitoringWaitPodMonitorTimeout,
+		ScrapeInterval: opts.MonitoringScrapeInterval,
 	}
 	podMonErr := k8s.EnsurePodMonitor(
 		ctx,
@@ -530,6 +531,7 @@ type BenchmarkOptions struct {
 	MonitoringServiceURL            string
 	MonitoringOutputFormat          string
 	MonitoringWaitPodMonitorTimeout time.Duration
+	MonitoringScrapeInterval        time.Duration
 
 	CheckPerfLoadSize string
 	PutLoadSize       uint64
@@ -579,6 +581,7 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 		MonitoringServiceURL:            sysOpts.MonitoringServiceURL,
 		MonitoringOutputFormat:          "promql",
 		MonitoringWaitPodMonitorTimeout: sysOpts.MonitoringWaitPodMonitorTimeout,
+		MonitoringScrapeInterval:        sysOpts.MonitoringScrapeInterval,
 
 		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
 		PutLoadSize:       DefaultLoadSize,
