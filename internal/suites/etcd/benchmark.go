@@ -67,10 +67,6 @@ func (s *BenchmarkSuite) RunE(
 	// 	return pkgsuites.SuiteResult{}, err
 	// }
 
-	if namespace == "" {
-		namespace = o.DefaultNamespace
-	}
-
 	nsReadyTimeout := 60 * time.Second
 	if _, err := k8s.EnsureNamespace(ctx, s.Clients, namespace, nsReadyTimeout); err != nil {
 		return pkgsuites.SuiteResult{}, err
@@ -502,8 +498,6 @@ func (s *BenchmarkSuite) SetClients(clients *pkgsuites.Clients) {
 }
 
 type BenchmarkOptions struct {
-	DefaultNamespace string
-
 	EtcdBenchmarkLocalPath string
 	EtcdctlLocalPath       string
 	PromtoolLocalPath      string
@@ -552,8 +546,6 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 
 	// TODO find a better way to merge the two structs
 	benchmarkOptions := &BenchmarkOptions{
-		DefaultNamespace: sysOpts.DefaultNamespace,
-
 		EtcdBenchmarkLocalPath: "/usr/local/bin/benchmark",
 		EtcdctlLocalPath:       "/usr/local/bin/etcdctl",
 		PromtoolLocalPath:      "/usr/local/bin/promtool",

@@ -95,7 +95,6 @@ func runSuites(testSuites []suites.Suite, format string) ([]*suites.SuiteResult,
 	if k8sConfigFlags.Namespace != nil && *k8sConfigFlags.Namespace != "" {
 		namespace = *k8sConfigFlags.Namespace
 	}
-
 	defer func() {
 		if !keepAlive && namespace == suites.DefaultNamespace {
 			//nolint:errcheck
