@@ -45,6 +45,9 @@ func (s *fakeSuite) RunE(ctx context.Context, runID, namespace string, opts Opti
 func (s *fakeSuite) SetClients(clientSets *Clients) {
 }
 
+func (s *fakeSuite) SetProgressReporter(reporter *ProgressReporter) {
+}
+
 func TestMarshalerString(t *testing.T) {
 	testCases := []struct {
 		name        string

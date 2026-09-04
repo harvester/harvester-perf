@@ -13,6 +13,7 @@ func TestBenchmarkOptionsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to convert default global options to BenchmarkOptions: %v", err)
 	}
+
 	expected := &BenchmarkOptions{
 		DefaultNamespace: sysOpts.DefaultNamespace,
 

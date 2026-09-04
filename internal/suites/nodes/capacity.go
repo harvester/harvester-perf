@@ -39,3 +39,6 @@ func (s *NodeCapacitySuite) RunE(ctx context.Context, runID, namespace string, o
 
 func (s *NodeCapacitySuite) SetClients(clientSets *pkgsuites.Clients) {
 }
+
+func (s *NodeCapacitySuite) SetProgressReporter(reporter *pkgsuites.ProgressReporter) {
+}

@@ -19,6 +19,7 @@ import (
 var (
 	runCmdClients *suites.Clients
 	keepAlive     bool
+	progress      *suites.ProgressReporter
 )
 
 // runCmd represents the run command
@@ -103,9 +104,12 @@ func runSuites(testSuites []suites.Suite, format string) ([]*suites.SuiteResult,
 		}
 	}()
 
-	for _, suite := range testSuites {
+	progress = suites.NewProgressReporter(os.Stderr, runID, len(testSuites))
+	for i, suite := range testSuites {
 		suite = suites.WithClients(suite, runCmdClients)
-		result, err := runSuite(ctx, runID, namespace, suite, suites.Options{})
+		suite = suites.WithProgressReporter(suite, progress)
+
+		result, err := runSuite(ctx, runID, namespace, suite, i+1, suites.Options{})
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to run test suite %q: %w", suite.Name(), err))
 			continue
@@ -115,7 +119,13 @@ func runSuites(testSuites []suites.Suite, format string) ([]*suites.SuiteResult,
 	return results, errs
 }
 
-func runSuite(ctx context.Context, runID, namespace string, testSuite suites.Suite, opts suites.Options) (suites.SuiteResult, error) {
+func runSuite(ctx context.Context, runID, namespace string, testSuite suites.Suite, i int, opts suites.Options) (suites.SuiteResult, error) {
+	start := time.Now()
+	progress.SuiteStart(testSuite.Name(), i)
+	defer func() {
+		progress.SuiteDone(testSuite.Name(), time.Since(start))
+	}()
+
 	return testSuite.RunE(ctx, runID, namespace, opts)
 }
 
