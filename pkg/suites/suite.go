@@ -17,6 +17,7 @@ type Suite interface {
 	IsReadWrite() bool
 	RunE(ctx context.Context, runID, namespace string, opt Options) (SuiteResult, error)
 	SetClients(clients *Clients)
+	SetProgressReporter(reporter *ProgressReporter)
 }
 
 // Clients holds the K8s API client sets that are used by the test suites
@@ -46,5 +47,11 @@ func NewClients(
 // WithClients creates a new Suite with the provided Clients.
 func WithClients(suite Suite, clients *Clients) Suite {
 	suite.SetClients(clients)
+	return suite
+}
+
+// WithProgressReporter creates a new Suite with the provided ProgressReporter.
+func WithProgressReporter(suite Suite, progress *ProgressReporter) Suite {
+	suite.SetProgressReporter(progress)
 	return suite
 }

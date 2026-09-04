@@ -35,6 +35,9 @@ func (s *recordingSuite) SetClients(clients *Clients) {
 	s.setCalls++
 }
 
+func (s *recordingSuite) SetProgressReporter(reporter *ProgressReporter) {
+}
+
 func TestNewClients(t *testing.T) {
 	var (
 		k8sClientSet = k8sfake.NewClientset()

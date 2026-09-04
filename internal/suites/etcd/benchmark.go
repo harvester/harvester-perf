@@ -27,6 +27,7 @@ var _ pkgsuites.Suite = &BenchmarkSuite{}
 // BenchmarkSuite implements test suite to assess etcd performance.
 type BenchmarkSuite struct {
 	pkgsuites.SuiteMarshaler
+	*pkgsuites.ProgressReporter
 	*pkgsuites.Clients
 }
 
@@ -64,7 +65,7 @@ func (s *BenchmarkSuite) RunE(
 	// TODO: merge custom options
 	// custom, err := FromOptions(opts)
 	// if err != nil {
-	// 	return pkgsuites.SuiteResult{}, err
+	//      return pkgsuites.SuiteResult{}, err
 	// }
 
 	if namespace == "" {
@@ -110,73 +111,85 @@ func (s *BenchmarkSuite) RunE(
 		return pkgsuites.SuiteResult{}, err
 	}
 
+	var caseResults []*pkgsuites.CaseResult
+
 	// issue exec command to run the etcdctl tool in the job pod
 	klog.V(3).Infof("running etcdctl healthcheck in pod '%s'\n", pod.GetName())
-	var caseResults []*pkgsuites.CaseResult
-	dateTimeStart := time.Now()
+	s.CaseStart(s.Name(), "etcd healthcheck")
+	start := time.Now()
 	healthOut, cmds, err := s.execHealthcheck(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd healthcheck",
 		Cmds:          cmds,
-		DateTimeStart: dateTimeStart,
+		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
 		Success:       err == nil,
 		Out:           string(healthOut),
 		Err:           err,
 	})
+	s.CaseDone(s.Name(), "etcd healthcheck", err == nil, time.Since(start))
 
+	klog.V(3).Infof("running etcdctl check perf in pod '%s'\n", pod.GetName())
+	s.CaseStart(s.Name(), "etcd check perf")
+	start = time.Now()
 	checkPerfOut, cmds, err := s.execCheckPerf(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd check perf",
 		Cmds:          cmds,
-		DateTimeStart: dateTimeStart,
+		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
 		Success:       err == nil,
 		Out:           string(checkPerfOut),
 		Err:           err,
 	})
+	s.CaseDone(s.Name(), "etcd check perf", err == nil, time.Since(start))
 
 	// issue exec commands to run the benchmark tool in the job pod
-	klog.V(3).Infof("running etcd benchmark (serial suite) in pod '%s'\n", pod.GetName())
-	dateTimeStart = time.Now()
+	klog.V(3).Infof("running etcd benchmark (serial) in pod '%s'\n", pod.GetName())
+	s.CaseStart(s.Name(), "etcd benchmark (serial)")
+	start = time.Now()
 	benchSerialOut, cmds, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
-		CaseName:      "etcd benchmark",
+		CaseName:      "etcd benchmark (serial)",
 		Cmds:          cmds,
-		DateTimeStart: dateTimeStart,
+		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
 		Success:       err == nil,
 		Out:           string(benchSerialOut),
 		Err:           err,
 	})
+	s.CaseDone(s.Name(), "etcd benchmark (serial)", err == nil, time.Since(start))
 
-	klog.V(3).Infof("running etcd benchmark (concurrent suite) in pod '%s'\n", pod.GetName())
-	dateTimeStart = time.Now()
+	klog.V(3).Infof("running etcd benchmark (concurrent) in pod '%s'\n", pod.GetName())
+	s.CaseStart(s.Name(), "etcd benchmark (concurrent)")
+	start = time.Now()
 	o.PutLoadSize = DefaultConcurrentLoadSize
 	o.GRPCClientCount = DefaultConcurrentClientCount
 	o.GRPCConnCount = DefaultConcurrentConnCount
 	benchConcurrentOut, cmds, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
-		CaseName:      "etcd benchmark",
+		CaseName:      "etcd benchmark (concurrent)",
 		Cmds:          cmds,
-		DateTimeStart: dateTimeStart,
+		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
 		Success:       err == nil,
 		Out:           string(benchConcurrentOut),
 		Err:           err,
 	})
+	s.CaseDone(s.Name(), "etcd benchmark (concurrent)", err == nil, time.Since(start))
 
-	klog.V(3).Infof("running etcd monitoring (promql suite) in pod '%s'\n", pod.GetName())
-	dateTimeStart = time.Now()
+	klog.V(3).Infof("running etcd monitoring (promql) in pod '%s'\n", pod.GetName())
+	s.CaseStart(s.Name(), "etcd monitoring (promql)")
+	start = time.Now()
 	promqlOut, cmds, skipped, err := s.monitoring(ctx, pod, o)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd monitoring (promql)",
 		Cmds:          cmds,
-		DateTimeStart: dateTimeStart,
+		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
 		Skipped:       skipped,
@@ -184,6 +197,7 @@ func (s *BenchmarkSuite) RunE(
 		Out:           string(promqlOut),
 		Err:           err,
 	})
+	s.CaseDone(s.Name(), "etcd monitoring (promql)", err == nil, time.Since(start))
 
 	suiteParams, err := pkgsuites.ToSuiteParams(o)
 	if err != nil {
@@ -500,6 +514,10 @@ func (s *BenchmarkSuite) SetClients(clients *pkgsuites.Clients) {
 	s.Clients = clients
 }
 
+func (s *BenchmarkSuite) SetProgressReporter(progressReporter *pkgsuites.ProgressReporter) {
+	s.ProgressReporter = progressReporter
+}
+
 type BenchmarkOptions struct {
 	DefaultNamespace string
 
@@ -548,7 +566,6 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 		return nil, err
 	}
 
-	// TODO find a better way to merge the two structs
 	benchmarkOptions := &BenchmarkOptions{
 		DefaultNamespace: sysOpts.DefaultNamespace,
 
