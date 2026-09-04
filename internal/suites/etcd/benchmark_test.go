@@ -14,8 +14,6 @@ func TestBenchmarkOptionsDefaults(t *testing.T) {
 		t.Fatalf("Failed to convert default global options to BenchmarkOptions: %v", err)
 	}
 	expected := &BenchmarkOptions{
-		DefaultNamespace: sysOpts.DefaultNamespace,
-
 		EtcdBenchmarkLocalPath: "/usr/local/bin/benchmark",
 		EtcdctlLocalPath:       "/usr/local/bin/etcdctl",
 		PromtoolLocalPath:      "/usr/local/bin/promtool",
@@ -43,6 +41,7 @@ func TestBenchmarkOptionsDefaults(t *testing.T) {
 		MonitoringServiceURL:            sysOpts.MonitoringServiceURL,
 		MonitoringOutputFormat:          "promql",
 		MonitoringWaitPodMonitorTimeout: sysOpts.MonitoringWaitPodMonitorTimeout,
+		MonitoringScrapeInterval:        sysOpts.MonitoringScrapeInterval,
 
 		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
 		PutLoadSize:       DefaultLoadSize,

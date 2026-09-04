@@ -11,7 +11,6 @@ type Options map[string]any
 // DefaultGlobalOptions returns the default options for the system test suite.
 func DefaultGlobalOptions() *Options {
 	return &Options{
-		"DefaultNamespace":                DefaultNamespace,
 		"JobActiveDeadline":               3600 * time.Second,
 		"JobPodContainerName":             "benchmark",
 		"JobPodImageName":                 "registry.suse.com/bci/bci-base",
@@ -24,5 +23,6 @@ func DefaultGlobalOptions() *Options {
 		"MonitoringNamespace":             "cattle-monitoring-system",
 		"MonitoringServiceURL":            "http://rancher-monitoring-prometheus.cattle-monitoring-system:9090",
 		"MonitoringWaitPodMonitorTimeout": 300 * time.Second,
+		"MonitoringScrapeInterval":        60 * time.Second,
 	}
 }

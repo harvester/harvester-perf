@@ -67,10 +67,6 @@ func (s *BenchmarkSuite) RunE(
 	// 	return pkgsuites.SuiteResult{}, err
 	// }
 
-	if namespace == "" {
-		namespace = o.DefaultNamespace
-	}
-
 	nsReadyTimeout := 60 * time.Second
 	if _, err := k8s.EnsureNamespace(ctx, s.Clients, namespace, nsReadyTimeout); err != nil {
 		return pkgsuites.SuiteResult{}, err
@@ -357,7 +353,8 @@ func (s *BenchmarkSuite) monitoring(
 			"component": "etcd",
 			"tier":      "control-plane",
 		},
-		WaitTimeout: opts.MonitoringWaitPodMonitorTimeout,
+		WaitTimeout:    opts.MonitoringWaitPodMonitorTimeout,
+		ScrapeInterval: opts.MonitoringScrapeInterval,
 	}
 	podMonErr := k8s.EnsurePodMonitor(
 		ctx,
@@ -501,8 +498,6 @@ func (s *BenchmarkSuite) SetClients(clients *pkgsuites.Clients) {
 }
 
 type BenchmarkOptions struct {
-	DefaultNamespace string
-
 	EtcdBenchmarkLocalPath string
 	EtcdctlLocalPath       string
 	PromtoolLocalPath      string
@@ -530,6 +525,7 @@ type BenchmarkOptions struct {
 	MonitoringServiceURL            string
 	MonitoringOutputFormat          string
 	MonitoringWaitPodMonitorTimeout time.Duration
+	MonitoringScrapeInterval        time.Duration
 
 	CheckPerfLoadSize string
 	PutLoadSize       uint64
@@ -550,8 +546,6 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 
 	// TODO find a better way to merge the two structs
 	benchmarkOptions := &BenchmarkOptions{
-		DefaultNamespace: sysOpts.DefaultNamespace,
-
 		EtcdBenchmarkLocalPath: "/usr/local/bin/benchmark",
 		EtcdctlLocalPath:       "/usr/local/bin/etcdctl",
 		PromtoolLocalPath:      "/usr/local/bin/promtool",
@@ -579,6 +573,7 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 		MonitoringServiceURL:            sysOpts.MonitoringServiceURL,
 		MonitoringOutputFormat:          "promql",
 		MonitoringWaitPodMonitorTimeout: sysOpts.MonitoringWaitPodMonitorTimeout,
+		MonitoringScrapeInterval:        sysOpts.MonitoringScrapeInterval,
 
 		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
 		PutLoadSize:       DefaultLoadSize,
