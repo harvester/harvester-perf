@@ -82,42 +82,50 @@ func EnsurePodMonitor(
 	}
 
 	jobName := fmt.Sprintf("%s/%s", opts.Namespace, opts.Name)
-	cmd := [][]string{
-		{
-			// check if the prom job is ready. the job's default name is set to the
-			// namespace and name of the pod monitor
-			"promtool",
-			"query",
-			"instant",
-			"-o",
-			"json",
-			opts.MonitoringServiceURL,
-			fmt.Sprintf("up{job='%s'}", jobName),
-		},
+	cmd := []string{
+		// check if the prom job is ready. the job's default name is set to the
+		// namespace and name of the pod monitor
+		"promtool",
+		"query",
+		"instant",
+		"-o",
+		"json",
+		opts.MonitoringServiceURL,
+		fmt.Sprintf("up{job='%s'}", jobName),
 	}
 
 	var waitErr error
-	if err := wait.PollUntilContextTimeout(ctx, time.Second*30, opts.WaitTimeout, true, func(ctx context.Context) (done bool, err error) {
+	if err := wait.PollUntilContextTimeout(ctx, time.Second*30, opts.WaitTimeout, true, func(ctx context.Context) (bool, error) {
 		// keep polling for the etcd job to be ready until timeout expired,
 		// ignoring any errors
-		var r io.Reader
-		waitErr = nil
-		r, err = ExecPod(ctx, clients, jobPod, cmd)
-		if err != nil {
+
+		handleErr := func(err error, stderr io.Reader) (bool, error) {
 			waitErr = err
+			if stderr != nil {
+				e, readErr := io.ReadAll(stderr)
+				if readErr != nil {
+					waitErr = errors.Join(waitErr, readErr)
+					return false, nil
+				}
+				waitErr = errors.Join(waitErr, fmt.Errorf("stderr: %s", string(e)))
+			}
 			return false, nil
 		}
 
-		b, err := io.ReadAll(r)
+		waitErr = nil
+		stdout, stderr, err := ExecPod(ctx, clients, jobPod, cmd)
 		if err != nil {
-			waitErr = err
-			return false, nil
+			return handleErr(err, stderr)
+		}
+
+		b, err := io.ReadAll(stdout)
+		if err != nil {
+			return handleErr(err, stderr)
 		}
 
 		var samples model.Samples
 		if err := json.Unmarshal(b, &samples); err != nil {
-			waitErr = err
-			return false, nil
+			return handleErr(err, stderr)
 		}
 
 		// set to ready only if all etcd jobs are ready

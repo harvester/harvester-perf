@@ -2,13 +2,16 @@ package suites
 
 import (
 	"fmt"
+	"io"
 	"reflect"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/prometheus/common/model"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/klog/v2"
 )
 
 const indent = "    "
@@ -105,14 +108,13 @@ func ToSuiteParams(opts any) ([]*SuiteParam, error) {
 // CaseResult represents the result of a single test case execution.
 type CaseResult struct {
 	CaseName      string
-	Cmds          [][]string
+	CmdResults    []*CmdResult
 	DateTimeStart time.Time
 	DateTimeEnd   time.Time
+	MetricResults []*MetricResult
 	Objects       []runtime.Object
 	Skipped       bool
 	Success       bool
-	Out           string
-	Err           error
 }
 
 func (c *CaseResult) String() string {
@@ -135,15 +137,55 @@ func (c *CaseResult) String() string {
 	}
 	fmt.Fprintf(tab, "%sStarted on:\t%s\n", indent, c.DateTimeStart.Format("2006-01-02T15:04:05Z07:00"))
 	fmt.Fprintf(tab, "%sEnded at:\t%s\n", indent, c.DateTimeEnd.Format("2006-01-02T15:04:05Z07:00"))
-	for i, cmd := range c.Cmds {
-		label := indent + "Cmds:"
-		if i > 0 {
-			label = indent
+
+	for i, r := range c.CmdResults {
+		if i == 0 {
+			fmt.Fprintf(tab, "%sExec:\n", indent)
 		}
-		fmt.Fprintf(tab, "%s\t%s\n", label, strings.Join(cmd, " "))
+
+		fmt.Fprintf(tab, "%sCmd: %s\n", strings.Repeat(indent, 2), strings.Join(r.Cmd, " "))
+		if r.Stdout != nil {
+			stdout, err := io.ReadAll(r.Stdout)
+			if err != nil {
+				klog.V(3).ErrorS(err, "failed to read stdout", "cmd", r.Cmd)
+			}
+			if stdout != nil {
+				if trimmed := strings.TrimSpace(string(stdout)); trimmed != "" {
+					fmt.Fprintf(tab, "%sStdout: ", strings.Repeat(indent, 2))
+					fmt.Fprintf(tab, "%s\n", trimmed)
+				}
+			}
+		}
+
+		if r.Stderr != nil {
+			stderr, err := io.ReadAll(r.Stderr)
+			if err != nil {
+				klog.V(3).ErrorS(err, "failed to read stderr for command", "cmd", r.Cmd)
+			}
+			if stderr != nil {
+				if trimmed := strings.TrimSpace(string(stderr)); trimmed != "" {
+					klog.V(3).InfoS("stderr output for command", "cmd", r.Cmd, "stderr", trimmed)
+				}
+			}
+		}
+
+		if r.Err != nil {
+			fmt.Fprintf(tab, "%serror:\t%v\n", strings.Repeat(indent, 2), r.Err)
+		}
 	}
-	if c.Err != nil {
-		fmt.Fprintf(tab, "%sError:\t%v\n", indent, c.Err)
+
+	for i, m := range c.MetricResults {
+		if i == 0 {
+			fmt.Fprintf(tab, "%sMetrics:\n", indent)
+		}
+
+		fmt.Fprintf(tab, "%sQuery: %s\n", strings.Repeat(indent, 2), m.Query)
+		for _, s := range m.Samples {
+			fmt.Fprintf(tab, "%s%.4f\t(%s)\n", strings.Repeat(indent, 2), s.Value, s.Timestamp)
+			if s.Histogram != nil {
+				fmt.Fprintf(tab, "%s%s\n", strings.Repeat(indent, 2), s.Histogram)
+			}
+		}
 	}
 
 	for i, obj := range c.Objects {
@@ -154,14 +196,21 @@ func (c *CaseResult) String() string {
 		fmt.Fprintf(tab, "%s\t%s\n", label, objectMeta(obj))
 	}
 
-	// flush the tabwriter before appending raw output, so the tabs within the raw
-	// output are treated as literal tabs, not column separators
+	//nolint:errcheck
 	tab.Flush()
-
-	if trimmed := strings.TrimSpace(c.Out); trimmed != "" {
-		fmt.Fprintf(&stringBuilder, "%sOutput:\n%s\n", indent, trimmed)
-	}
 	return stringBuilder.String()
+}
+
+type CmdResult struct {
+	Cmd    []string
+	Stdout io.Reader
+	Stderr io.Reader
+	Err    error
+}
+
+type MetricResult struct {
+	Query   string
+	Samples model.Vector
 }
 
 // objectMeta renders "(kind) namespace/name" for the Objects list in

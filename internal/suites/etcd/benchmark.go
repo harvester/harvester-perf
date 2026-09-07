@@ -2,9 +2,7 @@ package etcd
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/harvester/hvperf/internal/suites/options"
@@ -113,32 +111,28 @@ func (s *BenchmarkSuite) RunE(
 	klog.V(3).Infof("running etcdctl healthcheck in pod '%s'\n", pod.GetName())
 	s.CaseStart(s.Name(), "etcd healthcheck")
 	start := time.Now()
-	healthOut, cmds, err := s.execHealthcheck(ctx, pod, o, s.args(o)...)
+	results, err := s.execHealthcheck(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd healthcheck",
-		Cmds:          cmds,
+		CmdResults:    results,
 		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
 		Success:       err == nil,
-		Out:           string(healthOut),
-		Err:           err,
 	})
 	s.CaseDone(s.Name(), "etcd healthcheck", err == nil, time.Since(start))
 
 	klog.V(3).Infof("running etcdctl check perf in pod '%s'\n", pod.GetName())
 	s.CaseStart(s.Name(), "etcd check perf")
 	start = time.Now()
-	checkPerfOut, cmds, err := s.execCheckPerf(ctx, pod, o, s.args(o)...)
+	results, err = s.execCheckPerf(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd check perf",
-		Cmds:          cmds,
+		CmdResults:    results,
 		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
 		Success:       err == nil,
-		Out:           string(checkPerfOut),
-		Err:           err,
 	})
 	s.CaseDone(s.Name(), "etcd check perf", err == nil, time.Since(start))
 
@@ -146,16 +140,14 @@ func (s *BenchmarkSuite) RunE(
 	klog.V(3).Infof("running etcd benchmark (serial) in pod '%s'\n", pod.GetName())
 	s.CaseStart(s.Name(), "etcd benchmark (serial)")
 	start = time.Now()
-	benchSerialOut, cmds, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
+	results, err = s.execBenchmark(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
-		CaseName:      "etcd benchmark (serial)",
-		Cmds:          cmds,
+		CaseName:      "etcd benchmark",
+		CmdResults:    results,
 		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
 		Success:       err == nil,
-		Out:           string(benchSerialOut),
-		Err:           err,
 	})
 	s.CaseDone(s.Name(), "etcd benchmark (serial)", err == nil, time.Since(start))
 
@@ -165,33 +157,29 @@ func (s *BenchmarkSuite) RunE(
 	o.PutLoadSize = DefaultConcurrentLoadSize
 	o.GRPCClientCount = DefaultConcurrentClientCount
 	o.GRPCConnCount = DefaultConcurrentConnCount
-	benchConcurrentOut, cmds, err := s.execBenchmark(ctx, pod, o, s.args(o)...)
+	results, err = s.execBenchmark(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd benchmark (concurrent)",
-		Cmds:          cmds,
+		CmdResults:    results,
 		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
 		Success:       err == nil,
-		Out:           string(benchConcurrentOut),
-		Err:           err,
 	})
 	s.CaseDone(s.Name(), "etcd benchmark (concurrent)", err == nil, time.Since(start))
 
 	klog.V(3).Infof("running etcd monitoring (promql) in pod '%s'\n", pod.GetName())
 	s.CaseStart(s.Name(), "etcd monitoring (promql)")
 	start = time.Now()
-	promqlOut, cmds, skipped, err := s.monitoring(ctx, pod, o)
+	metricResults, skipped, err := s.monitoring(ctx, pod, o)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd monitoring (promql)",
-		Cmds:          cmds,
 		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
+		MetricResults: metricResults,
 		Skipped:       skipped,
 		Success:       err == nil,
-		Out:           string(promqlOut),
-		Err:           err,
 	})
 	s.CaseDone(s.Name(), "etcd monitoring (promql)", err == nil, time.Since(start))
 
@@ -226,7 +214,7 @@ func (s *BenchmarkSuite) execHealthcheck(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) ([]byte, [][]string, error) {
+) ([]*pkgsuites.CmdResult, error) {
 	outArgs := []string{
 		"-w", opts.EtcdctlOutputFormat,
 	}
@@ -236,19 +224,19 @@ func (s *BenchmarkSuite) execHealthcheck(
 		{"etcdctl", "member", "list"},
 	}
 
-	runCmds := [][]string{}
+	var results []*pkgsuites.CmdResult
 	args = append(args, outArgs...)
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
-		runCmds = append(runCmds, cmd)
+		stdout, stderr, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
+		results = append(results, &pkgsuites.CmdResult{
+			Cmd:    cmd,
+			Stdout: stdout,
+			Stderr: stderr,
+			Err:    err,
+		})
 	}
-	r, err := k8s.ExecPod(ctx, s.Clients, pod, runCmds)
-	// don't discard any partial outputs
-	if r != nil {
-		b, readErr := io.ReadAll(r)
-		return b, runCmds, errors.Join(err, readErr)
-	}
-	return nil, runCmds, err
+	return results, nil
 }
 
 func (s *BenchmarkSuite) execCheckPerf(
@@ -256,7 +244,7 @@ func (s *BenchmarkSuite) execCheckPerf(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) ([]byte, [][]string, error) {
+) ([]*pkgsuites.CmdResult, error) {
 	outArgs := []string{
 		"-w", opts.EtcdctlOutputFormat,
 		"--load", opts.CheckPerfLoadSize,
@@ -265,19 +253,19 @@ func (s *BenchmarkSuite) execCheckPerf(
 		{"etcdctl", "check", "perf"},
 	}
 
-	runCmds := [][]string{}
+	var results []*pkgsuites.CmdResult
 	args = append(args, outArgs...)
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
-		runCmds = append(runCmds, cmd)
+		stdout, stderr, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
+		results = append(results, &pkgsuites.CmdResult{
+			Cmd:    cmd,
+			Stdout: stdout,
+			Stderr: stderr,
+			Err:    err,
+		})
 	}
-	r, err := k8s.ExecPod(ctx, s.Clients, pod, runCmds)
-	// don't discard any partial outputs
-	if r != nil {
-		b, readErr := io.ReadAll(r)
-		return b, runCmds, errors.Join(err, readErr)
-	}
-	return nil, runCmds, err
+	return results, nil
 }
 
 func (s *BenchmarkSuite) execBenchmark(
@@ -285,7 +273,7 @@ func (s *BenchmarkSuite) execBenchmark(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) ([]byte, [][]string, error) {
+) ([]*pkgsuites.CmdResult, error) {
 	cmds := [][]string{
 		{
 			// write serial
@@ -320,18 +308,18 @@ func (s *BenchmarkSuite) execBenchmark(
 		},
 	}
 
-	runCmds := [][]string{}
+	var results []*pkgsuites.CmdResult
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
-		runCmds = append(runCmds, cmd)
+		stdout, stderr, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
+		results = append(results, &pkgsuites.CmdResult{
+			Cmd:    cmd,
+			Stdout: stdout,
+			Stderr: stderr,
+			Err:    err,
+		})
 	}
-	r, err := k8s.ExecPod(ctx, s.Clients, pod, runCmds)
-	// don't discard any partial outputs
-	if r != nil {
-		b, readErr := io.ReadAll(r)
-		return b, runCmds, errors.Join(err, readErr)
-	}
-	return nil, runCmds, err
+	return results, nil
 }
 
 func (s *BenchmarkSuite) monitoring(
@@ -339,18 +327,18 @@ func (s *BenchmarkSuite) monitoring(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) ([]byte, [][]string, bool, error) {
+) ([]*pkgsuites.MetricResult, bool, error) {
 	// check if monitoring addon is enabled and ready. if not, skip the promql
 	// execution.
 	ready, err := k8s.MonitoringEnabled(ctx, s.Clients, opts.MonitoringNamespace, opts.MonitoringAddonName)
 	if err != nil {
-		return nil, nil, false, err
+		return nil, true, err
 	}
 
 	// skip if not ready
 	if !ready {
 		klog.V(3).Infof("monitoring addon '%s' is not enabled in namespace '%s', skipping promql execution\n", opts.MonitoringNamespace, opts.MonitoringAddonName)
-		return nil, nil, true, nil
+		return nil, true, nil
 	}
 
 	// etcd metrics are not exposed by default, so we need to ensure that the pod
@@ -387,15 +375,15 @@ func (s *BenchmarkSuite) monitoring(
 		}
 	}()
 	if podMonErr != nil {
-		return nil, nil, false, podMonErr
+		return nil, true, podMonErr
 	}
 
-	out, cmds, err := s.execPromQL(ctx, pod, opts, args...)
+	metricResults, err := s.execPromQL(ctx, pod, opts, args...)
 	if err != nil {
-		return out, cmds, false, err
+		return nil, false, err
 	}
 
-	return out, cmds, false, err
+	return metricResults, false, err
 }
 
 func (s *BenchmarkSuite) execPromQL(
@@ -403,108 +391,40 @@ func (s *BenchmarkSuite) execPromQL(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) ([]byte, [][]string, error) {
-	cmds := [][]string{
-		{
-			// p99 WAL fsync
-			"promtool",
-			"query",
-			"instant",
-			"-o",
-			opts.MonitoringOutputFormat,
-			opts.MonitoringServiceURL,
-			fmt.Sprintf(`histogram_quantile(
-				0.99,
-				sum by (le, pod) (
-					rate(etcd_disk_wal_fsync_duration_seconds_bucket{namespace='%s'}[5m])
-				)
-			)`, opts.EtcdNamespace),
-		},
-		{
-			// p99 backend commit
-			"promtool",
-			"query",
-			"instant",
-			"-o",
-			opts.MonitoringOutputFormat,
-			opts.MonitoringServiceURL,
-			fmt.Sprintf(`histogram_quantile(0.99, 
-				sum by (le, pod) (
-					rate(etcd_disk_backend_commit_duration_seconds_bucket{namespace='%s'}[5m])
-				)
-			)`, opts.EtcdNamespace),
-		},
-		{
-			// rate of WAL write bytes
-			"promtool",
-			"query",
-			"instant",
-			"-o",
-			opts.MonitoringOutputFormat,
-			opts.MonitoringServiceURL,
-			fmt.Sprintf(`sum by (pod) (
-				rate(etcd_disk_wal_write_bytes_total{namespace='%s'}[5m])
-			)`, opts.EtcdNamespace),
-		},
-		{
-			// p99 peer round-trip time
-			// query for ROUND_TRIPPER_RAFT_MESSAGE connection type to fetch small
-			// heartbeat/consensus traffic which dictates election-timeout risk
-			"promtool",
-			"query",
-			"instant",
-			"-o",
-			opts.MonitoringOutputFormat,
-			opts.MonitoringServiceURL,
-			fmt.Sprintf(`histogram_quantile(
-				0.99,
-				sum by (le, pod, To) (
-					rate(etcd_network_peer_round_trip_time_seconds_bucket{namespace='%s', ConnectionType='ROUND_TRIPPER_RAFT_MESSAGE'}[5m])
-				)
-			)`, opts.EtcdNamespace),
-		},
-		{
-			// peer send failure rates for multi-node cluster
-			// use the 'To' group-by to obtain the per peer node rates, instead of the
-			// cluster-wide rate
-			"promtool",
-			"query",
-			"instant",
-			"-o",
-			opts.MonitoringOutputFormat,
-			opts.MonitoringServiceURL,
-			fmt.Sprintf(`sum by (pod, To) (
-				rate(etcd_network_peer_sent_failures_total{namespace="%s"}[5m])
-				)`, opts.EtcdNamespace),
-		},
-		{
-			// peer receive failure rates for multi-node cluster
-			// use the 'To' group-by to obtain the per peer node rates, instead of the
-			// cluster-wide rate
-			"promtool",
-			"query",
-			"instant",
-			"-o",
-			opts.MonitoringOutputFormat,
-			opts.MonitoringServiceURL,
-			fmt.Sprintf(`sum by (pod, To) (
-				rate(etcd_network_peer_received_failures_total{namespace="%s"}[5m])
-				)`, opts.EtcdNamespace),
-		},
+) ([]*pkgsuites.MetricResult, error) {
+	queries := []string{
+		// p99 WAL fsync
+		fmt.Sprintf(`histogram_quantile(0.99,sum by (le, pod) (rate(etcd_disk_wal_fsync_duration_seconds_bucket{namespace='%s'}[5m])))`, opts.EtcdNamespace),
+
+		// p99 backend commit
+		fmt.Sprintf(`histogram_quantile(0.99,sum by (le, pod) (rate(etcd_disk_backend_commit_duration_seconds_bucket{namespace='%s'}[5m])))`, opts.EtcdNamespace),
+
+		// rate of WAL write bytes
+		fmt.Sprintf(`sum by (pod) (rate(etcd_disk_wal_write_bytes_total{namespace='%s'}[5m]))`, opts.EtcdNamespace),
+
+		// p99 peer round-trip time
+		// query for ROUND_TRIPPER_RAFT_MESSAGE connection type to fetch small
+		// heartbeat/consensus traffic which dictates election-timeout risk
+		fmt.Sprintf(`histogram_quantile(0.99,sum by (le, pod, To) (rate(etcd_network_peer_round_trip_time_seconds_bucket{namespace='%s', ConnectionType='ROUND_TRIPPER_RAFT_MESSAGE'}[5m])))`, opts.EtcdNamespace),
+
+		// peer send failure rates for multi-node cluster
+		// use the 'To' group-by to obtain the per peer node rates, instead of the
+		// cluster-wide rate
+		fmt.Sprintf(`sum by (pod, To) (rate(etcd_network_peer_sent_failures_total{namespace="%s"}[5m]))`, opts.EtcdNamespace),
+
+		// peer receive failure rates for multi-node cluster
+		// use the 'To' group-by to obtain the per peer node rates, instead of the
+		// cluster-wide rate
+		fmt.Sprintf(`sum by (pod, To) (rate(etcd_network_peer_received_failures_total{namespace="%s"}[5m]))`, opts.EtcdNamespace),
 	}
 
-	runCmds := [][]string{}
-	for _, cmd := range cmds {
-		cmd = append(cmd, args...)
-		runCmds = append(runCmds, cmd)
+	var metricResults []*pkgsuites.MetricResult
+	for _, query := range queries {
+		metricResults = append(metricResults, &pkgsuites.MetricResult{
+			Query: query,
+		})
 	}
-	r, err := k8s.ExecPod(ctx, s.Clients, pod, runCmds)
-	// don't discard any partial outputs
-	if r != nil {
-		b, readErr := io.ReadAll(r)
-		return b, runCmds, errors.Join(err, readErr)
-	}
-	return nil, runCmds, err
+	return metricResults, nil
 }
 
 func (s *BenchmarkSuite) SetClients(clients *pkgsuites.Clients) {

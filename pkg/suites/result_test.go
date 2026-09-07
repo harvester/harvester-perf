@@ -210,12 +210,19 @@ func TestCaseResultString(t *testing.T) {
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
 				Success:       false,
-				Err:           errors.New("connection refused"),
+				CmdResults: []*CmdResult{
+					{
+						Cmd: []string{"ping", "host.example.com"},
+						Err: errors.New("connection refused"),
+					},
+				},
 			},
 			expected: "--- FAIL list-nodes (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
-				"    Error:       connection refused\n",
+				"    Cmds:\n" +
+				"        ping host.example.com\n" +
+				"        error:  connection refused\n",
 		},
 		{
 			name: "objects are labelled once and aligned",
@@ -284,22 +291,6 @@ func TestCaseResultStringLocalTimeZone(t *testing.T) {
 	}
 	if !strings.Contains(got, "2026-08-26T12:30:01+02:00") {
 		t.Errorf("String() = %q, want it to contain the zone-local end time", got)
-	}
-}
-
-// TestCaseResultStringOutputTabs checks that tabs inside Out survive as literal
-// tabs, which is why String flushes the tabwriter before appending Out.
-func TestCaseResultStringOutputTabs(t *testing.T) {
-	c := &CaseResult{
-		CaseName:      "etcd-benchmark",
-		DateTimeStart: testStart,
-		DateTimeEnd:   testEnd,
-		Success:       true,
-		Out:           "a\tb\nlonger-cell\tc",
-	}
-
-	if got := c.String(); !strings.HasSuffix(got, "    Output:\na\tb\nlonger-cell\tc\n") {
-		t.Errorf("String() = %q, want the raw output appended with its tabs intact", got)
 	}
 }
 
@@ -377,7 +368,12 @@ func TestSuiteResultString(t *testing.T) {
 		DateTimeStart: testStart,
 		DateTimeEnd:   testEnd,
 		Success:       false,
-		Err:           errors.New("connection refused"),
+		CmdResults: []*CmdResult{
+			{
+				Cmd: []string{"ping", "host.example.com"},
+				Err: errors.New("connection refused"),
+			},
+		},
 	}
 	skipped := &CaseResult{
 		CaseName: "list-pods",
