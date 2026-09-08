@@ -17,8 +17,9 @@ import (
 )
 
 var (
-	runCmdClients *suites.Clients
-	keepAlive     bool
+	runCmdClients        *suites.Clients
+	keepAlive            bool
+	monitoringServiceURL string
 )
 
 // runCmd represents the run command
@@ -74,6 +75,8 @@ func init() {
 
 	runCmd.PersistentFlags().BoolVar(&keepAlive, "keep-alive", true,
 		fmt.Sprintf("Keep the test namespace and all its resources after test suite execution. Only works if the namespace is %s", suites.DefaultNamespace))
+	runCmd.PersistentFlags().StringVar(&monitoringServiceURL, "monitoring-url", "http://localhost:9090",
+		"Prometheus HTTP API base URL.")
 
 	k8sConfigFlags.AddFlags(runCmd.PersistentFlags())
 	k8sPrintFlags.AddFlags(runCmd)

@@ -15,6 +15,7 @@ require (
 
 require (
 	github.com/prometheus-operator/prometheus-operator/pkg/client v0.93.1
+	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/common v0.71.0
 	go.yaml.in/yaml/v4 v4.0.0-rc.6
 )

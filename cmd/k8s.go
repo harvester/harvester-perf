@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"github.com/harvester/hvperf/pkg/prometheus"
 	"github.com/harvester/hvperf/pkg/suites"
 	monclient "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	kcliopts "k8s.io/cli-runtime/pkg/genericclioptions"
 	discoveryclient "k8s.io/client-go/discovery"
 	dynclient "k8s.io/client-go/dynamic"
@@ -51,6 +53,10 @@ func discoveryClient() (discoveryclient.DiscoveryInterface, error) {
 	return discoveryclient.NewDiscoveryClientForConfig(restConfig)
 }
 
+func promClientSet(restConfig *rest.Config) (promv1.API, error) {
+	return prometheus.New(monitoringServiceURL, restConfig)
+}
+
 // configureClients configures all the K8s client sets for the test
 // suites. the client sets are configured using the K8s config flags that are
 // passed to the command line. Hence, this function should be called after the
@@ -76,5 +82,10 @@ func configureClients() (*suites.Clients, error) {
 		return nil, err
 	}
 
-	return suites.NewClients(k8sClientSet, dynClientSet, monClientSet, restConfig), nil
+	promClientSet, err := promClientSet(restConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	return suites.NewClients(k8sClientSet, dynClientSet, monClientSet, promClientSet, restConfig), nil
 }

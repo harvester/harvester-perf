@@ -4,6 +4,7 @@ import (
 	"context"
 
 	monclient "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	dynclient "k8s.io/client-go/dynamic"
 	k8sclient "k8s.io/client-go/kubernetes"
 
@@ -25,6 +26,7 @@ type Clients struct {
 	K8sClientSet k8sclient.Interface
 	DynClientSet dynclient.Interface
 	MonClientSet monclient.Interface
+	PromClient   promv1.API
 	RestConfig   *rest.Config
 }
 
@@ -33,12 +35,14 @@ func NewClients(
 	k8sClientSet k8sclient.Interface,
 	dynClientSet dynclient.Interface,
 	monClientSet monclient.Interface,
+	promClient promv1.API,
 	restConfig *rest.Config,
 ) *Clients {
 	return &Clients{
 		K8sClientSet: k8sClientSet,
 		DynClientSet: dynClientSet,
 		MonClientSet: monClientSet,
+		PromClient:   promClient,
 		RestConfig:   restConfig,
 	}
 }

@@ -1,49 +1,11 @@
 package suites
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
 	"go.yaml.in/yaml/v4"
 )
-
-var _ Suite = &fakeSuite{}
-
-// fakeSuite is a minimal TestSuite implementation used to exercise
-// TestSuiteMarshaler in isolation from the real test suites.
-type fakeSuite struct {
-	SuiteMarshaler
-
-	name        string
-	description string
-	readWrite   bool
-}
-
-func newFakeSuite(name, description string, readWrite bool) *fakeSuite {
-	s := &fakeSuite{name: name, description: description, readWrite: readWrite}
-	s.Marshal = s
-	return s
-}
-
-func (s *fakeSuite) Name() string {
-	return s.name
-}
-
-func (s *fakeSuite) Description() string {
-	return s.description
-}
-
-func (s *fakeSuite) IsReadWrite() bool {
-	return s.readWrite
-}
-
-func (s *fakeSuite) RunE(ctx context.Context, runID, namespace string, opts Options) (SuiteResult, error) {
-	return SuiteResult{}, nil
-}
-
-func (s *fakeSuite) SetClients(clientSets *Clients) {
-}
 
 func TestMarshalerString(t *testing.T) {
 	testCases := []struct {
