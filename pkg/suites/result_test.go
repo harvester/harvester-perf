@@ -275,6 +275,29 @@ func TestCaseResultString(t *testing.T) {
 				"        Cmd: etcdctl endpoint status\n",
 		},
 		{
+			name: "tabs in stdout are replaced with spaces so the tabwriter doesn't reinterpret them",
+			result: &CaseResult{
+				CaseName:      "etcd benchmark",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				Success:       true,
+				CmdResults: []*CmdResult{
+					{
+						Cmd:    []string{"benchmark", "put"},
+						Stdout: bytes.NewBufferString("Summary:\n  Total:\t1.234s\n  Slowest:\t0.5s\tFastest:\t0.01s\n"),
+					},
+				},
+			},
+			expected: "--- PASS etcd benchmark (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Exec:\n" +
+				"        Cmd: benchmark put\n" +
+				"        Stdout: Summary:\n" +
+				"  Total:    1.234s\n" +
+				"  Slowest:    0.5s    Fastest:    0.01s\n",
+		},
+		{
 			name: "metric result without samples renders the query with an N/A value",
 			result: &CaseResult{
 				CaseName:      "etcd monitoring (promql)",
@@ -486,6 +509,30 @@ func TestCmdResultMarshalJSON(t *testing.T) {
 			expected: decoded{
 				Cmd: "etcdctl endpoint health",
 				Err: "connection refused",
+			},
+		},
+		{
+			name: "tabs in stdout and stderr are replaced with spaces",
+			result: &CmdResult{
+				Cmd:    []string{"benchmark", "put"},
+				Stdout: bytes.NewBufferString("Summary:\n  Total:\t1.234s\n"),
+				Stderr: bytes.NewBufferString("warning:\tslow request"),
+			},
+			expected: decoded{
+				Cmd:    "benchmark put",
+				Stdout: "Summary:\n  Total:    1.234s\n",
+				Stderr: "warning:    slow request",
+			},
+		},
+		{
+			name: "nil stdout and stderr readers do not panic",
+			result: &CmdResult{
+				Cmd: []string{"etcdctl", "endpoint", "health"},
+				Err: errors.New("failed to init SPDY executor: connection refused"),
+			},
+			expected: decoded{
+				Cmd: "etcdctl endpoint health",
+				Err: "failed to init SPDY executor: connection refused",
 			},
 		},
 	}

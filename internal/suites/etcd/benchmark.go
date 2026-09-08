@@ -143,7 +143,7 @@ func (s *BenchmarkSuite) RunE(
 	start = time.Now()
 	results, err = s.execBenchmark(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
-		CaseName:      "etcd benchmark",
+		CaseName:      "etcd benchmark (serial)",
 		CmdResults:    results,
 		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),

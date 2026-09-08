@@ -153,7 +153,10 @@ func (c *CaseResult) String() string {
 			if stdout != nil {
 				if trimmed := strings.TrimSpace(string(stdout)); trimmed != "" {
 					fmt.Fprintf(tab, "%sStdout: ", strings.Repeat(indent, 2))
-					fmt.Fprintf(tab, "%s\n", trimmed)
+
+					// tabs in stdout are replaced with 4 spaces to avoid conflicts with the
+					// tabwriter output
+					fmt.Fprintf(tab, "%s\n", strings.ReplaceAll(trimmed, "\t", "    "))
 				}
 			}
 		}
@@ -217,14 +220,28 @@ type CmdResult struct {
 // MarshalJSON implements the json.Marshaler interface for CmdResult. It reads the
 // stdout and stderr streams and includes their contents in the JSON output.
 func (c *CmdResult) MarshalJSON() ([]byte, error) {
-	stdout, err := io.ReadAll(c.Stdout)
-	if err != nil {
-		return nil, err
+	var stdout string
+	if c.Stdout != nil {
+		b, err := io.ReadAll(c.Stdout)
+		if err != nil {
+			return nil, err
+		}
+
+		// tabs in stdout are replaced with 4 spaces to avoid conflicts with the
+		// tabwriter output
+		stdout = strings.ReplaceAll(string(b), "\t", "    ")
 	}
 
-	stderr, err := io.ReadAll(c.Stderr)
-	if err != nil {
-		return nil, err
+	var stderr string
+	if c.Stderr != nil {
+		b, err := io.ReadAll(c.Stderr)
+		if err != nil {
+			return nil, err
+		}
+
+		// tabs in stdout are replaced with 4 spaces to avoid conflicts with the
+		// tabwriter output
+		stderr = strings.ReplaceAll(string(b), "\t", "    ")
 	}
 
 	errStr := ""
