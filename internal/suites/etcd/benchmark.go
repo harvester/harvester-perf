@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/harvester/hvperf/internal/suites/options"
@@ -240,7 +241,7 @@ func (s *BenchmarkSuite) execHealthcheck(
 			Err:    err,
 		})
 		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to execute command '%s': %w", cmd, err))
+			errs = errors.Join(errs, fmt.Errorf("failed to execute command '%s': %w", strings.Join(cmd, " "), err))
 		}
 	}
 	return results, errs
