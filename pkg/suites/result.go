@@ -181,10 +181,14 @@ func (c *CaseResult) String() string {
 		}
 
 		fmt.Fprintf(tab, "%sQuery: %s\n", strings.Repeat(indent, 2), m.Query)
-		for _, s := range m.Samples {
-			fmt.Fprintf(tab, "%s%.4f\t(%s)\n", strings.Repeat(indent, 2), s.Value, s.Timestamp)
-			if s.Histogram != nil {
-				fmt.Fprintf(tab, "%s%s\n", strings.Repeat(indent, 2), s.Histogram)
+		if len(m.Samples) == 0 {
+			fmt.Fprintf(tab, "%sValue: N/A\n", strings.Repeat(indent, 2))
+		} else {
+			for _, s := range m.Samples {
+				fmt.Fprintf(tab, "%sValue: %.4f\t(%s)\n", strings.Repeat(indent, 2), s.Value, s.Timestamp)
+				if s.Histogram != nil {
+					fmt.Fprintf(tab, "%s%s\n", strings.Repeat(indent, 2), s.Histogram)
+				}
 			}
 		}
 	}
@@ -223,16 +227,21 @@ func (c *CmdResult) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 
+	errStr := ""
+	if c.Err != nil {
+		errStr = c.Err.Error()
+	}
+
 	return json.Marshal(struct {
 		Cmd    string
 		Stdout string
 		Stderr string
-		Err    error
+		Err    string
 	}{
 		Cmd:    strings.Join(c.Cmd, " "),
 		Stdout: string(stdout),
 		Stderr: string(stderr),
-		Err:    c.Err,
+		Err:    errStr,
 	})
 }
 

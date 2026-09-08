@@ -1,6 +1,8 @@
 package suites
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -8,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/common/model"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -225,6 +228,97 @@ func TestCaseResultString(t *testing.T) {
 				"        Error:  connection refused\n",
 		},
 		{
+			name: "multiple cmd results are grouped under a single Exec label",
+			result: &CaseResult{
+				CaseName:      "etcd healthcheck",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				Success:       true,
+				CmdResults: []*CmdResult{
+					{
+						Cmd:    []string{"etcdctl", "endpoint", "status"},
+						Stdout: bytes.NewBufferString("ok\n"),
+					},
+					{
+						Cmd:    []string{"etcdctl", "endpoint", "health"},
+						Stdout: bytes.NewBufferString("healthy\n"),
+					},
+				},
+			},
+			expected: "--- PASS etcd healthcheck (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Exec:\n" +
+				"        Cmd: etcdctl endpoint status\n" +
+				"        Stdout: ok\n" +
+				"        Cmd: etcdctl endpoint health\n" +
+				"        Stdout: healthy\n",
+		},
+		{
+			name: "stderr is not rendered in the output",
+			result: &CaseResult{
+				CaseName:      "etcd healthcheck",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				Success:       true,
+				CmdResults: []*CmdResult{
+					{
+						Cmd:    []string{"etcdctl", "endpoint", "status"},
+						Stderr: bytes.NewBufferString("some warning\n"),
+					},
+				},
+			},
+			expected: "--- PASS etcd healthcheck (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Exec:\n" +
+				"        Cmd: etcdctl endpoint status\n",
+		},
+		{
+			name: "metric result without samples renders the query with an N/A value",
+			result: &CaseResult{
+				CaseName:      "etcd monitoring (promql)",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				Success:       true,
+				MetricResults: []*MetricResult{
+					{Query: "histogram_quantile(0.99, wal_fsync_duration_seconds_bucket)"},
+				},
+			},
+			expected: "--- PASS etcd monitoring (promql) (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Metrics:\n" +
+				"        Query: histogram_quantile(0.99, wal_fsync_duration_seconds_bucket)\n" +
+				"        Value: N/A\n",
+		},
+		{
+			name: "multiple metric results are grouped under a single Metrics label and render their samples",
+			result: &CaseResult{
+				CaseName:      "etcd monitoring (promql)",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				Success:       true,
+				MetricResults: []*MetricResult{
+					{
+						Query: "up",
+						Samples: model.Vector{
+							{Value: 1.23456, Timestamp: model.Time(0)},
+						},
+					},
+					{Query: "etcd_server_has_leader"},
+				},
+			},
+			expected: "--- PASS etcd monitoring (promql) (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Metrics:\n" +
+				"        Query: up\n" +
+				"        Value: 1.2346  (0)\n" +
+				"        Query: etcd_server_has_leader\n" +
+				"        Value: N/A\n",
+		},
+		{
 			name: "objects are labelled once and aligned",
 			result: &CaseResult{
 				CaseName:      "etcd-benchmark",
@@ -351,6 +445,64 @@ func TestSuiteResultSummary(t *testing.T) {
 			}
 			if passed+failed+skipped != total {
 				t.Errorf("summary() passed+failed+skipped = %d, want total %d", passed+failed+skipped, total)
+			}
+		})
+	}
+}
+
+func TestCmdResultMarshalJSON(t *testing.T) {
+	type decoded struct {
+		Cmd    string
+		Stdout string
+		Stderr string
+		Err    string
+	}
+
+	testCases := []struct {
+		name     string
+		result   *CmdResult
+		expected decoded
+	}{
+		{
+			name: "stdout and stderr contents are captured, nil error is an empty string",
+			result: &CmdResult{
+				Cmd:    []string{"etcdctl", "endpoint", "health"},
+				Stdout: bytes.NewBufferString("healthy\n"),
+				Stderr: bytes.NewBufferString(""),
+			},
+			expected: decoded{
+				Cmd:    "etcdctl endpoint health",
+				Stdout: "healthy\n",
+			},
+		},
+		{
+			name: "error message is preserved as a string",
+			result: &CmdResult{
+				Cmd:    []string{"etcdctl", "endpoint", "health"},
+				Stdout: bytes.NewBufferString(""),
+				Stderr: bytes.NewBufferString(""),
+				Err:    errors.New("connection refused"),
+			},
+			expected: decoded{
+				Cmd: "etcdctl endpoint health",
+				Err: "connection refused",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, err := json.Marshal(tc.result)
+			if err != nil {
+				t.Fatalf("MarshalJSON() error = %v, want nil", err)
+			}
+
+			var got decoded
+			if err := json.Unmarshal(raw, &got); err != nil {
+				t.Fatalf("json.Unmarshal(%s) error = %v, want nil", raw, err)
+			}
+			if got != tc.expected {
+				t.Errorf("MarshalJSON() = %+v, want %+v", got, tc.expected)
 			}
 		})
 	}
