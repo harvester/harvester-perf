@@ -1,9 +1,6 @@
 package suites
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -215,8 +212,8 @@ func TestCaseResultString(t *testing.T) {
 				Success:       false,
 				CmdResults: []*CmdResult{
 					{
-						Cmd: []string{"ping", "host.example.com"},
-						Err: errors.New("connection refused"),
+						Cmd: "ping host.example.com",
+						Err: "connection refused",
 					},
 				},
 			},
@@ -236,12 +233,12 @@ func TestCaseResultString(t *testing.T) {
 				Success:       true,
 				CmdResults: []*CmdResult{
 					{
-						Cmd:    []string{"etcdctl", "endpoint", "status"},
-						Stdout: bytes.NewBufferString("ok\n"),
+						Cmd:    "etcdctl endpoint status",
+						Stdout: "ok\n",
 					},
 					{
-						Cmd:    []string{"etcdctl", "endpoint", "health"},
-						Stdout: bytes.NewBufferString("healthy\n"),
+						Cmd:    "etcdctl endpoint health",
+						Stdout: "healthy\n",
 					},
 				},
 			},
@@ -263,8 +260,8 @@ func TestCaseResultString(t *testing.T) {
 				Success:       true,
 				CmdResults: []*CmdResult{
 					{
-						Cmd:    []string{"etcdctl", "endpoint", "status"},
-						Stderr: bytes.NewBufferString("some warning\n"),
+						Cmd:    "etcdctl endpoint status",
+						Stderr: "some warning\n",
 					},
 				},
 			},
@@ -283,8 +280,8 @@ func TestCaseResultString(t *testing.T) {
 				Success:       true,
 				CmdResults: []*CmdResult{
 					{
-						Cmd:    []string{"benchmark", "put"},
-						Stdout: bytes.NewBufferString("Summary:\n  Total:\t1.234s\n  Slowest:\t0.5s\tFastest:\t0.01s\n"),
+						Cmd:    "benchmark put",
+						Stdout: "Summary:\n  Total:\t1.234s\n  Slowest:\t0.5s\tFastest:\t0.01s\n",
 					},
 				},
 			},
@@ -473,88 +470,6 @@ func TestSuiteResultSummary(t *testing.T) {
 	}
 }
 
-func TestCmdResultMarshalJSON(t *testing.T) {
-	type decoded struct {
-		Cmd    string
-		Stdout string
-		Stderr string
-		Err    string
-	}
-
-	testCases := []struct {
-		name     string
-		result   *CmdResult
-		expected decoded
-	}{
-		{
-			name: "stdout and stderr contents are captured, nil error is an empty string",
-			result: &CmdResult{
-				Cmd:    []string{"etcdctl", "endpoint", "health"},
-				Stdout: bytes.NewBufferString("healthy\n"),
-				Stderr: bytes.NewBufferString(""),
-			},
-			expected: decoded{
-				Cmd:    "etcdctl endpoint health",
-				Stdout: "healthy\n",
-			},
-		},
-		{
-			name: "error message is preserved as a string",
-			result: &CmdResult{
-				Cmd:    []string{"etcdctl", "endpoint", "health"},
-				Stdout: bytes.NewBufferString(""),
-				Stderr: bytes.NewBufferString(""),
-				Err:    errors.New("connection refused"),
-			},
-			expected: decoded{
-				Cmd: "etcdctl endpoint health",
-				Err: "connection refused",
-			},
-		},
-		{
-			name: "tabs in stdout and stderr are replaced with spaces",
-			result: &CmdResult{
-				Cmd:    []string{"benchmark", "put"},
-				Stdout: bytes.NewBufferString("Summary:\n  Total:\t1.234s\n"),
-				Stderr: bytes.NewBufferString("warning:\tslow request"),
-			},
-			expected: decoded{
-				Cmd:    "benchmark put",
-				Stdout: "Summary:\n  Total:    1.234s\n",
-				Stderr: "warning:    slow request",
-			},
-		},
-		{
-			name: "nil stdout and stderr readers do not panic",
-			result: &CmdResult{
-				Cmd: []string{"etcdctl", "endpoint", "health"},
-				Err: errors.New("failed to init SPDY executor: connection refused"),
-			},
-			expected: decoded{
-				Cmd: "etcdctl endpoint health",
-				Err: "failed to init SPDY executor: connection refused",
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			raw, err := json.Marshal(tc.result)
-			if err != nil {
-				t.Fatalf("MarshalJSON() error = %v, want nil", err)
-			}
-
-			var got decoded
-			if err := json.Unmarshal(raw, &got); err != nil {
-				t.Fatalf("json.Unmarshal(%s) error = %v, want nil", raw, err)
-			}
-			if got != tc.expected {
-				t.Errorf("MarshalJSON() = %+v, want %+v", got, tc.expected)
-			}
-		})
-	}
-}
-
 func TestSuiteResultString(t *testing.T) {
 	passing := &CaseResult{
 		CaseName:      "list-nodes",
@@ -569,8 +484,8 @@ func TestSuiteResultString(t *testing.T) {
 		Success:       false,
 		CmdResults: []*CmdResult{
 			{
-				Cmd: []string{"ping", "host.example.com"},
-				Err: errors.New("connection refused"),
+				Cmd: "ping host.example.com",
+				Err: "connection refused",
 			},
 		},
 	}

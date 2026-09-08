@@ -99,6 +99,12 @@ func CopyToJobPod(
 	return nil
 }
 
+// ExecOutput represents the output of a command executed in a pod.
+type ExecOutput struct {
+	Stdout string
+	Stderr string
+}
+
 // ExecPod executes the specified command in the given pod and returns the
 // combined stdout and stderr outputs of the command.
 func ExecPod(
@@ -106,7 +112,7 @@ func ExecPod(
 	c *suites.Clients,
 	pod *corev1.Pod,
 	cmd []string,
-) (io.Reader, io.Reader, error) {
+) (ExecOutput, error) {
 	req := c.K8sClientSet.CoreV1().RESTClient().
 		Post().
 		Resource("pods").
@@ -126,7 +132,7 @@ func ExecPod(
 	// setup spdy executor and exec the command in the pod
 	exec, err := remotecommand.NewSPDYExecutor(c.RestConfig, "POST", req.URL())
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to init SPDY executor: %w", err)
+		return ExecOutput{}, fmt.Errorf("failed to init SPDY executor: %w", err)
 	}
 
 	var (
@@ -137,7 +143,14 @@ func ExecPod(
 		Stdout: bout,
 		Stderr: berr,
 	}); err != nil {
-		return bout, berr, fmt.Errorf("failed to exec command '%s': %w", strings.Join(cmd, " "), err)
+		return ExecOutput{
+			Stdout: bout.String(),
+			Stderr: berr.String(),
+		}, fmt.Errorf("failed to exec command '%s': %w", strings.Join(cmd, " "), err)
 	}
-	return bout, berr, nil
+
+	return ExecOutput{
+		Stdout: bout.String(),
+		Stderr: berr.String(),
+	}, nil
 }

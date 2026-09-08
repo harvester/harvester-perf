@@ -233,16 +233,17 @@ func (s *BenchmarkSuite) execHealthcheck(
 	args = append(args, outArgs...)
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
-		stdout, stderr, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
-		results = append(results, &pkgsuites.CmdResult{
-			Cmd:    cmd,
-			Stdout: stdout,
-			Stderr: stderr,
-			Err:    err,
-		})
+		out, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
+		result := &pkgsuites.CmdResult{
+			Cmd:    strings.Join(cmd, " "),
+			Stdout: out.Stdout,
+			Stderr: out.Stderr,
+		}
 		if err != nil {
+			result.Err = err.Error()
 			errs = errors.Join(errs, fmt.Errorf("failed to execute command '%s': %w", strings.Join(cmd, " "), err))
 		}
+		results = append(results, result)
 	}
 	return results, errs
 }
@@ -268,16 +269,17 @@ func (s *BenchmarkSuite) execCheckPerf(
 	args = append(args, outArgs...)
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
-		stdout, stderr, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
-		results = append(results, &pkgsuites.CmdResult{
-			Cmd:    cmd,
-			Stdout: stdout,
-			Stderr: stderr,
-			Err:    err,
-		})
-		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to execute command '%s': %w", cmd, err))
+		out, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
+		result := &pkgsuites.CmdResult{
+			Cmd:    strings.Join(cmd, " "),
+			Stdout: out.Stdout,
+			Stderr: out.Stderr,
 		}
+		if err != nil {
+			result.Err = err.Error()
+			errs = errors.Join(errs, fmt.Errorf("failed to execute command '%s': %w", strings.Join(cmd, " "), err))
+		}
+		results = append(results, result)
 	}
 	return results, errs
 }
@@ -328,16 +330,17 @@ func (s *BenchmarkSuite) execBenchmark(
 	)
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
-		stdout, stderr, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
-		results = append(results, &pkgsuites.CmdResult{
-			Cmd:    cmd,
-			Stdout: stdout,
-			Stderr: stderr,
-			Err:    err,
-		})
-		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to execute command '%s': %w", cmd, err))
+		out, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
+		result := &pkgsuites.CmdResult{
+			Cmd:    strings.Join(cmd, " "),
+			Stdout: out.Stdout,
+			Stderr: out.Stderr,
 		}
+		if err != nil {
+			result.Err = err.Error()
+			errs = errors.Join(errs, fmt.Errorf("failed to execute command '%s': %w", strings.Join(cmd, " "), err))
+		}
+		results = append(results, result)
 	}
 	return results, errs
 }

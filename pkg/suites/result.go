@@ -1,9 +1,7 @@
 package suites
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"reflect"
 	"strings"
 	"text/tabwriter"
@@ -144,36 +142,24 @@ func (c *CaseResult) String() string {
 			fmt.Fprintf(tab, "%sExec:\n", indent)
 		}
 
-		fmt.Fprintf(tab, "%sCmd: %s\n", strings.Repeat(indent, 2), strings.Join(r.Cmd, " "))
-		if r.Stdout != nil {
-			stdout, err := io.ReadAll(r.Stdout)
-			if err != nil {
-				klog.V(3).ErrorS(err, "failed to read stdout", "cmd", r.Cmd)
-			}
-			if stdout != nil {
-				if trimmed := strings.TrimSpace(string(stdout)); trimmed != "" {
-					fmt.Fprintf(tab, "%sStdout: ", strings.Repeat(indent, 2))
+		fmt.Fprintf(tab, "%sCmd: %s\n", strings.Repeat(indent, 2), r.Cmd)
+		if stdout := r.Stdout; stdout != "" {
+			if trimmed := strings.TrimSpace(string(stdout)); trimmed != "" {
+				fmt.Fprintf(tab, "%sStdout: ", strings.Repeat(indent, 2))
 
-					// tabs in stdout are replaced with 4 spaces to avoid conflicts with the
-					// tabwriter output
-					fmt.Fprintf(tab, "%s\n", strings.ReplaceAll(trimmed, "\t", "    "))
-				}
+				// tabs in stdout are replaced with 4 spaces to avoid conflicts with the
+				// tabwriter output
+				fmt.Fprintf(tab, "%s\n", strings.ReplaceAll(trimmed, "\t", "    "))
 			}
 		}
 
-		if r.Stderr != nil {
-			stderr, err := io.ReadAll(r.Stderr)
-			if err != nil {
-				klog.V(3).ErrorS(err, "failed to read stderr for command", "cmd", r.Cmd)
-			}
-			if stderr != nil {
-				if trimmed := strings.TrimSpace(string(stderr)); trimmed != "" {
-					klog.V(3).InfoS("stderr output for command", "cmd", r.Cmd, "stderr", trimmed)
-				}
+		if stderr := r.Stderr; stderr != "" {
+			if trimmed := strings.TrimSpace(string(stderr)); trimmed != "" {
+				klog.V(3).InfoS("stderr output for command", "cmd", r.Cmd, "stderr", trimmed)
 			}
 		}
 
-		if r.Err != nil {
+		if r.Err != "" {
 			fmt.Fprintf(tab, "%sError:\t%v\n", strings.Repeat(indent, 2), r.Err)
 		}
 	}
@@ -211,55 +197,10 @@ func (c *CaseResult) String() string {
 
 // CmdResult represents the result of executing a command in a test case.
 type CmdResult struct {
-	Cmd    []string
-	Stdout io.Reader
-	Stderr io.Reader
-	Err    error
-}
-
-// MarshalJSON implements the json.Marshaler interface for CmdResult. It reads the
-// stdout and stderr streams and includes their contents in the JSON output.
-func (c *CmdResult) MarshalJSON() ([]byte, error) {
-	var stdout string
-	if c.Stdout != nil {
-		b, err := io.ReadAll(c.Stdout)
-		if err != nil {
-			return nil, err
-		}
-
-		// tabs in stdout are replaced with 4 spaces to avoid conflicts with the
-		// tabwriter output
-		stdout = strings.ReplaceAll(string(b), "\t", "    ")
-	}
-
-	var stderr string
-	if c.Stderr != nil {
-		b, err := io.ReadAll(c.Stderr)
-		if err != nil {
-			return nil, err
-		}
-
-		// tabs in stdout are replaced with 4 spaces to avoid conflicts with the
-		// tabwriter output
-		stderr = strings.ReplaceAll(string(b), "\t", "    ")
-	}
-
-	errStr := ""
-	if c.Err != nil {
-		errStr = c.Err.Error()
-	}
-
-	return json.Marshal(struct {
-		Cmd    string
-		Stdout string
-		Stderr string
-		Err    string
-	}{
-		Cmd:    strings.Join(c.Cmd, " "),
-		Stdout: string(stdout),
-		Stderr: string(stderr),
-		Err:    errStr,
-	})
+	Cmd    string
+	Stdout string
+	Stderr string
+	Err    string
 }
 
 // MetricResult represents the result of a Prometheus query executed in a test case.

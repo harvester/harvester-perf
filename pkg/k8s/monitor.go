@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/harvester/hvperf/pkg/suites"
@@ -96,36 +95,25 @@ func EnsurePodMonitor(
 
 	var waitErr error
 	if err := wait.PollUntilContextTimeout(ctx, time.Second*30, opts.WaitTimeout, true, func(ctx context.Context) (bool, error) {
-		// keep polling for the etcd job to be ready until timeout expired,
-		// ignoring any errors
-
-		handleErr := func(err error, stderr io.Reader) (bool, error) {
-			waitErr = err
-			if stderr != nil {
-				e, readErr := io.ReadAll(stderr)
-				if readErr != nil {
-					waitErr = errors.Join(waitErr, readErr)
-					return false, nil
-				}
-				waitErr = errors.Join(waitErr, fmt.Errorf("stderr: %s", string(e)))
+		// keep polling for the etcd job to be ready until timeout expired, ignoring
+		// any errors to keep the wait alive.
+		// intermediate errors are recorded using waitErr. waitErr gets reset on every
+		// iteration so that when the wait times out, only the final state is returned
+		// to the caller.
+		waitErr = nil
+		out, err := ExecPod(ctx, clients, jobPod, cmd)
+		if err != nil {
+			waitErr = errors.Join(waitErr, err)
+			if out.Stderr != "" {
+				waitErr = errors.Join(waitErr, fmt.Errorf("stderr: %s", out.Stderr))
 			}
 			return false, nil
 		}
 
-		waitErr = nil
-		stdout, stderr, err := ExecPod(ctx, clients, jobPod, cmd)
-		if err != nil {
-			return handleErr(err, stderr)
-		}
-
-		b, err := io.ReadAll(stdout)
-		if err != nil {
-			return handleErr(err, stderr)
-		}
-
 		var samples model.Samples
-		if err := json.Unmarshal(b, &samples); err != nil {
-			return handleErr(err, stderr)
+		if err := json.Unmarshal([]byte(out.Stdout), &samples); err != nil {
+			waitErr = errors.Join(waitErr, err)
+			return false, nil
 		}
 
 		// set to ready only if all etcd jobs are ready
