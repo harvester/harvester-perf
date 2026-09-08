@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -224,7 +225,10 @@ func (s *BenchmarkSuite) execHealthcheck(
 		{"etcdctl", "member", "list"},
 	}
 
-	var results []*pkgsuites.CmdResult
+	var (
+		results []*pkgsuites.CmdResult
+		errs    error
+	)
 	args = append(args, outArgs...)
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
@@ -235,8 +239,11 @@ func (s *BenchmarkSuite) execHealthcheck(
 			Stderr: stderr,
 			Err:    err,
 		})
+		if err != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to execute command '%s': %w", cmd, err))
+		}
 	}
-	return results, nil
+	return results, errs
 }
 
 func (s *BenchmarkSuite) execCheckPerf(
@@ -253,7 +260,10 @@ func (s *BenchmarkSuite) execCheckPerf(
 		{"etcdctl", "check", "perf"},
 	}
 
-	var results []*pkgsuites.CmdResult
+	var (
+		results []*pkgsuites.CmdResult
+		errs    error
+	)
 	args = append(args, outArgs...)
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
@@ -264,8 +274,11 @@ func (s *BenchmarkSuite) execCheckPerf(
 			Stderr: stderr,
 			Err:    err,
 		})
+		if err != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to execute command '%s': %w", cmd, err))
+		}
 	}
-	return results, nil
+	return results, errs
 }
 
 func (s *BenchmarkSuite) execBenchmark(
@@ -308,7 +321,10 @@ func (s *BenchmarkSuite) execBenchmark(
 		},
 	}
 
-	var results []*pkgsuites.CmdResult
+	var (
+		results []*pkgsuites.CmdResult
+		errs    error
+	)
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
 		stdout, stderr, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
@@ -318,15 +334,17 @@ func (s *BenchmarkSuite) execBenchmark(
 			Stderr: stderr,
 			Err:    err,
 		})
+		if err != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to execute command '%s': %w", cmd, err))
+		}
 	}
-	return results, nil
+	return results, errs
 }
 
 func (s *BenchmarkSuite) monitoring(
 	ctx context.Context,
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
-	args ...string,
 ) ([]*pkgsuites.MetricResult, bool, error) {
 	// check if monitoring addon is enabled and ready. if not, skip the promql
 	// execution.
@@ -378,7 +396,7 @@ func (s *BenchmarkSuite) monitoring(
 		return nil, true, podMonErr
 	}
 
-	metricResults, err := s.execPromQL(ctx, pod, opts, args...)
+	metricResults, err := s.execPromQL(ctx, opts)
 	if err != nil {
 		return nil, false, err
 	}
@@ -388,9 +406,7 @@ func (s *BenchmarkSuite) monitoring(
 
 func (s *BenchmarkSuite) execPromQL(
 	ctx context.Context,
-	pod *corev1.Pod,
 	opts *BenchmarkOptions,
-	args ...string,
 ) ([]*pkgsuites.MetricResult, error) {
 	queries := []string{
 		// p99 WAL fsync
@@ -423,6 +439,7 @@ func (s *BenchmarkSuite) execPromQL(
 		metricResults = append(metricResults, &pkgsuites.MetricResult{
 			Query: query,
 		})
+		// TODO: implement promql query execution and populate the metricResults with the results
 	}
 	return metricResults, nil
 }

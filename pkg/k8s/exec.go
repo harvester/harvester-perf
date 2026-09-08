@@ -137,7 +137,7 @@ func ExecPod(
 		Stdout: bout,
 		Stderr: berr,
 	}); err != nil {
-		return nil, nil, fmt.Errorf("failed to exec command '%s': %w", cmd, err)
+		return bout, berr, fmt.Errorf("failed to exec command '%s': %w", cmd, err)
 	}
 	return bout, berr, nil
 }

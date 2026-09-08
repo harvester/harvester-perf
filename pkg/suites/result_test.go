@@ -220,9 +220,9 @@ func TestCaseResultString(t *testing.T) {
 			expected: "--- FAIL list-nodes (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
-				"    Cmds:\n" +
-				"        ping host.example.com\n" +
-				"        error:  connection refused\n",
+				"    Exec:\n" +
+				"        Cmd: ping host.example.com\n" +
+				"        Error:  connection refused\n",
 		},
 		{
 			name: "objects are labelled once and aligned",

@@ -1,6 +1,7 @@
 package suites
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"reflect"
@@ -170,7 +171,7 @@ func (c *CaseResult) String() string {
 		}
 
 		if r.Err != nil {
-			fmt.Fprintf(tab, "%serror:\t%v\n", strings.Repeat(indent, 2), r.Err)
+			fmt.Fprintf(tab, "%sError:\t%v\n", strings.Repeat(indent, 2), r.Err)
 		}
 	}
 
@@ -201,6 +202,7 @@ func (c *CaseResult) String() string {
 	return stringBuilder.String()
 }
 
+// CmdResult represents the result of executing a command in a test case.
 type CmdResult struct {
 	Cmd    []string
 	Stdout io.Reader
@@ -208,6 +210,33 @@ type CmdResult struct {
 	Err    error
 }
 
+// MarshalJSON implements the json.Marshaler interface for CmdResult. It reads the
+// stdout and stderr streams and includes their contents in the JSON output.
+func (c *CmdResult) MarshalJSON() ([]byte, error) {
+	stdout, err := io.ReadAll(c.Stdout)
+	if err != nil {
+		return nil, err
+	}
+
+	stderr, err := io.ReadAll(c.Stderr)
+	if err != nil {
+		return nil, err
+	}
+
+	return json.Marshal(struct {
+		Cmd    string
+		Stdout string
+		Stderr string
+		Err    error
+	}{
+		Cmd:    strings.Join(c.Cmd, " "),
+		Stdout: string(stdout),
+		Stderr: string(stderr),
+		Err:    c.Err,
+	})
+}
+
+// MetricResult represents the result of a Prometheus query executed in a test case.
 type MetricResult struct {
 	Query   string
 	Samples model.Vector
