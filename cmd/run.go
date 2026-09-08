@@ -75,8 +75,8 @@ func init() {
 
 	runCmd.PersistentFlags().BoolVar(&keepAlive, "keep-alive", true,
 		fmt.Sprintf("Keep the test namespace and all its resources after test suite execution. Only works if the namespace is %s", suites.DefaultNamespace))
-	runCmd.PersistentFlags().StringVar(&monitoringServiceURL, "monitoring-url", "",
-		"Prometheus HTTP API base URL. When empty, defaults to the rancher-monitoring service accessed via the Kubernetes API-server proxy (uses kubeconfig credentials).")
+	runCmd.PersistentFlags().StringVar(&monitoringServiceURL, "monitoring-url", "http://localhost:9090",
+		"Prometheus HTTP API base URL.")
 
 	k8sConfigFlags.AddFlags(runCmd.PersistentFlags())
 	k8sPrintFlags.AddFlags(runCmd)

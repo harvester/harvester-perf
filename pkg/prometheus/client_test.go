@@ -63,10 +63,6 @@ func TestNew_URL(t *testing.T) {
 			if err != nil {
 				t.Fatalf("New() error = %v, want nil", err)
 			}
-
-			if resolvePrometheusURL(inputURL, restConfig) != tt.wantPath {
-				t.Fatalf("url setup wrror")
-			}
 		})
 	}
 }

@@ -31,11 +31,3 @@ func RunInstant(ctx context.Context, client promv1.API, query string) (model.Vec
 
 	return v, warnings, nil
 }
-
-func VectorByLabel(v model.Vector, label string) map[string]model.SampleValue {
-	m := map[string]model.SampleValue{}
-	for _, s := range v {
-		m[string(s.Metric[model.LabelName(label)])] = s.Value
-	}
-	return m
-}
