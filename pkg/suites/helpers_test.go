@@ -37,7 +37,8 @@ func (s *fakeSuite) IsReadWrite() bool   { return s.readWrite }
 func (s *fakeSuite) RunE(_ context.Context, _, _ string, _ Options) (SuiteResult, error) {
 	return SuiteResult{}, nil
 }
-func (s *fakeSuite) SetClients(_ *Clients) {}
+func (s *fakeSuite) SetClients(_ *Clients)                   {}
+func (s *fakeSuite) SetProgressReporter(_ *ProgressReporter) {}
 
 // recordingSuite wraps fakeSuite with a SetClients that records what it
 // received, so WithClients behaviour can be observed.
@@ -58,3 +59,4 @@ func (s *recordingSuite) SetClients(clients *Clients) {
 	s.clients = clients
 	s.setCalls++
 }
+func (s *recordingSuite) SetProgressReporter(_ *ProgressReporter) {}
