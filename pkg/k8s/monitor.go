@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/harvester/hvperf/pkg/suites"
@@ -82,41 +81,38 @@ func EnsurePodMonitor(
 	}
 
 	jobName := fmt.Sprintf("%s/%s", opts.Namespace, opts.Name)
-	cmd := [][]string{
-		{
-			// check if the prom job is ready. the job's default name is set to the
-			// namespace and name of the pod monitor
-			"promtool",
-			"query",
-			"instant",
-			"-o",
-			"json",
-			opts.MonitoringServiceURL,
-			fmt.Sprintf("up{job='%s'}", jobName),
-		},
+	cmd := []string{
+		// check if the prom job is ready. the job's default name is set to the
+		// namespace and name of the pod monitor
+		"promtool",
+		"query",
+		"instant",
+		"-o",
+		"json",
+		opts.MonitoringServiceURL,
+		fmt.Sprintf("up{job='%s'}", jobName),
 	}
 
 	var waitErr error
-	if err := wait.PollUntilContextTimeout(ctx, time.Second*30, opts.WaitTimeout, true, func(ctx context.Context) (done bool, err error) {
-		// keep polling for the etcd job to be ready until timeout expired,
-		// ignoring any errors
-		var r io.Reader
+	if err := wait.PollUntilContextTimeout(ctx, time.Second*30, opts.WaitTimeout, true, func(ctx context.Context) (bool, error) {
+		// keep polling for the etcd job to be ready until timeout expired, ignoring
+		// any errors to keep the wait alive.
+		// intermediate errors are recorded using waitErr. waitErr gets reset on every
+		// iteration so that when the wait times out, only the final state is returned
+		// to the caller.
 		waitErr = nil
-		r, err = ExecPod(ctx, clients, jobPod, cmd)
+		out, err := ExecPod(ctx, clients, jobPod, cmd)
 		if err != nil {
-			waitErr = err
-			return false, nil
-		}
-
-		b, err := io.ReadAll(r)
-		if err != nil {
-			waitErr = err
+			waitErr = errors.Join(waitErr, err)
+			if out.Stderr != "" {
+				waitErr = errors.Join(waitErr, fmt.Errorf("stderr: %s", out.Stderr))
+			}
 			return false, nil
 		}
 
 		var samples model.Samples
-		if err := json.Unmarshal(b, &samples); err != nil {
-			waitErr = err
+		if err := json.Unmarshal([]byte(out.Stdout), &samples); err != nil {
+			waitErr = errors.Join(waitErr, err)
 			return false, nil
 		}
 

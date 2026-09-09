@@ -1,13 +1,13 @@
 package suites
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/prometheus/common/model"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -210,12 +210,133 @@ func TestCaseResultString(t *testing.T) {
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
 				Success:       false,
-				Err:           errors.New("connection refused"),
+				CmdResults: []*CmdResult{
+					{
+						Cmd: "ping host.example.com",
+						Err: "connection refused",
+					},
+				},
 			},
 			expected: "--- FAIL list-nodes (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
-				"    Error:       connection refused\n",
+				"    Exec:\n" +
+				"        Cmd: ping host.example.com\n" +
+				"        Error:  connection refused\n",
+		},
+		{
+			name: "multiple cmd results are grouped under a single Exec label",
+			result: &CaseResult{
+				CaseName:      "etcd healthcheck",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				Success:       true,
+				CmdResults: []*CmdResult{
+					{
+						Cmd:    "etcdctl endpoint status",
+						Stdout: "ok\n",
+					},
+					{
+						Cmd:    "etcdctl endpoint health",
+						Stdout: "healthy\n",
+					},
+				},
+			},
+			expected: "--- PASS etcd healthcheck (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Exec:\n" +
+				"        Cmd: etcdctl endpoint status\n" +
+				"        Stdout: ok\n" +
+				"        Cmd: etcdctl endpoint health\n" +
+				"        Stdout: healthy\n",
+		},
+		{
+			name: "stderr is not rendered in the output",
+			result: &CaseResult{
+				CaseName:      "etcd healthcheck",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				Success:       true,
+				CmdResults: []*CmdResult{
+					{
+						Cmd:    "etcdctl endpoint status",
+						Stderr: "some warning\n",
+					},
+				},
+			},
+			expected: "--- PASS etcd healthcheck (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Exec:\n" +
+				"        Cmd: etcdctl endpoint status\n",
+		},
+		{
+			name: "tabs in stdout are replaced with spaces so the tabwriter doesn't reinterpret them",
+			result: &CaseResult{
+				CaseName:      "etcd benchmark",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				Success:       true,
+				CmdResults: []*CmdResult{
+					{
+						Cmd:    "benchmark put",
+						Stdout: "Summary:\n  Total:\t1.234s\n  Slowest:\t0.5s\tFastest:\t0.01s\n",
+					},
+				},
+			},
+			expected: "--- PASS etcd benchmark (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Exec:\n" +
+				"        Cmd: benchmark put\n" +
+				"        Stdout: Summary:\n" +
+				"  Total:    1.234s\n" +
+				"  Slowest:    0.5s    Fastest:    0.01s\n",
+		},
+		{
+			name: "metric result without samples renders the query with an N/A value",
+			result: &CaseResult{
+				CaseName:      "etcd monitoring (promql)",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				Success:       true,
+				MetricResults: []*MetricResult{
+					{Query: "histogram_quantile(0.99, wal_fsync_duration_seconds_bucket)"},
+				},
+			},
+			expected: "--- PASS etcd monitoring (promql) (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Metrics:\n" +
+				"        Query: histogram_quantile(0.99, wal_fsync_duration_seconds_bucket)\n" +
+				"        Value: N/A\n",
+		},
+		{
+			name: "multiple metric results are grouped under a single Metrics label and render their samples",
+			result: &CaseResult{
+				CaseName:      "etcd monitoring (promql)",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				Success:       true,
+				MetricResults: []*MetricResult{
+					{
+						Query: "up",
+						Samples: model.Vector{
+							{Value: 1.23456, Timestamp: model.Time(0)},
+						},
+					},
+					{Query: "etcd_server_has_leader"},
+				},
+			},
+			expected: "--- PASS etcd monitoring (promql) (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Metrics:\n" +
+				"        Query: up\n" +
+				"        Value: 1.2346  (0)\n" +
+				"        Query: etcd_server_has_leader\n" +
+				"        Value: N/A\n",
 		},
 		{
 			name: "objects are labelled once and aligned",
@@ -284,22 +405,6 @@ func TestCaseResultStringLocalTimeZone(t *testing.T) {
 	}
 	if !strings.Contains(got, "2026-08-26T12:30:01+02:00") {
 		t.Errorf("String() = %q, want it to contain the zone-local end time", got)
-	}
-}
-
-// TestCaseResultStringOutputTabs checks that tabs inside Out survive as literal
-// tabs, which is why String flushes the tabwriter before appending Out.
-func TestCaseResultStringOutputTabs(t *testing.T) {
-	c := &CaseResult{
-		CaseName:      "etcd-benchmark",
-		DateTimeStart: testStart,
-		DateTimeEnd:   testEnd,
-		Success:       true,
-		Out:           "a\tb\nlonger-cell\tc",
-	}
-
-	if got := c.String(); !strings.HasSuffix(got, "    Output:\na\tb\nlonger-cell\tc\n") {
-		t.Errorf("String() = %q, want the raw output appended with its tabs intact", got)
 	}
 }
 
@@ -377,7 +482,12 @@ func TestSuiteResultString(t *testing.T) {
 		DateTimeStart: testStart,
 		DateTimeEnd:   testEnd,
 		Success:       false,
-		Err:           errors.New("connection refused"),
+		CmdResults: []*CmdResult{
+			{
+				Cmd: "ping host.example.com",
+				Err: "connection refused",
+			},
+		},
 	}
 	skipped := &CaseResult{
 		CaseName: "list-pods",

@@ -58,7 +58,7 @@ func (p *ProgressReporter) CaseDone(suiteName, caseName string, passed bool, dur
 	if !passed {
 		mark = "✗"
 	}
-	if _, err := fmt.Fprintf(p.out, "\r\033[K[%s] %s %s (%s)\n", suiteName, caseName, mark, dur.Round(time.Millisecond)); err != nil {
+	if _, err := fmt.Fprintf(p.out, "\r\033[K[%s] %s: %s (%s)\n", suiteName, caseName, mark, dur.Round(time.Millisecond)); err != nil {
 		klog.ErrorS(err, "failed to write case done message")
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -100,62 +99,58 @@ func CopyToJobPod(
 	return nil
 }
 
-// ExecPod executes the specified commands in the given pod and returns the
-// combined stdout output of all commands.
+// ExecOutput represents the output of a command executed in a pod.
+type ExecOutput struct {
+	Stdout string
+	Stderr string
+}
+
+// ExecPod executes the specified command in the given pod and returns the
+// combined stdout and stderr outputs of the command.
 func ExecPod(
 	ctx context.Context,
 	c *suites.Clients,
 	pod *corev1.Pod,
-	cmds [][]string,
-) (io.Reader, error) {
-	var (
-		errs   error
-		bufOut = &bytes.Buffer{}
-	)
-	for _, cmd := range cmds {
-		req := c.K8sClientSet.CoreV1().RESTClient().
-			Post().
-			Resource("pods").
-			Name(pod.GetName()).
-			Namespace(pod.GetNamespace()).
-			SubResource("exec").
-			VersionedParams(&corev1.PodExecOptions{
-				Container: "hvperf",
-				Command:   cmd,
-				Stdin:     false,
-				Stdout:    true,
-				Stderr:    true,
-				TTY:       false,
-			}, scheme.ParameterCodec)
-		klog.V(5).Infof("exec cmd: %q\n", strings.Join(cmd, " "))
+	cmd []string,
+) (ExecOutput, error) {
+	req := c.K8sClientSet.CoreV1().RESTClient().
+		Post().
+		Resource("pods").
+		Name(pod.GetName()).
+		Namespace(pod.GetNamespace()).
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: "hvperf",
+			Command:   cmd,
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    true,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+	klog.V(5).Infof("exec cmd: %q\n", strings.Join(cmd, " "))
 
-		// setup spdy executor and exec the command in the pod
-		exec, err := remotecommand.NewSPDYExecutor(c.RestConfig, "POST", req.URL())
-		if err != nil {
-			return nil, fmt.Errorf("failed to init SPDY executor: %w", err)
-		}
-
-		// buffer stdout of remote execution so that we can return it to the caller for
-		// rendering. meanwhile, stderr is streamed directly to klog to render progress
-		// of the command execution in real time.
-		var (
-			b = &bytes.Buffer{}
-			e = pipeToKlog(5)
-		)
-		defer closeWriter(e)
-		if err := exec.StreamWithContext(ctx, remotecommand.StreamOptions{
-			Stdout: b,
-			Stderr: e,
-		}); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to exec command '%s': %w", strings.Join(cmd, " "), err))
-			continue
-		}
-
-		// don't return on write-to-buffer error here, instead collect the stdout and
-		// stderr buffers for  all commands
-		if _, err := bufOut.Write(b.Bytes()); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to write stdout buffer: %w", err))
-		}
+	// setup spdy executor and exec the command in the pod
+	exec, err := remotecommand.NewSPDYExecutor(c.RestConfig, "POST", req.URL())
+	if err != nil {
+		return ExecOutput{}, fmt.Errorf("failed to init SPDY executor: %w", err)
 	}
-	return bufOut, errs
+
+	var (
+		bout = &bytes.Buffer{}
+		berr = &bytes.Buffer{}
+	)
+	if err := exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+		Stdout: bout,
+		Stderr: berr,
+	}); err != nil {
+		return ExecOutput{
+			Stdout: bout.String(),
+			Stderr: berr.String(),
+		}, fmt.Errorf("failed to exec command '%s': %w", strings.Join(cmd, " "), err)
+	}
+
+	return ExecOutput{
+		Stdout: bout.String(),
+		Stderr: berr.String(),
+	}, nil
 }
