@@ -22,6 +22,10 @@ const (
 	// Per-node requests
 	queryRequestCPU = `sum by (node) (kube_pod_container_resource_requests{resource="cpu", node!=""})`
 	queryRequestMem = `sum by (node) (kube_pod_container_resource_requests{resource="memory", node!=""})`
+
+	// Host memory — kernel view
+	queryHostMemTotal     = `node_memory_MemTotal_bytes * on(instance) group_left(nodename) node_uname_info`
+	queryHostMemAvailable = `node_memory_MemAvailable_bytes * on(instance) group_left(nodename) node_uname_info`
 )
 
 var _ pkgsuites.Suite = &ResourceFootprintSuite{}
@@ -152,6 +156,50 @@ func (s *ResourceFootprintSuite) measureNodeResourceRequests(ctx context.Context
 	return sb.String(), metrics, queries, nil
 }
 
+// measureHostMemory reports total, available, and used host memory per node-exporter instance.
+func (s *ResourceFootprintSuite) measureHostMemory(ctx context.Context) (string, []*pkgsuites.MetricResult, []string, error) {
+	var sb strings.Builder
+	queries := []string{queryHostMemTotal, queryHostMemAvailable}
+
+	totalVec, totalWarn, err := pkgprom.RunInstant(ctx, s.Clients.PromClient, queryHostMemTotal)
+	s.addWarnings(&sb, queryHostMemTotal, totalWarn)
+	if err != nil {
+		return sb.String(), nil, queries, err
+	}
+
+	availableVec, availableWarn, err := pkgprom.RunInstant(ctx, s.Clients.PromClient, queryHostMemAvailable)
+	s.addWarnings(&sb, queryHostMemAvailable, availableWarn)
+	if err != nil {
+		return sb.String(), nil, queries, err
+	}
+
+	availableByInstance := make(map[string]float64, len(availableVec))
+	for _, sample := range availableVec {
+		availableByInstance[string(sample.Metric["nodename"])] = float64(sample.Value)
+	}
+
+	sort.Slice(totalVec, func(i, j int) bool {
+		return string(totalVec[i].Metric["nodename"]) < string(totalVec[j].Metric["nodename"])
+	})
+
+	tw := tabwriter.NewWriter(&sb, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "INSTANCE\tTOTAL\tAVAILABLE\tUSED\t")
+	fmt.Fprintln(tw, strings.Repeat("-", 8)+"\t"+strings.Repeat("-", 5)+"\t"+strings.Repeat("-", 9)+"\t"+strings.Repeat("-", 4)+"\t")
+	for _, sample := range totalVec {
+		instance := string(sample.Metric["nodename"])
+		total := float64(sample.Value)
+		available := availableByInstance[instance]
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t\n", instance, pkgprom.FormatMiB(total), pkgprom.FormatMiB(available), pkgprom.FormatMiB(total-available))
+	}
+	tw.Flush()
+
+	metrics := []*pkgsuites.MetricResult{
+		{Query: queryHostMemTotal, Samples: totalVec},
+		{Query: queryHostMemAvailable, Samples: availableVec},
+	}
+	return sb.String(), metrics, queries, nil
+}
+
 func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, namespace string, opts pkgsuites.Options) (pkgsuites.SuiteResult, error) {
 	cases := []struct {
 		name    string
@@ -164,6 +212,10 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, namespace stri
 		{
 			name:    "node resource requests",
 			measure: func() (string, []*pkgsuites.MetricResult, []string, error) { return s.measureNodeResourceRequests(ctx) },
+		},
+		{
+			name:    "host memory",
+			measure: func() (string, []*pkgsuites.MetricResult, []string, error) { return s.measureHostMemory(ctx) },
 		},
 	}
 
