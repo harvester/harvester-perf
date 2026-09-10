@@ -26,6 +26,10 @@ const (
 	// Host memory — kernel view
 	queryHostMemTotal     = `node_memory_MemTotal_bytes * on(instance) group_left(nodename) node_uname_info`
 	queryHostMemAvailable = `node_memory_MemAvailable_bytes * on(instance) group_left(nodename) node_uname_info`
+
+	// Allocatable
+	queryAllocCPU = `kube_node_status_allocatable{resource="cpu"}`
+	queryAllocMem = `kube_node_status_allocatable{resource="memory"}`
 )
 
 var _ pkgsuites.Suite = &ResourceFootprintSuite{}
@@ -200,6 +204,46 @@ func (s *ResourceFootprintSuite) measureHostMemory(ctx context.Context) (string,
 	return sb.String(), metrics, queries, nil
 }
 
+// measureNodeAllocatable reports allocatable CPU and memory per node.
+func (s *ResourceFootprintSuite) measureNodeAllocatable(ctx context.Context) (string, []*pkgsuites.MetricResult, []string, error) {
+	var sb strings.Builder
+	queries := []string{queryAllocCPU, queryAllocMem}
+
+	cpuVec, cpuWarn, err := pkgprom.RunInstant(ctx, s.Clients.PromClient, queryAllocCPU)
+	s.addWarnings(&sb, queryAllocCPU, cpuWarn)
+	if err != nil {
+		return sb.String(), nil, queries, err
+	}
+	memVec, memWarn, err := pkgprom.RunInstant(ctx, s.Clients.PromClient, queryAllocMem)
+	s.addWarnings(&sb, queryAllocMem, memWarn)
+	if err != nil {
+		return sb.String(), nil, queries, err
+	}
+
+	memByNode := make(map[string]float64, len(memVec))
+	for _, sample := range memVec {
+		memByNode[string(sample.Metric["node"])] = float64(sample.Value)
+	}
+	sort.Slice(cpuVec, func(i, j int) bool {
+		return string(cpuVec[i].Metric["node"]) < string(cpuVec[j].Metric["node"])
+	})
+
+	tw := tabwriter.NewWriter(&sb, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "NODE\tCPU ALLOCATABLE\tMEMORY ALLOCATABLE\t")
+	fmt.Fprintln(tw, strings.Repeat("-", 4)+"\t"+strings.Repeat("-", 15)+"\t"+strings.Repeat("-", 18)+"\t")
+	for _, sample := range cpuVec {
+		node := string(sample.Metric["node"])
+		fmt.Fprintf(tw, "%s\t%s\t%s\t\n", node, pkgprom.FormatMilliCPU(float64(sample.Value)), pkgprom.FormatMiB(memByNode[node]))
+	}
+	tw.Flush()
+
+	metrics := []*pkgsuites.MetricResult{
+		{Query: queryAllocCPU, Samples: cpuVec},
+		{Query: queryAllocMem, Samples: memVec},
+	}
+	return sb.String(), metrics, queries, nil
+}
+
 func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, namespace string, opts pkgsuites.Options) (pkgsuites.SuiteResult, error) {
 	cases := []struct {
 		name    string
@@ -216,6 +260,10 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, namespace stri
 		{
 			name:    "host memory",
 			measure: func() (string, []*pkgsuites.MetricResult, []string, error) { return s.measureHostMemory(ctx) },
+		},
+		{
+			name:    "node allocatable resources",
+			measure: func() (string, []*pkgsuites.MetricResult, []string, error) { return s.measureNodeAllocatable(ctx) },
 		},
 	}
 
