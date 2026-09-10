@@ -18,6 +18,10 @@ const (
 	// Per-namespace usage
 	queryNsCPU = `sum by (namespace, node) (rate(container_cpu_usage_seconds_total{container!="", pod!=""}[5m]))`
 	queryNsMem = `avg_over_time((sum by (namespace, node) (container_memory_working_set_bytes{container!="", pod!=""}))[5m:30s])`
+
+	// Per-node requests
+	queryRequestCPU = `sum by (node) (kube_pod_container_resource_requests{resource="cpu", node!=""})`
+	queryRequestMem = `sum by (node) (kube_pod_container_resource_requests{resource="memory", node!=""})`
 )
 
 var _ pkgsuites.Suite = &ResourceFootprintSuite{}
@@ -108,6 +112,46 @@ func (s *ResourceFootprintSuite) measureNamespaceUsage(ctx context.Context) (str
 	return sb.String(), metrics, queries, nil
 }
 
+// measureNodeResourceRequests reports requested CPU and memory per node.
+func (s *ResourceFootprintSuite) measureNodeResourceRequests(ctx context.Context) (string, []*pkgsuites.MetricResult, []string, error) {
+	var sb strings.Builder
+	queries := []string{queryRequestCPU, queryRequestMem}
+
+	cpuVec, cpuWarn, err := pkgprom.RunInstant(ctx, s.Clients.PromClient, queryRequestCPU)
+	s.addWarnings(&sb, queryRequestCPU, cpuWarn)
+	if err != nil {
+		return sb.String(), nil, queries, err
+	}
+	memVec, memWarn, err := pkgprom.RunInstant(ctx, s.Clients.PromClient, queryRequestMem)
+	s.addWarnings(&sb, queryRequestMem, memWarn)
+	if err != nil {
+		return sb.String(), nil, queries, err
+	}
+
+	memByNode := make(map[string]float64, len(memVec))
+	for _, sample := range memVec {
+		memByNode[string(sample.Metric["node"])] = float64(sample.Value)
+	}
+	sort.Slice(cpuVec, func(i, j int) bool {
+		return string(cpuVec[i].Metric["node"]) < string(cpuVec[j].Metric["node"])
+	})
+
+	tw := tabwriter.NewWriter(&sb, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "NODE\tCPU REQUEST\tMEMORY REQUEST\t")
+	fmt.Fprintln(tw, strings.Repeat("-", 4)+"\t"+strings.Repeat("-", 11)+"\t"+strings.Repeat("-", 14)+"\t")
+	for _, sample := range cpuVec {
+		node := string(sample.Metric["node"])
+		fmt.Fprintf(tw, "%s\t%s\t%s\t\n", node, pkgprom.FormatMilliCPU(float64(sample.Value)), pkgprom.FormatMiB(memByNode[node]))
+	}
+	tw.Flush()
+
+	metrics := []*pkgsuites.MetricResult{
+		{Query: queryRequestCPU, Samples: cpuVec},
+		{Query: queryRequestMem, Samples: memVec},
+	}
+	return sb.String(), metrics, queries, nil
+}
+
 func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, namespace string, opts pkgsuites.Options) (pkgsuites.SuiteResult, error) {
 	cases := []struct {
 		name    string
@@ -116,6 +160,10 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, namespace stri
 		{
 			name:    "per-namespace resource usage",
 			measure: func() (string, []*pkgsuites.MetricResult, []string, error) { return s.measureNamespaceUsage(ctx) },
+		},
+		{
+			name:    "node resource requests",
+			measure: func() (string, []*pkgsuites.MetricResult, []string, error) { return s.measureNodeResourceRequests(ctx) },
 		},
 	}
 
