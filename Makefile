@@ -66,11 +66,13 @@ IMAGE_OUTPUT_TYPE ?= docker
 image/cmd:
 	@$(DOCKER) run --rm \
 		--mount type=bind,src=$(HOME)/.kube,dst=/root/.kube,ro=true \
+		--network=host \
 		$(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_CMD_ARGS)
 
 image/run_all:
 	@$(DOCKER) run --rm \
 		--mount type=bind,src=$(HOME)/.kube,dst=/root/.kube,ro=true \
+		--network=host \
 		$(IMAGE_NAME):$(IMAGE_TAG) run all
 
 image/build:
