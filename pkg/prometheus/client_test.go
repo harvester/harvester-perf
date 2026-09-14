@@ -1,9 +1,11 @@
 package prometheus
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"k8s.io/client-go/rest"
 )
@@ -31,37 +33,42 @@ func TestNew_invalidURL(t *testing.T) {
 }
 
 func TestNew_URL(t *testing.T) {
-	mockHost := "https://mock"
 	tests := []struct {
 		name      string
-		serverURL string // input to New()
-		wantPath  string // expected path hit on server
+		serverURL func(string) string
+		wantPath  string
 	}{
 		{
-			name:      "default URL",
-			serverURL: "",
-			wantPath:  mockHost + prometheusSVCProxy,
+			name:      "service proxy by default",
+			serverURL: func(string) string { return "" },
+			wantPath:  prometheusSVCProxy + "/api/v1/query",
 		},
 		{
 			name:      "custom URL",
-			serverURL: "http://localhost:9090",
-			wantPath:  "http://localhost:9090",
+			serverURL: func(host string) string { return host },
+			wantPath:  "/api/v1/query",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			var gotPath string
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusOK)
+				gotPath = r.URL.Path
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
 			}))
 			defer srv.Close()
 
-			inputURL := tt.serverURL
-			restConfig := &rest.Config{Host: mockHost}
-
-			_, err := New(inputURL, restConfig)
+			api, err := New(tt.serverURL(srv.URL), &rest.Config{Host: srv.URL})
 			if err != nil {
 				t.Fatalf("New() error = %v, want nil", err)
+			}
+			if _, _, err := api.Query(context.Background(), "up", time.Now()); err != nil {
+				t.Fatalf("Query() error = %v, want nil", err)
+			}
+			if gotPath != tt.wantPath {
+				t.Errorf("request path = %q, want %q", gotPath, tt.wantPath)
 			}
 		})
 	}
