@@ -17,9 +17,9 @@ const (
 	queryNsCPU = `sum by (namespace, node) (rate(container_cpu_usage_seconds_total{container!="", pod!="", ` + footprintNamespaceFilter + `}[5m]))`
 	queryNsMem = `avg_over_time((sum by (namespace, node) (container_memory_working_set_bytes{container!="", pod!="", ` + footprintNamespaceFilter + `}))[5m:30s])`
 
-	// Per-node requests.
-	queryRequestCPU = `sum by (node) (kube_pod_container_resource_requests{resource="cpu", node!="", ` + footprintNamespaceFilter + `})`
-	queryRequestMem = `sum by (node) (kube_pod_container_resource_requests{resource="memory", node!="", ` + footprintNamespaceFilter + `})`
+	// Per-namespace requests.
+	queryRequestCPU = `sum by (namespace, node) (kube_pod_container_resource_requests{resource="cpu", node!="", ` + footprintNamespaceFilter + `})`
+	queryRequestMem = `sum by (namespace, node) (kube_pod_container_resource_requests{resource="memory", node!="", ` + footprintNamespaceFilter + `})`
 
 	// Host memory — kernel view.
 	queryHostMemTotal     = `node_memory_MemTotal_bytes * on(instance) group_left(nodename) node_uname_info`
@@ -54,7 +54,7 @@ func (s *ResourceFootprintSuite) Name() string {
 }
 
 func (s *ResourceFootprintSuite) Description() string {
-	return "measure the static resource footprint of the cluster"
+	return "measure the resource footprint of the cluster"
 }
 func (s *ResourceFootprintSuite) IsReadWrite() bool                     { return false }
 func (s *ResourceFootprintSuite) SetClients(clients *pkgsuites.Clients) { s.Clients = clients }
@@ -75,7 +75,7 @@ func (s *ResourceFootprintSuite) measureNamespaceUsage(ctx context.Context) ([]*
 	return s.measure(ctx, queryNsCPU, queryNsMem)
 }
 
-func (s *ResourceFootprintSuite) measureNodeResourceRequests(ctx context.Context) ([]*pkgsuites.MetricResult, error) {
+func (s *ResourceFootprintSuite) measureNamespaceResourceRequests(ctx context.Context) ([]*pkgsuites.MetricResult, error) {
 	return s.measure(ctx, queryRequestCPU, queryRequestMem)
 }
 
@@ -97,8 +97,8 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, _ pk
 			measure: func() ([]*pkgsuites.MetricResult, error) { return s.measureNamespaceUsage(ctx) },
 		},
 		{
-			name:    "node resource requests",
-			measure: func() ([]*pkgsuites.MetricResult, error) { return s.measureNodeResourceRequests(ctx) },
+			name:    "per-namespace resource requests",
+			measure: func() ([]*pkgsuites.MetricResult, error) { return s.measureNamespaceResourceRequests(ctx) },
 		},
 		{
 			name:    "host memory",
