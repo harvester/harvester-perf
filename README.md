@@ -220,6 +220,9 @@ ported. See [`poc/README.md`](poc/README.md).
 - Go 1.26+ only if you build outside the container.
 - The `rancher-monitoring` addon, only for the metrics cases; suites skip those
   cases when it is not enabled.
+- For `etcd-benchmark`'s metrics cases, the RKE2 server config
+  [`etcd-expose-metrics`](https://docs.rke2.io/reference/server_config#database)
+  must be set to `true`; etcd does not expose metrics otherwise.
 
 ## License
 
