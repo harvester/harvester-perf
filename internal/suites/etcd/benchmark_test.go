@@ -25,6 +25,7 @@ func TestBenchmarkOptionsDefaults(t *testing.T) {
 		EtcdMetricsPath:         "/metrics",
 		EtcdMetricsPortName:     "metrics",
 		EtcdMetricsScheme:       "http",
+		EtcdReadyTimeout:        sysOpts.EtcdReadyTimeout,
 		EtcdRemoteCopyTargetDir: "/usr/local/bin/",
 		EtcdRemoteTLSCertDir:    "/host/rancher/rke2/server/tls/etcd",
 
@@ -39,10 +40,8 @@ func TestBenchmarkOptionsDefaults(t *testing.T) {
 
 		MonitoringAddonName:             sysOpts.MonitoringAddonName,
 		MonitoringNamespace:             sysOpts.MonitoringNamespace,
-		MonitoringServiceURL:            sysOpts.MonitoringServiceURL,
 		MonitoringOutputFormat:          "promql",
 		MonitoringWaitPodMonitorTimeout: sysOpts.MonitoringWaitPodMonitorTimeout,
-		MonitoringScrapeInterval:        sysOpts.MonitoringScrapeInterval,
 
 		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
 		PutLoadSize:       DefaultLoadSize,

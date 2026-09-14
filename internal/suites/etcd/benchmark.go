@@ -9,11 +9,10 @@ import (
 
 	"github.com/harvester/hvperf/internal/suites/options"
 	"github.com/harvester/hvperf/pkg/k8s"
+	prom "github.com/harvester/hvperf/pkg/prometheus"
 	pkgsuites "github.com/harvester/hvperf/pkg/suites"
 
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 )
@@ -354,51 +353,54 @@ func (s *BenchmarkSuite) monitoring(
 	// execution.
 	ready, err := k8s.MonitoringEnabled(ctx, s.Clients, opts.MonitoringNamespace, opts.MonitoringAddonName)
 	if err != nil {
-		return nil, true, err
+		klog.V(3).ErrorS(err, "failed to check if monitoring addon is enabled, skipping etcd promql test case", "namespace", opts.MonitoringNamespace, "addon", opts.MonitoringAddonName)
+		return nil, true, nil
 	}
-
-	// skip if not ready
 	if !ready {
-		klog.V(3).Infof("monitoring addon '%s' is not enabled in namespace '%s', skipping promql execution\n", opts.MonitoringNamespace, opts.MonitoringAddonName)
+		klog.V(3).InfoS("monitoring addon is not enabled in namespace, skipping etcd promql test case", "namespace", opts.MonitoringNamespace, "addon", opts.MonitoringAddonName)
 		return nil, true, nil
 	}
 
+	// monitoring addon is enabled, so all errors from this point on should be
+	// returned to the caller, as they indicate a failure in the test case.
+	etcd, etcdReady, err := k8s.EnsureEtcdReady(ctx, s.Clients, opts.EtcdNamespace, opts.EtcdReadyTimeout)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to ensure etcd pods are ready: %w", err)
+	}
+	if !etcdReady {
+		return nil, false, fmt.Errorf("etcd pods are not ready in namespace '%s'", opts.EtcdNamespace)
+	}
+	klog.V(3).InfoS("etcd pods are ready", "namespace", opts.EtcdNamespace, "count", len(etcd.Items))
+
 	// etcd metrics are not exposed by default, so we need to ensure that the pod
 	// monitor is created
-	podMonitorOpts := &k8s.PodMonitorOption{
-		Name:                 s.Name(),
-		Namespace:            pod.GetNamespace(),
-		MetricsPortName:      opts.EtcdMetricsPortName,
-		MetricsPath:          opts.EtcdMetricsPath,
-		EndpointScheme:       opts.EtcdMetricsScheme,
-		TargetNamespace:      opts.EtcdNamespace,
-		MonitoringServiceURL: opts.MonitoringServiceURL,
-		LabelSelector: map[string]string{
-			"component": "etcd",
-			"tier":      "control-plane",
-		},
-		WaitTimeout:    opts.MonitoringWaitPodMonitorTimeout,
-		ScrapeInterval: opts.MonitoringScrapeInterval,
+	podMonOpts := &k8s.PodMonitorOption{
+		EtcdCount:       len(etcd.Items),
+		Name:            s.Name(),
+		Namespace:       pod.GetNamespace(),
+		MetricsPortName: opts.EtcdMetricsPortName,
+		MetricsPath:     opts.EtcdMetricsPath,
+		EndpointScheme:  opts.EtcdMetricsScheme,
+		TargetNamespace: opts.EtcdNamespace,
+		LabelSelector:   k8s.EtcdLabelSelector.MatchLabels,
+		WaitTimeout:     opts.MonitoringWaitPodMonitorTimeout,
 	}
-	podMonErr := k8s.EnsurePodMonitor(
+	cleanup, podMonErr := k8s.EnsurePodMonitor(
 		ctx,
 		s.Clients,
-		podMonitorOpts,
+		podMonOpts,
 		pod,
 	)
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-		defer cancel()
-
-		if err := s.MonClientSet.MonitoringV1().PodMonitors(pod.GetNamespace()).Delete(ctx, s.Name(), metav1.DeleteOptions{}); err != nil {
-			if !apierrors.IsNotFound(err) {
-				klog.V(3).ErrorS(err, "failed to delete pod monitor", "name", s.Name(), "namespace", pod.GetNamespace())
-			}
+		klog.V(3).InfoS("cleaning up pod monitor", "name", podMonOpts.Name, "namespace", podMonOpts.Namespace)
+		if err := cleanup(); err != nil {
+			klog.V(3).ErrorS(err, "failed to cleanup pod monitor", "name", podMonOpts.Name, "namespace", podMonOpts.Namespace)
 		}
 	}()
 	if podMonErr != nil {
 		return nil, true, podMonErr
 	}
+	klog.V(3).InfoS("pod monitor is ready", "name", podMonOpts.Name, "namespace", podMonOpts.Namespace)
 
 	metricResults, err := s.execPromQL(ctx, opts)
 	if err != nil {
@@ -438,14 +440,22 @@ func (s *BenchmarkSuite) execPromQL(
 		fmt.Sprintf(`sum by (pod, To) (rate(etcd_network_peer_received_failures_total{namespace="%s"}[5m]))`, opts.EtcdNamespace),
 	}
 
-	var metricResults []*pkgsuites.MetricResult
+	var (
+		metricResults []*pkgsuites.MetricResult
+		errs          error
+	)
 	for _, query := range queries {
-		metricResults = append(metricResults, &pkgsuites.MetricResult{
-			Query: query,
-		})
-		// TODO: implement promql query execution and populate the metricResults with the results
+		v, _, err := prom.RunInstant(ctx, s.PromClient, query)
+		result := &pkgsuites.MetricResult{
+			Query:   query,
+			Samples: v,
+		}
+		if err != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to execute promql query '%s': %w", query, err))
+		}
+		metricResults = append(metricResults, result)
 	}
-	return metricResults, nil
+	return metricResults, errs
 }
 
 func (s *BenchmarkSuite) SetClients(clients *pkgsuites.Clients) {
@@ -467,6 +477,7 @@ type BenchmarkOptions struct {
 	EtcdMetricsPortName     string
 	EtcdMetricsScheme       string
 	EtcdNamespace           string
+	EtcdReadyTimeout        time.Duration
 	EtcdRemoteTLSCertDir    string
 	EtcdRemoteCopyTargetDir string
 
@@ -481,10 +492,8 @@ type BenchmarkOptions struct {
 
 	MonitoringAddonName             string
 	MonitoringNamespace             string
-	MonitoringServiceURL            string
 	MonitoringOutputFormat          string
 	MonitoringWaitPodMonitorTimeout time.Duration
-	MonitoringScrapeInterval        time.Duration
 
 	CheckPerfLoadSize string
 	PutLoadSize       uint64
@@ -514,6 +523,7 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 		EtcdMetricsPortName:     "metrics",
 		EtcdMetricsScheme:       "http",
 		EtcdNamespace:           sysOpts.EtcdNamespace,
+		EtcdReadyTimeout:        sysOpts.EtcdReadyTimeout,
 		EtcdRemoteCopyTargetDir: "/usr/local/bin/",
 		EtcdRemoteTLSCertDir:    "/host/rancher/rke2/server/tls/etcd",
 
@@ -528,10 +538,8 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 
 		MonitoringAddonName:             sysOpts.MonitoringAddonName,
 		MonitoringNamespace:             sysOpts.MonitoringNamespace,
-		MonitoringServiceURL:            sysOpts.MonitoringServiceURL,
 		MonitoringOutputFormat:          "promql",
 		MonitoringWaitPodMonitorTimeout: sysOpts.MonitoringWaitPodMonitorTimeout,
-		MonitoringScrapeInterval:        sysOpts.MonitoringScrapeInterval,
 
 		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
 		PutLoadSize:       DefaultLoadSize,

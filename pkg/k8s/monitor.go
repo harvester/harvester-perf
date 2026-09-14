@@ -2,7 +2,6 @@ package k8s
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -18,7 +17,7 @@ import (
 
 	monv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	monv1apply "github.com/prometheus-operator/prometheus-operator/pkg/client/applyconfiguration/monitoring/v1"
-	"github.com/prometheus/common/model"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 )
 
 var addonGVR = schema.GroupVersionResource{
@@ -51,13 +50,34 @@ func MonitoringEnabled(ctx context.Context, c *suites.Clients, namespace, name s
 	return enabled, nil
 }
 
-// EnsurePodMonitor ensures that the specified PodMonitor exists.
+// EnsurePodMonitor ensures that the specified PodMonitor exists. It returns a
+// cleanup function to delete the PodMonitor and an error if any occurred during
+// the process. Caller is responsible for calling the cleanup function to prevent
+// continuous polling of the etcd pods.
+//
+// The function waits until Prometheus has successfully scraped
+// metrics from all etcd pods before returning.
 func EnsurePodMonitor(
 	ctx context.Context,
 	clients *suites.Clients,
 	opts *PodMonitorOption,
 	jobPod *corev1.Pod,
-) error {
+) (func() error, error) {
+	if opts.EtcdCount <= 0 {
+		return func() error {
+			return nil
+		}, fmt.Errorf("etcd count must be greater than 0, got %d", opts.EtcdCount)
+	}
+
+	// cleanup is the cleanup function to be returned to caller to delete
+	// the PodMonitor created by EnsurePodMonitor. If left behind, Prometheus would
+	// continue to poll the etcd pods.
+	cleanup := func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+		defer cancel()
+		return clients.MonClientSet.MonitoringV1().PodMonitors(opts.Namespace).Delete(ctx, opts.Name, metav1.DeleteOptions{})
+	}
+
 	var (
 		applyConfig       = monv1apply.PodMonitor(opts.Name, opts.Namespace)
 		namespaceSelector = monv1apply.NamespaceSelector().WithMatchNames(opts.TargetNamespace)
@@ -77,23 +97,15 @@ func EnsurePodMonitor(
 	if _, err := clients.MonClientSet.MonitoringV1().PodMonitors(opts.Namespace).Apply(ctx, applyConfig, metav1.ApplyOptions{
 		FieldManager: DefaultSSAFieldManager,
 	}); err != nil {
-		return err
+		return cleanup, err
 	}
+	applyTime := time.Now()
 
-	jobName := fmt.Sprintf("%s/%s", opts.Namespace, opts.Name)
-	cmd := []string{
-		// check if the prom job is ready. the job's default name is set to the
-		// namespace and name of the pod monitor
-		"promtool",
-		"query",
-		"instant",
-		"-o",
-		"json",
-		opts.MonitoringServiceURL,
-		fmt.Sprintf("up{job='%s'}", jobName),
-	}
-
-	var waitErr error
+	var (
+		// jobName is auto-assigned by the PodMonitor controller
+		jobName = fmt.Sprintf("%s/%s", opts.Namespace, opts.Name)
+		waitErr error
+	)
 	if err := wait.PollUntilContextTimeout(ctx, time.Second*30, opts.WaitTimeout, true, func(ctx context.Context) (bool, error) {
 		// keep polling for the etcd job to be ready until timeout expired, ignoring
 		// any errors to keep the wait alive.
@@ -101,54 +113,38 @@ func EnsurePodMonitor(
 		// iteration so that when the wait times out, only the final state is returned
 		// to the caller.
 		waitErr = nil
-		out, err := ExecPod(ctx, clients, jobPod, cmd)
+		targets, err := clients.PromClient.Targets(ctx)
 		if err != nil {
-			waitErr = errors.Join(waitErr, err)
-			if out.Stderr != "" {
-				waitErr = errors.Join(waitErr, fmt.Errorf("stderr: %s", out.Stderr))
-			}
+			waitErr = fmt.Errorf("failed to get prometheus targets... retrying: %w", err)
 			return false, nil
 		}
 
-		var samples model.Samples
-		if err := json.Unmarshal([]byte(out.Stdout), &samples); err != nil {
-			waitErr = errors.Join(waitErr, err)
-			return false, nil
-		}
-
-		// set to ready only if all etcd jobs are ready
-		ready := len(samples) > 0
-		for _, sample := range samples {
-			if sample.Value != 1 {
-				ready = false
-				break
+		var readyCount int
+		for _, t := range targets.Active {
+			if string(t.Labels["job"]) == jobName &&
+				t.Health == promv1.HealthGood &&
+				!t.LastScrape.IsZero() &&
+				t.LastScrape.After(applyTime) {
+				readyCount += 1
 			}
 		}
-		return ready, nil
+
+		return readyCount == opts.EtcdCount, nil
 	}); err != nil {
-		return errors.Join(waitErr, err)
+		return cleanup, errors.Join(waitErr, err)
 	}
 
-	// wait for the next scrape interval so that prometheus has scraped the metrics
-	// at least once
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(opts.ScrapeInterval):
-	}
-
-	return nil
+	return cleanup, nil
 }
 
 type PodMonitorOption struct {
-	Name                 string
-	Namespace            string
-	MetricsPortName      string
-	MetricsPath          string
-	EndpointScheme       string
-	TargetNamespace      string
-	MonitoringServiceURL string
-	LabelSelector        map[string]string
-	WaitTimeout          time.Duration
-	ScrapeInterval       time.Duration
+	EtcdCount       int
+	Name            string
+	Namespace       string
+	MetricsPortName string
+	MetricsPath     string
+	EndpointScheme  string
+	TargetNamespace string
+	LabelSelector   map[string]string
+	WaitTimeout     time.Duration
 }
