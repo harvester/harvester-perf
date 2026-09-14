@@ -124,7 +124,7 @@ func EnsurePodMonitor(
 			if string(t.Labels["job"]) == jobName &&
 				t.Health == promv1.HealthGood &&
 				!t.LastScrape.IsZero() &&
-				t.LastScrape.After(applyTime) {
+				t.LastScrape.After(applyTime.Add(opts.RangeDuration)) {
 				readyCount += 1
 			}
 		}
@@ -138,13 +138,14 @@ func EnsurePodMonitor(
 }
 
 type PodMonitorOption struct {
-	EtcdCount       int
 	Name            string
 	Namespace       string
+	EndpointScheme  string
+	EtcdCount       int
+	LabelSelector   map[string]string
 	MetricsPortName string
 	MetricsPath     string
-	EndpointScheme  string
 	TargetNamespace string
-	LabelSelector   map[string]string
+	RangeDuration   time.Duration
 	WaitTimeout     time.Duration
 }

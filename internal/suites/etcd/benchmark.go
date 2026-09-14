@@ -375,14 +375,15 @@ func (s *BenchmarkSuite) monitoring(
 	// etcd metrics are not exposed by default, so we need to ensure that the pod
 	// monitor is created
 	podMonOpts := &k8s.PodMonitorOption{
-		EtcdCount:       len(etcd.Items),
 		Name:            s.Name(),
 		Namespace:       pod.GetNamespace(),
+		EndpointScheme:  opts.EtcdMetricsScheme,
+		EtcdCount:       len(etcd.Items),
+		LabelSelector:   k8s.EtcdLabelSelector.MatchLabels,
 		MetricsPortName: opts.EtcdMetricsPortName,
 		MetricsPath:     opts.EtcdMetricsPath,
-		EndpointScheme:  opts.EtcdMetricsScheme,
+		RangeDuration:   opts.MonitoringRangeDuration,
 		TargetNamespace: opts.EtcdNamespace,
-		LabelSelector:   k8s.EtcdLabelSelector.MatchLabels,
 		WaitTimeout:     opts.MonitoringWaitPodMonitorTimeout,
 	}
 	cleanup, podMonErr := k8s.EnsurePodMonitor(
@@ -416,28 +417,28 @@ func (s *BenchmarkSuite) execPromQL(
 ) ([]*pkgsuites.MetricResult, error) {
 	queries := []string{
 		// p99 WAL fsync
-		fmt.Sprintf(`histogram_quantile(0.99,sum by (le, pod) (rate(etcd_disk_wal_fsync_duration_seconds_bucket{namespace='%s'}[5m])))`, opts.EtcdNamespace),
+		fmt.Sprintf(`histogram_quantile(0.99,sum by (le, pod) (rate(etcd_disk_wal_fsync_duration_seconds_bucket{namespace='%s'}[%s])))`, opts.EtcdNamespace, opts.MonitoringRangeDuration),
 
 		// p99 backend commit
-		fmt.Sprintf(`histogram_quantile(0.99,sum by (le, pod) (rate(etcd_disk_backend_commit_duration_seconds_bucket{namespace='%s'}[5m])))`, opts.EtcdNamespace),
+		fmt.Sprintf(`histogram_quantile(0.99,sum by (le, pod) (rate(etcd_disk_backend_commit_duration_seconds_bucket{namespace='%s'}[%s])))`, opts.EtcdNamespace, opts.MonitoringRangeDuration),
 
 		// rate of WAL write bytes
-		fmt.Sprintf(`sum by (pod) (rate(etcd_disk_wal_write_bytes_total{namespace='%s'}[5m]))`, opts.EtcdNamespace),
+		fmt.Sprintf(`sum by (pod) (rate(etcd_disk_wal_write_bytes_total{namespace='%s'}[%s]))`, opts.EtcdNamespace, opts.MonitoringRangeDuration),
 
 		// p99 peer round-trip time
 		// query for ROUND_TRIPPER_RAFT_MESSAGE connection type to fetch small
 		// heartbeat/consensus traffic which dictates election-timeout risk
-		fmt.Sprintf(`histogram_quantile(0.99,sum by (le, pod, To) (rate(etcd_network_peer_round_trip_time_seconds_bucket{namespace='%s', ConnectionType='ROUND_TRIPPER_RAFT_MESSAGE'}[5m])))`, opts.EtcdNamespace),
+		fmt.Sprintf(`histogram_quantile(0.99,sum by (le, pod, To) (rate(etcd_network_peer_round_trip_time_seconds_bucket{namespace='%s', ConnectionType='ROUND_TRIPPER_RAFT_MESSAGE'}[%s])))`, opts.EtcdNamespace, opts.MonitoringRangeDuration),
 
 		// peer send failure rates for multi-node cluster
 		// use the 'To' group-by to obtain the per peer node rates, instead of the
 		// cluster-wide rate
-		fmt.Sprintf(`sum by (pod, To) (rate(etcd_network_peer_sent_failures_total{namespace="%s"}[5m]))`, opts.EtcdNamespace),
+		fmt.Sprintf(`sum by (pod, To) (rate(etcd_network_peer_sent_failures_total{namespace="%s"}[%s]))`, opts.EtcdNamespace, opts.MonitoringRangeDuration),
 
 		// peer receive failure rates for multi-node cluster
-		// use the 'To' group-by to obtain the per peer node rates, instead of the
+		// use the 'From' group-by to obtain the per peer node rates, instead of the
 		// cluster-wide rate
-		fmt.Sprintf(`sum by (pod, To) (rate(etcd_network_peer_received_failures_total{namespace="%s"}[5m]))`, opts.EtcdNamespace),
+		fmt.Sprintf(`sum by (pod, From) (rate(etcd_network_peer_received_failures_total{namespace="%s"}[%s]))`, opts.EtcdNamespace, opts.MonitoringRangeDuration),
 	}
 
 	var (
@@ -476,6 +477,7 @@ type BenchmarkOptions struct {
 	EtcdMetricsPath         string
 	EtcdMetricsPortName     string
 	EtcdMetricsScheme       string
+	MonitoringRangeDuration time.Duration
 	EtcdNamespace           string
 	EtcdReadyTimeout        time.Duration
 	EtcdRemoteTLSCertDir    string
@@ -538,6 +540,7 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 
 		MonitoringAddonName:             sysOpts.MonitoringAddonName,
 		MonitoringNamespace:             sysOpts.MonitoringNamespace,
+		MonitoringRangeDuration:         sysOpts.MonitoringRangeDuration,
 		MonitoringOutputFormat:          "promql",
 		MonitoringWaitPodMonitorTimeout: sysOpts.MonitoringWaitPodMonitorTimeout,
 

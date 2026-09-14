@@ -22,6 +22,7 @@ func DefaultGlobalOptions() *Options {
 		"EtcdReadyTimeout":                300 * time.Second,
 		"MonitoringAddonName":             "rancher-monitoring",
 		"MonitoringNamespace":             "cattle-monitoring-system",
-		"MonitoringWaitPodMonitorTimeout": 300 * time.Second,
+		"MonitoringRangeDuration":         300 * time.Second,
+		"MonitoringWaitPodMonitorTimeout": 600 * time.Second, // 2x the EtcdRangeDuration to allow for Prometheus to scrape etcd metrics
 	}
 }
