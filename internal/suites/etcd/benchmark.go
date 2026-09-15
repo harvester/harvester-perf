@@ -121,28 +121,26 @@ func (s *BenchmarkSuite) RunE(
 	klog.V(3).Infof("running etcdctl healthcheck in pod '%s'\n", pod.GetName())
 	s.CaseStart(s.Name(), "etcd healthcheck")
 	start := time.Now()
-	results, err := s.execHealthcheck(ctx, pod, o, s.args(o)...)
+	results := s.execHealthcheck(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd healthcheck",
 		CmdResults:    results,
 		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
-		Success:       err == nil,
 	})
 	s.CaseDone(s.Name(), "etcd healthcheck", err == nil, time.Since(start))
 
 	klog.V(3).Infof("running etcdctl check perf in pod '%s'\n", pod.GetName())
 	s.CaseStart(s.Name(), "etcd check perf")
 	start = time.Now()
-	results, err = s.execCheckPerf(ctx, pod, o, s.args(o)...)
+	results = s.execCheckPerf(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd check perf",
 		CmdResults:    results,
 		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
-		Success:       err == nil,
 	})
 	s.CaseDone(s.Name(), "etcd check perf", err == nil, time.Since(start))
 
@@ -150,14 +148,13 @@ func (s *BenchmarkSuite) RunE(
 	klog.V(3).Infof("running etcd benchmark (serial) in pod '%s'\n", pod.GetName())
 	s.CaseStart(s.Name(), "etcd benchmark (serial)")
 	start = time.Now()
-	results, err = s.execBenchmark(ctx, pod, o, s.args(o)...)
+	results = s.execBenchmark(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd benchmark (serial)",
 		CmdResults:    results,
 		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
-		Success:       err == nil,
 	})
 	s.CaseDone(s.Name(), "etcd benchmark (serial)", err == nil, time.Since(start))
 
@@ -167,14 +164,13 @@ func (s *BenchmarkSuite) RunE(
 	o.PutLoadSize = DefaultConcurrentLoadSize
 	o.GRPCClientCount = DefaultConcurrentClientCount
 	o.GRPCConnCount = DefaultConcurrentConnCount
-	results, err = s.execBenchmark(ctx, pod, o, s.args(o)...)
+	results = s.execBenchmark(ctx, pod, o, s.args(o)...)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd benchmark (concurrent)",
 		CmdResults:    results,
 		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),
 		Objects:       []runtime.Object{job, pod},
-		Success:       err == nil,
 	})
 	s.CaseDone(s.Name(), "etcd benchmark (concurrent)", err == nil, time.Since(start))
 
@@ -186,10 +182,10 @@ func (s *BenchmarkSuite) RunE(
 		CaseName:      "etcd monitoring (promql)",
 		DateTimeStart: start,
 		DateTimeEnd:   time.Now(),
+		Err:           err,
 		Objects:       []runtime.Object{job, pod},
 		MetricResults: metricResults,
 		Skipped:       skipped,
-		Success:       err == nil,
 	})
 	s.CaseDone(s.Name(), "etcd monitoring (promql)", err == nil, time.Since(start))
 
@@ -224,7 +220,7 @@ func (s *BenchmarkSuite) execHealthcheck(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) ([]*pkgsuites.CmdResult, error) {
+) []*pkgsuites.CmdResult {
 	outArgs := []string{
 		"-w", opts.EtcdctlOutputFormat,
 	}
@@ -234,26 +230,20 @@ func (s *BenchmarkSuite) execHealthcheck(
 		{"etcdctl", "member", "list"},
 	}
 
-	var (
-		results []*pkgsuites.CmdResult
-		errs    error
-	)
+	var results []*pkgsuites.CmdResult
 	args = append(args, outArgs...)
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
 		out, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
 		result := &pkgsuites.CmdResult{
 			Cmd:    strings.Join(cmd, " "),
+			Err:    err,
 			Stdout: out.Stdout,
 			Stderr: out.Stderr,
 		}
-		if err != nil {
-			result.Err = err.Error()
-			errs = errors.Join(errs, fmt.Errorf("failed to execute command '%s': %w", strings.Join(cmd, " "), err))
-		}
 		results = append(results, result)
 	}
-	return results, errs
+	return results
 }
 
 func (s *BenchmarkSuite) execCheckPerf(
@@ -261,7 +251,7 @@ func (s *BenchmarkSuite) execCheckPerf(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) ([]*pkgsuites.CmdResult, error) {
+) []*pkgsuites.CmdResult {
 	outArgs := []string{
 		"-w", opts.EtcdctlOutputFormat,
 		"--load", opts.CheckPerfLoadSize,
@@ -270,26 +260,20 @@ func (s *BenchmarkSuite) execCheckPerf(
 		{"etcdctl", "check", "perf"},
 	}
 
-	var (
-		results []*pkgsuites.CmdResult
-		errs    error
-	)
+	var results []*pkgsuites.CmdResult
 	args = append(args, outArgs...)
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
 		out, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
 		result := &pkgsuites.CmdResult{
 			Cmd:    strings.Join(cmd, " "),
+			Err:    err,
 			Stdout: out.Stdout,
 			Stderr: out.Stderr,
 		}
-		if err != nil {
-			result.Err = err.Error()
-			errs = errors.Join(errs, fmt.Errorf("failed to execute command '%s': %w", strings.Join(cmd, " "), err))
-		}
 		results = append(results, result)
 	}
-	return results, errs
+	return results
 }
 
 func (s *BenchmarkSuite) execBenchmark(
@@ -297,7 +281,7 @@ func (s *BenchmarkSuite) execBenchmark(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) ([]*pkgsuites.CmdResult, error) {
+) []*pkgsuites.CmdResult {
 	cmds := [][]string{
 		{
 			// write serial
@@ -332,25 +316,19 @@ func (s *BenchmarkSuite) execBenchmark(
 		},
 	}
 
-	var (
-		results []*pkgsuites.CmdResult
-		errs    error
-	)
+	var results []*pkgsuites.CmdResult
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
 		out, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
 		result := &pkgsuites.CmdResult{
 			Cmd:    strings.Join(cmd, " "),
+			Err:    err,
 			Stdout: out.Stdout,
 			Stderr: out.Stderr,
 		}
-		if err != nil {
-			result.Err = err.Error()
-			errs = errors.Join(errs, fmt.Errorf("failed to execute command '%s': %w", strings.Join(cmd, " "), err))
-		}
 		results = append(results, result)
 	}
-	return results, errs
+	return results
 }
 
 func (s *BenchmarkSuite) monitoring(

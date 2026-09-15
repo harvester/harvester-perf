@@ -1,6 +1,7 @@
 package suites
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -197,7 +198,6 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "list-nodes",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       true,
 			},
 			expected: "--- PASS list-nodes (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
@@ -209,11 +209,10 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "list-nodes",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       false,
 				CmdResults: []*CmdResult{
 					{
 						Cmd: "ping host.example.com",
-						Err: "connection refused",
+						Err: errors.New("connection refused"),
 					},
 				},
 			},
@@ -230,7 +229,6 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd healthcheck",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       true,
 				CmdResults: []*CmdResult{
 					{
 						Cmd:    "etcdctl endpoint status",
@@ -257,7 +255,6 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd healthcheck",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       true,
 				CmdResults: []*CmdResult{
 					{
 						Cmd:    "etcdctl endpoint status",
@@ -277,7 +274,6 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd benchmark",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       true,
 				CmdResults: []*CmdResult{
 					{
 						Cmd:    "benchmark put",
@@ -300,7 +296,6 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd monitoring (promql)",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       true,
 				MetricResults: []*MetricResult{
 					{Query: "histogram_quantile(0.99, wal_fsync_duration_seconds_bucket)"},
 				},
@@ -309,8 +304,7 @@ func TestCaseResultString(t *testing.T) {
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
 				"    Metrics:\n" +
-				"        Query: histogram_quantile(0.99, wal_fsync_duration_seconds_bucket)\n" +
-				"        Value: N/A\n",
+				"        Query: histogram_quantile(0.99, wal_fsync_duration_seconds_bucket)\n",
 		},
 		{
 			name: "multiple metric results are grouped under a single Metrics label and render their samples",
@@ -318,7 +312,6 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd monitoring (promql)",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       true,
 				MetricResults: []*MetricResult{
 					{
 						Query: "up",
@@ -334,9 +327,8 @@ func TestCaseResultString(t *testing.T) {
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
 				"    Metrics:\n" +
 				"        Query: up\n" +
-				"        Value: 1.2346  (0)\n" +
-				"        Query: etcd_server_has_leader\n" +
-				"        Value: N/A\n",
+				"        Value: {} => 1.23456 @[0]\n" +
+				"        Query: etcd_server_has_leader\n",
 		},
 		{
 			name: "objects are labelled once and aligned",
@@ -344,7 +336,6 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd-benchmark",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       true,
 				Objects: []runtime.Object{
 					newPod("harvester-system-perf", "etcd-benchmark-0"),
 					newPod("harvester-system-perf", "etcd-benchmark-1"),
@@ -362,7 +353,6 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "list-nodes",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testStart.Add(2*time.Second + 4*time.Microsecond),
-				Success:       true,
 			},
 			expected: "--- PASS list-nodes (2s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
@@ -373,7 +363,7 @@ func TestCaseResultString(t *testing.T) {
 			result: &CaseResult{
 				CaseName: "",
 			},
-			expected: "--- FAIL  (0s)\n" +
+			expected: "--- PASS  (0s)\n" +
 				"    Started on:  0001-01-01T00:00:00Z\n" +
 				"    Ended at:    0001-01-01T00:00:00Z\n",
 		},
@@ -396,7 +386,6 @@ func TestCaseResultStringLocalTimeZone(t *testing.T) {
 		CaseName:      "list-nodes",
 		DateTimeStart: testStart.In(zone),
 		DateTimeEnd:   testEnd.In(zone),
-		Success:       true,
 	}
 
 	got := c.String()
@@ -420,13 +409,13 @@ func TestSuiteResultSummary(t *testing.T) {
 		},
 		{
 			name:       "all passed",
-			results:    []*CaseResult{{Success: true}, {Success: true}},
+			results:    []*CaseResult{{}, {}},
 			wantPassed: 2,
 			wantTot:    2,
 		},
 		{
 			name:       "all failed",
-			results:    []*CaseResult{{Success: false}, {Success: false}},
+			results:    []*CaseResult{{Err: errors.New("")}, {Err: errors.New("")}},
 			wantFailed: 2,
 			wantTot:    2,
 		},
@@ -438,7 +427,7 @@ func TestSuiteResultSummary(t *testing.T) {
 		},
 		{
 			name:        "mixed",
-			results:     []*CaseResult{{Success: true}, {Success: false}, {Success: true}, {Skipped: true}},
+			results:     []*CaseResult{{}, {Err: errors.New("")}, {}, {Skipped: true}},
 			wantPassed:  2,
 			wantFailed:  1,
 			wantSkipped: 1,
@@ -475,17 +464,15 @@ func TestSuiteResultString(t *testing.T) {
 		CaseName:      "list-nodes",
 		DateTimeStart: testStart,
 		DateTimeEnd:   testEnd,
-		Success:       true,
 	}
 	failing := &CaseResult{
 		CaseName:      "list-vms",
 		DateTimeStart: testStart,
 		DateTimeEnd:   testEnd,
-		Success:       false,
 		CmdResults: []*CmdResult{
 			{
 				Cmd: "ping host.example.com",
-				Err: "connection refused",
+				Err: errors.New("connection refused"),
 			},
 		},
 	}

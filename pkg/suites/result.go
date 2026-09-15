@@ -50,15 +50,14 @@ func (s *SuiteResult) String() string {
 func (s *SuiteResult) summary() (passed int, failed int, skipped int, total int) {
 	total = len(s.Results)
 	for _, result := range s.Results {
-		if result.Skipped {
-			skipped++
-			continue
-		}
-		if result.Success {
+		switch result.resultState() {
+		case CaseStatePass:
 			passed++
-			continue
+		case CaseStateFail:
+			failed++
+		case CaseStateSkipped:
+			skipped++
 		}
-		failed++
 	}
 	return
 }
@@ -105,15 +104,18 @@ func ToSuiteParams(opts any) ([]*SuiteParam, error) {
 }
 
 // CaseResult represents the result of a single test case execution.
+// Err captures errors that occur during the test case setup and cleanup.
+// CmdResults and MetricResults have fields for their own errors, for remote
+// commands and promql executions.
 type CaseResult struct {
 	CaseName      string
 	CmdResults    []*CmdResult
 	DateTimeStart time.Time
 	DateTimeEnd   time.Time
+	Err           error
 	MetricResults []*MetricResult
 	Objects       []runtime.Object
 	Skipped       bool
-	Success       bool
 }
 
 func (c *CaseResult) String() string {
@@ -122,15 +124,11 @@ func (c *CaseResult) String() string {
 		tab           = tabwriter.NewWriter(&stringBuilder, 0, 0, 2, ' ', 0)
 	)
 
-	result := "PASS"
-	if !c.Success {
-		result = "FAIL"
-	}
-	if c.Skipped {
-		result = "SKIPPED"
-	}
-
+	result := c.resultState()
 	fmt.Fprintf(tab, "--- %s %s (%s)\n", result, c.CaseName, c.DateTimeEnd.Sub(c.DateTimeStart).Round(time.Millisecond))
+	if c.Err != nil {
+		fmt.Fprintf(tab, "%sError:\t%v\n", indent, c.Err)
+	}
 	if c.Skipped {
 		return stringBuilder.String()
 	}
@@ -141,26 +139,15 @@ func (c *CaseResult) String() string {
 		if i == 0 {
 			fmt.Fprintf(tab, "%sExec:\n", indent)
 		}
+		r.indent = strings.Repeat(indent, 2)
+		fmt.Fprintf(tab, "%s", r)
 
-		fmt.Fprintf(tab, "%sCmd: %s\n", strings.Repeat(indent, 2), r.Cmd)
-		if stdout := r.Stdout; stdout != "" {
-			if trimmed := strings.TrimSpace(string(stdout)); trimmed != "" {
-				fmt.Fprintf(tab, "%sStdout: ", strings.Repeat(indent, 2))
-
-				// tabs in stdout are replaced with 4 spaces to avoid conflicts with the
-				// tabwriter output
-				fmt.Fprintf(tab, "%s\n", strings.ReplaceAll(trimmed, "\t", "    "))
-			}
-		}
-
+		// stderr from remote command is often noisy - by default, we don't stringify
+		// it, but stream it to klog at V(3) for debugging purposes
 		if stderr := r.Stderr; stderr != "" {
 			if trimmed := strings.TrimSpace(string(stderr)); trimmed != "" {
-				klog.V(3).InfoS("stderr output for command", "cmd", r.Cmd, "stderr", trimmed)
+				klog.V(3).InfoS("[remote-exec] stderr output", "cmd", r.Cmd, "stderr", trimmed)
 			}
-		}
-
-		if r.Err != "" {
-			fmt.Fprintf(tab, "%sError:\t%v\n", strings.Repeat(indent, 2), r.Err)
 		}
 	}
 
@@ -168,18 +155,8 @@ func (c *CaseResult) String() string {
 		if i == 0 {
 			fmt.Fprintf(tab, "%sMetrics:\n", indent)
 		}
-
-		fmt.Fprintf(tab, "%sQuery: %s\n", strings.Repeat(indent, 2), m.Query)
-		if len(m.Samples) == 0 {
-			fmt.Fprintf(tab, "%sValue: N/A\n", strings.Repeat(indent, 2))
-		} else {
-			for _, s := range m.Samples {
-				fmt.Fprintf(tab, "%sValue: %.4f\t(%s)\n", strings.Repeat(indent, 2), s.Value, s.Timestamp)
-				if s.Histogram != nil {
-					fmt.Fprintf(tab, "%s%s\n", strings.Repeat(indent, 2), s.Histogram)
-				}
-			}
-		}
+		m.indent = strings.Repeat(indent, 2)
+		fmt.Fprintf(tab, "%s", m)
 	}
 
 	for i, obj := range c.Objects {
@@ -195,18 +172,106 @@ func (c *CaseResult) String() string {
 	return stringBuilder.String()
 }
 
+const (
+	CaseStatePass    = "PASS"
+	CaseStateFail    = "FAIL"
+	CaseStateSkipped = "SKIPPED"
+)
+
+func (c *CaseResult) resultState() string {
+	if c.Skipped {
+		return CaseStateSkipped
+	}
+
+	if c.Err != nil {
+		return CaseStateFail
+	}
+
+	for _, cmdResult := range c.CmdResults {
+		if cmdResult.Err != nil {
+			return CaseStateFail
+		}
+	}
+
+	for _, metricResult := range c.MetricResults {
+		if metricResult.Err != nil {
+			return CaseStateFail
+		}
+	}
+
+	return CaseStatePass
+}
+
 // CmdResult represents the result of executing a command in a test case.
+// Err captures errors that occur during command execution, while Stdout and
+// Stderr capture the command's output streams.
 type CmdResult struct {
-	Cmd    string
-	Stdout string
-	Stderr string
-	Err    string
+	Cmd            string
+	Stdout         string
+	Stderr         string
+	Err            error
+	indent         string
+	stderrtostring bool
+}
+
+func (c *CmdResult) String() string {
+	var sb strings.Builder
+
+	fmt.Fprintf(&sb, "%sCmd: %s\n", c.indent, c.Cmd)
+	// tabs in stdout and stderr are replaced with 4 spaces to avoid conflicts with
+	// the tabwriter output
+	if stdout := c.Stdout; stdout != "" {
+		if trimmed := strings.TrimSpace(string(stdout)); trimmed != "" {
+			fmt.Fprintf(&sb, "%sStdout: ", c.indent)
+			fmt.Fprintf(&sb, "%s\n", strings.ReplaceAll(trimmed, "\t", "    "))
+		}
+	}
+
+	// stderr from remote command is often noisy - by default, we don't stringify it
+	if stderr := c.Stderr; stderr != "" && c.stderrtostring {
+		if trimmed := strings.TrimSpace(string(stderr)); trimmed != "" {
+			fmt.Fprintf(&sb, "%sStderr: ", c.indent)
+			fmt.Fprintf(&sb, "%s\n", strings.ReplaceAll(trimmed, "\t", "    "))
+		}
+	}
+
+	if err := c.Err; err != nil {
+		fmt.Fprintf(&sb, "%sError:\t%v\n", c.indent, err)
+	}
+
+	return sb.String()
 }
 
 // MetricResult represents the result of a Prometheus query executed in a test case.
+// Err captures promclient errors that occur during query execution.
 type MetricResult struct {
-	Query   string
-	Samples model.Vector
+	Err      error
+	Query    string
+	Samples  model.Vector
+	Warnings []string
+	indent   string
+}
+
+func (m *MetricResult) String() string {
+	var sb strings.Builder
+
+	fmt.Fprintf(&sb, "%sQuery: %s\n", m.indent, m.Query)
+	for _, s := range m.Samples {
+		fmt.Fprintf(&sb, "%sValue: %v\n", m.indent, s)
+	}
+
+	if m.Err != nil {
+		fmt.Fprintf(&sb, "%sError:\t%v\n", m.indent, m.Err)
+	}
+
+	if len(m.Warnings) > 0 {
+		fmt.Fprintf(&sb, "%sWarnings:\n", m.indent)
+		for _, w := range m.Warnings {
+			fmt.Fprintf(&sb, "%s- %s\n", m.indent, w)
+		}
+	}
+
+	return sb.String()
 }
 
 // objectMeta renders "(kind) namespace/name" for the Objects list in

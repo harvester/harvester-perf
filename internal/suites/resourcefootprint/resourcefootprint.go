@@ -62,11 +62,13 @@ func (s *ResourceFootprintSuite) SetClients(clients *pkgsuites.Clients) { s.Clie
 func (s *ResourceFootprintSuite) measure(ctx context.Context, queries ...string) ([]*pkgsuites.MetricResult, error) {
 	metrics := make([]*pkgsuites.MetricResult, 0, len(queries))
 	for _, query := range queries {
-		samples, _, err := pkgprom.RunInstant(ctx, s.Clients.PromClient, query)
-		if err != nil {
-			return metrics, err
-		}
-		metrics = append(metrics, &pkgsuites.MetricResult{Query: query, Samples: samples})
+		samples, warnings, err := pkgprom.RunInstant(ctx, s.Clients.PromClient, query)
+		metrics = append(metrics, &pkgsuites.MetricResult{
+			Err:      err,
+			Query:    query,
+			Samples:  samples,
+			Warnings: warnings,
+		})
 	}
 	return metrics, nil
 }
@@ -138,10 +140,10 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, _ pk
 		metrics, err := c.measure()
 		results = append(results, &pkgsuites.CaseResult{
 			CaseName:      c.name,
+			Err:           err,
 			MetricResults: metrics,
 			DateTimeStart: start,
 			DateTimeEnd:   time.Now(),
-			Success:       err == nil,
 		})
 	}
 
