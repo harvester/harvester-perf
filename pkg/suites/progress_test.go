@@ -24,10 +24,10 @@ func TestProgressReporterSuiteDone(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewProgressReporter(&buf, "run-123", 3)
 
-	p.SuiteDone("etcd-benchmark", 2500*time.Millisecond)
+	p.SuiteDone("etcd-benchmark", 1, 2500*time.Millisecond)
 
 	got := strings.TrimSpace(buf.String())
-	want := "etcd-benchmark: finished (2.5s)"
+	want := "[1/3] etcd-benchmark: finished (2.5s)"
 	if got != want {
 		t.Errorf("SuiteDone() output = %q, want it to be %q", got, want)
 	}

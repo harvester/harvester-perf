@@ -125,7 +125,7 @@ func runSuite(ctx context.Context, runID, namespace string, testSuite suites.Sui
 	start := time.Now()
 	progress.SuiteStart(testSuite.Name(), i)
 	defer func() {
-		progress.SuiteDone(testSuite.Name(), time.Since(start))
+		progress.SuiteDone(testSuite.Name(), i, time.Since(start))
 	}()
 
 	return testSuite.RunE(ctx, runID, namespace, opts)
