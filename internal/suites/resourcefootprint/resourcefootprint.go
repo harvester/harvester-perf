@@ -59,10 +59,17 @@ func (s *ResourceFootprintSuite) Description() string {
 func (s *ResourceFootprintSuite) IsReadWrite() bool                     { return false }
 func (s *ResourceFootprintSuite) SetClients(clients *pkgsuites.Clients) { s.Clients = clients }
 
-func (s *ResourceFootprintSuite) measure(ctx context.Context, queries ...string) ([]*pkgsuites.MetricResult, error) {
+func (s *ResourceFootprintSuite) measure(ctx context.Context, queries ...string) *pkgsuites.CaseResult {
+	caseResult := &pkgsuites.CaseResult{
+		DateTimeStart: time.Now(),
+	}
 	metrics := make([]*pkgsuites.MetricResult, 0, len(queries))
+	var failed bool
 	for _, query := range queries {
 		samples, warnings, err := pkgprom.RunInstant(ctx, s.Clients.PromClient, query)
+		if err != nil {
+			failed = true
+		}
 		metrics = append(metrics, &pkgsuites.MetricResult{
 			Err:      err,
 			Query:    query,
@@ -70,45 +77,52 @@ func (s *ResourceFootprintSuite) measure(ctx context.Context, queries ...string)
 			Warnings: warnings,
 		})
 	}
-	return metrics, nil
+
+	caseResult.DateTimeEnd = time.Now()
+	caseResult.MetricResults = metrics
+	caseResult.State = pkgsuites.CaseResultStatePass
+	if failed {
+		caseResult.State = pkgsuites.CaseResultStateFail
+	}
+	return caseResult
 }
 
-func (s *ResourceFootprintSuite) measureNamespaceUsage(ctx context.Context) ([]*pkgsuites.MetricResult, error) {
+func (s *ResourceFootprintSuite) measureNamespaceUsage(ctx context.Context) *pkgsuites.CaseResult {
 	return s.measure(ctx, queryNsCPU, queryNsMem)
 }
 
-func (s *ResourceFootprintSuite) measureNamespaceResourceRequests(ctx context.Context) ([]*pkgsuites.MetricResult, error) {
+func (s *ResourceFootprintSuite) measureNamespaceResourceRequests(ctx context.Context) *pkgsuites.CaseResult {
 	return s.measure(ctx, queryRequestCPU, queryRequestMem)
 }
 
-func (s *ResourceFootprintSuite) measureHostMemory(ctx context.Context) ([]*pkgsuites.MetricResult, error) {
+func (s *ResourceFootprintSuite) measureHostMemory(ctx context.Context) *pkgsuites.CaseResult {
 	return s.measure(ctx, queryHostMemTotal, queryHostMemAvailable)
 }
 
-func (s *ResourceFootprintSuite) measureNodeAllocatable(ctx context.Context) ([]*pkgsuites.MetricResult, error) {
+func (s *ResourceFootprintSuite) measureNodeAllocatable(ctx context.Context) *pkgsuites.CaseResult {
 	return s.measure(ctx, queryAllocCPU, queryAllocMem)
 }
 
 func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, _ pkgsuites.Options) (pkgsuites.SuiteResult, error) {
 	cases := []struct {
 		name    string
-		measure func() ([]*pkgsuites.MetricResult, error)
+		measure func() *pkgsuites.CaseResult
 	}{
 		{
 			name:    "per-namespace resource usage",
-			measure: func() ([]*pkgsuites.MetricResult, error) { return s.measureNamespaceUsage(ctx) },
+			measure: func() *pkgsuites.CaseResult { return s.measureNamespaceUsage(ctx) },
 		},
 		{
 			name:    "per-namespace resource requests",
-			measure: func() ([]*pkgsuites.MetricResult, error) { return s.measureNamespaceResourceRequests(ctx) },
+			measure: func() *pkgsuites.CaseResult { return s.measureNamespaceResourceRequests(ctx) },
 		},
 		{
 			name:    "host memory",
-			measure: func() ([]*pkgsuites.MetricResult, error) { return s.measureHostMemory(ctx) },
+			measure: func() *pkgsuites.CaseResult { return s.measureHostMemory(ctx) },
 		},
 		{
 			name:    "node allocatable resources",
-			measure: func() ([]*pkgsuites.MetricResult, error) { return s.measureNodeAllocatable(ctx) },
+			measure: func() *pkgsuites.CaseResult { return s.measureNodeAllocatable(ctx) },
 		},
 	}
 
@@ -128,7 +142,7 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, _ pk
 				CaseName:      c.name,
 				DateTimeStart: now,
 				DateTimeEnd:   now,
-				Skipped:       true,
+				State:         pkgsuites.CaseResultStateSkipped,
 			}
 		}
 		return pkgsuites.SuiteResult{Name: s.Name(), RunID: runID, Results: results}, nil
@@ -136,15 +150,8 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, _ pk
 
 	results := make([]*pkgsuites.CaseResult, 0, len(cases))
 	for _, c := range cases {
-		start := time.Now()
-		metrics, err := c.measure()
-		results = append(results, &pkgsuites.CaseResult{
-			CaseName:      c.name,
-			Err:           err,
-			MetricResults: metrics,
-			DateTimeStart: start,
-			DateTimeEnd:   time.Now(),
-		})
+		caseResult := c.measure()
+		results = append(results, caseResult)
 	}
 
 	return pkgsuites.SuiteResult{
