@@ -42,7 +42,11 @@ func (s *SuiteResult) String() string {
 	for _, result := range s.Results {
 		results = append(results, result.String())
 	}
-	fmt.Fprint(&stringBuilder, strings.Join(results, "\n"))
+	if len(results) > 0 {
+		fmt.Fprint(&stringBuilder, strings.Join(results, "\n"))
+	} else {
+		fmt.Fprintf(&stringBuilder, "--- No test cases were executed.")
+	}
 
 	if SuiteErr := s.Err; SuiteErr != "" {
 		fmt.Fprintf(&stringBuilder, "\n--- SUITE ERROR: %v\n", SuiteErr)
