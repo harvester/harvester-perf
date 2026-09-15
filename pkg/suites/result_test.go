@@ -1,6 +1,7 @@
 package suites
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -197,7 +198,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "list-nodes",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       true,
+				State:         CaseResultStatePassed,
 			},
 			expected: "--- PASS list-nodes (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
@@ -209,15 +210,15 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "list-nodes",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       false,
+				State:         CaseResultStateErrored,
 				CmdResults: []*CmdResult{
 					{
 						Cmd: "ping host.example.com",
-						Err: "connection refused",
+						Err: errors.New("connection refused"),
 					},
 				},
 			},
-			expected: "--- FAIL list-nodes (1.5s)\n" +
+			expected: "--- ERROR list-nodes (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
 				"    Exec:\n" +
@@ -230,7 +231,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd healthcheck",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       true,
+				State:         CaseResultStatePassed,
 				CmdResults: []*CmdResult{
 					{
 						Cmd:    "etcdctl endpoint status",
@@ -257,7 +258,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd healthcheck",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       true,
+				State:         CaseResultStatePassed,
 				CmdResults: []*CmdResult{
 					{
 						Cmd:    "etcdctl endpoint status",
@@ -277,7 +278,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd benchmark",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       true,
+				State:         CaseResultStatePassed,
 				CmdResults: []*CmdResult{
 					{
 						Cmd:    "benchmark put",
@@ -300,7 +301,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd monitoring (promql)",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       true,
+				State:         CaseResultStatePassed,
 				MetricResults: []*MetricResult{
 					{Query: "histogram_quantile(0.99, wal_fsync_duration_seconds_bucket)"},
 				},
@@ -309,8 +310,7 @@ func TestCaseResultString(t *testing.T) {
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
 				"    Metrics:\n" +
-				"        Query: histogram_quantile(0.99, wal_fsync_duration_seconds_bucket)\n" +
-				"        Value: N/A\n",
+				"        Query: histogram_quantile(0.99, wal_fsync_duration_seconds_bucket)\n",
 		},
 		{
 			name: "multiple metric results are grouped under a single Metrics label and render their samples",
@@ -318,7 +318,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd monitoring (promql)",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       true,
+				State:         CaseResultStatePassed,
 				MetricResults: []*MetricResult{
 					{
 						Query: "up",
@@ -334,9 +334,8 @@ func TestCaseResultString(t *testing.T) {
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
 				"    Metrics:\n" +
 				"        Query: up\n" +
-				"        Value: 1.2346  (0)\n" +
-				"        Query: etcd_server_has_leader\n" +
-				"        Value: N/A\n",
+				"        Value: {} => 1.23456 @[0]\n" +
+				"        Query: etcd_server_has_leader\n",
 		},
 		{
 			name: "objects are labelled once and aligned",
@@ -344,7 +343,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd-benchmark",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
-				Success:       true,
+				State:         CaseResultStatePassed,
 				Objects: []runtime.Object{
 					newPod("harvester-system-perf", "etcd-benchmark-0"),
 					newPod("harvester-system-perf", "etcd-benchmark-1"),
@@ -362,7 +361,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "list-nodes",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testStart.Add(2*time.Second + 4*time.Microsecond),
-				Success:       true,
+				State:         CaseResultStatePassed,
 			},
 			expected: "--- PASS list-nodes (2s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
@@ -372,8 +371,9 @@ func TestCaseResultString(t *testing.T) {
 			name: "zero value case result still renders",
 			result: &CaseResult{
 				CaseName: "",
+				State:    CaseResultStatePassed,
 			},
-			expected: "--- FAIL  (0s)\n" +
+			expected: "--- PASS  (0s)\n" +
 				"    Started on:  0001-01-01T00:00:00Z\n" +
 				"    Ended at:    0001-01-01T00:00:00Z\n",
 		},
@@ -396,7 +396,6 @@ func TestCaseResultStringLocalTimeZone(t *testing.T) {
 		CaseName:      "list-nodes",
 		DateTimeStart: testStart.In(zone),
 		DateTimeEnd:   testEnd.In(zone),
-		Success:       true,
 	}
 
 	got := c.String()
@@ -410,9 +409,9 @@ func TestCaseResultStringLocalTimeZone(t *testing.T) {
 
 func TestSuiteResultSummary(t *testing.T) {
 	testCases := []struct {
-		name                                         string
-		results                                      []*CaseResult
-		wantPassed, wantFailed, wantSkipped, wantTot int
+		name                                          string
+		results                                       []*CaseResult
+		wantPassed, wantErrored, wantSkipped, wantTot int
 	}{
 		{
 			name:    "no results",
@@ -420,27 +419,27 @@ func TestSuiteResultSummary(t *testing.T) {
 		},
 		{
 			name:       "all passed",
-			results:    []*CaseResult{{Success: true}, {Success: true}},
+			results:    []*CaseResult{{State: CaseResultStatePassed}, {State: CaseResultStatePassed}},
 			wantPassed: 2,
 			wantTot:    2,
 		},
 		{
-			name:       "all failed",
-			results:    []*CaseResult{{Success: false}, {Success: false}},
-			wantFailed: 2,
-			wantTot:    2,
+			name:        "all errored",
+			results:     []*CaseResult{{State: CaseResultStateErrored}, {State: CaseResultStateErrored}},
+			wantErrored: 2,
+			wantTot:     2,
 		},
 		{
 			name:        "all skipped",
-			results:     []*CaseResult{{Skipped: true}, {Skipped: true}},
+			results:     []*CaseResult{{State: CaseResultStateSkipped}, {State: CaseResultStateSkipped}},
 			wantSkipped: 2,
 			wantTot:     2,
 		},
 		{
 			name:        "mixed",
-			results:     []*CaseResult{{Success: true}, {Success: false}, {Success: true}, {Skipped: true}},
+			results:     []*CaseResult{{State: CaseResultStatePassed}, {State: CaseResultStateErrored}, {State: CaseResultStatePassed}, {State: CaseResultStateSkipped}},
 			wantPassed:  2,
-			wantFailed:  1,
+			wantErrored: 1,
 			wantSkipped: 1,
 			wantTot:     4,
 		},
@@ -450,12 +449,12 @@ func TestSuiteResultSummary(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &SuiteResult{Name: "etcd-benchmark", RunID: "abc123", Results: tc.results}
 
-			passed, failed, skipped, total := s.summary()
+			passed, errored, skipped, total := s.summary()
 			if passed != tc.wantPassed {
 				t.Errorf("summary() passed = %d, want %d", passed, tc.wantPassed)
 			}
-			if failed != tc.wantFailed {
-				t.Errorf("summary() failed = %d, want %d", failed, tc.wantFailed)
+			if errored != tc.wantErrored {
+				t.Errorf("summary() errored = %d, want %d", errored, tc.wantErrored)
 			}
 			if skipped != tc.wantSkipped {
 				t.Errorf("summary() skipped = %d, want %d", skipped, tc.wantSkipped)
@@ -463,8 +462,8 @@ func TestSuiteResultSummary(t *testing.T) {
 			if total != tc.wantTot {
 				t.Errorf("summary() total = %d, want %d", total, tc.wantTot)
 			}
-			if passed+failed+skipped != total {
-				t.Errorf("summary() passed+failed+skipped = %d, want total %d", passed+failed+skipped, total)
+			if passed+errored+skipped != total {
+				t.Errorf("summary() passed+errored+skipped = %d, want total %d", passed+errored+skipped, total)
 			}
 		})
 	}
@@ -475,23 +474,23 @@ func TestSuiteResultString(t *testing.T) {
 		CaseName:      "list-nodes",
 		DateTimeStart: testStart,
 		DateTimeEnd:   testEnd,
-		Success:       true,
+		State:         CaseResultStatePassed,
 	}
 	failing := &CaseResult{
 		CaseName:      "list-vms",
 		DateTimeStart: testStart,
 		DateTimeEnd:   testEnd,
-		Success:       false,
+		State:         CaseResultStateErrored,
 		CmdResults: []*CmdResult{
 			{
 				Cmd: "ping host.example.com",
-				Err: "connection refused",
+				Err: errors.New("connection refused"),
 			},
 		},
 	}
 	skipped := &CaseResult{
 		CaseName: "list-pods",
-		Skipped:  true,
+		State:    CaseResultStateSkipped,
 	}
 
 	testCases := []struct {
@@ -503,27 +502,29 @@ func TestSuiteResultString(t *testing.T) {
 			name:   "no case results",
 			result: &SuiteResult{Name: "node-capacity", RunID: "abc123"},
 			expected: "=== SUITE node-capacity (run abc123)\n" +
-				"\n=== node-capacity: 0 failed, 0 passed, 0 skipped (0 total)\n",
+				"--- No test cases were executed.\n" +
+				"=== node-capacity: 0 errored, 0 passed, 0 skipped (0 total)\n",
 		},
 		{
 			name:   "single passing case",
 			result: &SuiteResult{Name: "node-capacity", RunID: "abc123", Results: []*CaseResult{passing}},
 			expected: "=== SUITE node-capacity (run abc123)\n" +
 				passing.String() +
-				"\n=== node-capacity: 0 failed, 1 passed, 0 skipped (1 total)\n",
+				"\n=== node-capacity: 0 errored, 1 passed, 0 skipped (1 total)\n",
 		},
 		{
 			name:   "mixed cases are joined by a newline",
 			result: &SuiteResult{Name: "node-capacity", RunID: "abc123", Results: []*CaseResult{passing, failing, skipped}},
 			expected: "=== SUITE node-capacity (run abc123)\n" +
 				passing.String() + "\n" + failing.String() + "\n" + skipped.String() +
-				"\n=== node-capacity: 1 failed, 1 passed, 1 skipped (3 total)\n",
+				"\n=== node-capacity: 1 errored, 1 passed, 1 skipped (3 total)\n",
 		},
 		{
 			name:   "zero value suite result still renders",
 			result: &SuiteResult{},
 			expected: "=== SUITE  (run )\n" +
-				"\n=== : 0 failed, 0 passed, 0 skipped (0 total)\n",
+				"--- No test cases were executed.\n" +
+				"=== : 0 errored, 0 passed, 0 skipped (0 total)\n",
 		},
 	}
 

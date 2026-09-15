@@ -15,12 +15,14 @@ import (
 
 const indent = "    "
 
-// SuiteResult represents the result of a test suite execution.
+// SuiteResult represents the result of a test suite execution. Err captures
+// errors that occur during the suite setup and cleanup.
 type SuiteResult struct {
 	Name    string
 	Params  []*SuiteParam
 	RunID   string
 	Results []*CaseResult
+	Err     string
 }
 
 func (s *SuiteResult) String() string {
@@ -42,23 +44,26 @@ func (s *SuiteResult) String() string {
 	}
 	fmt.Fprint(&stringBuilder, strings.Join(results, "\n"))
 
-	passed, failed, skipped, total := s.summary()
-	fmt.Fprintf(&stringBuilder, "\n=== %s: %d failed, %d passed, %d skipped (%d total)\n", s.Name, failed, passed, skipped, total)
+	if SuiteErr := s.Err; SuiteErr != "" {
+		fmt.Fprintf(&stringBuilder, "\n--- SUITE ERROR: %v\n", SuiteErr)
+	}
+
+	passed, errored, skipped, total := s.summary()
+	fmt.Fprintf(&stringBuilder, "\n=== %s: %d errored, %d passed, %d skipped (%d total)\n", s.Name, errored, passed, skipped, total)
 	return stringBuilder.String()
 }
 
-func (s *SuiteResult) summary() (passed int, failed int, skipped int, total int) {
+func (s *SuiteResult) summary() (passed int, errored int, skipped int, total int) {
 	total = len(s.Results)
 	for _, result := range s.Results {
-		if result.Skipped {
-			skipped++
-			continue
-		}
-		if result.Success {
+		switch result.State {
+		case CaseResultStatePassed:
 			passed++
-			continue
+		case CaseResultStateErrored:
+			errored++
+		case CaseResultStateSkipped:
+			skipped++
 		}
-		failed++
 	}
 	return
 }
@@ -104,16 +109,100 @@ func ToSuiteParams(opts any) ([]*SuiteParam, error) {
 	return params, nil
 }
 
-// CaseResult represents the result of a single test case execution.
+// CaseResult represents the result of a single test case execution. Err captures
+// errors that occur during the test case setup and cleanup.
 type CaseResult struct {
 	CaseName      string
 	CmdResults    []*CmdResult
 	DateTimeStart time.Time
 	DateTimeEnd   time.Time
+	Err           error
 	MetricResults []*MetricResult
 	Objects       []runtime.Object
-	Skipped       bool
-	Success       bool
+	State         CaseResultState
+}
+
+type CaseResultState string
+
+const (
+	CaseResultStatePassed  CaseResultState = "PASS"
+	CaseResultStateErrored CaseResultState = "ERROR"
+	CaseResultStateSkipped CaseResultState = "SKIP"
+	CaseResultStateUnknown CaseResultState = "UNKNOWN"
+)
+
+// NewCaseResult creates a new CaseResult instance with the provided parameters.
+// Typically, NewCaseResult is called after a test case has been executed, to
+// finalize its state based on the command and metric results.
+// If NewCaseResult is called before a test case is executed, caller has to
+// explicitly call CaseResult.FinalizeState() to finalize the case result state.
+func NewCaseResult(
+	name string,
+	start time.Time,
+	end time.Time,
+	cmdResults []*CmdResult,
+	metricResults []*MetricResult,
+	objs ...runtime.Object,
+) *CaseResult {
+	cr := &CaseResult{
+		CaseName:      name,
+		CmdResults:    cmdResults,
+		MetricResults: metricResults,
+		DateTimeStart: start,
+		DateTimeEnd:   end,
+		Objects:       objs,
+		State:         CaseResultStateUnknown,
+	}
+	cr.FinalizeState()
+
+	return cr
+}
+
+// NewCaseResultSkipped creates a new CaseResult instance for a test case that
+// is skipped with an error during execution.
+func NewCaseResultSkipped(name string, start, end time.Time, err error) *CaseResult {
+	return &CaseResult{
+		CaseName:      name,
+		DateTimeStart: start,
+		DateTimeEnd:   end,
+		Err:           err.Error(),
+		State:         CaseResultStateSkipped,
+	}
+}
+
+// FinalizeState determines the final state of the CaseResult based on its
+// CmdResults, MetricResults, and any errors that may have occurred during the
+// test case execution.
+func (c *CaseResult) FinalizeState() {
+	// do not override the 'skipped' state as this is set by the test case itself
+	if c.State == CaseResultStateSkipped {
+		return
+	}
+
+	if c.Err != "" {
+		c.State = CaseResultStateErrored
+	}
+
+	var hasErr bool
+	for _, cr := range c.CmdResults {
+		if cr.Err != "" {
+			c.State = CaseResultStateErrored
+			hasErr = true
+			break
+		}
+	}
+
+	for _, mr := range c.MetricResults {
+		if mr.Err != "" {
+			c.State = CaseResultStateErrored
+			hasErr = true
+			break
+		}
+	}
+
+	if !hasErr {
+		c.State = CaseResultStatePassed
+	}
 }
 
 func (c *CaseResult) String() string {
@@ -122,18 +211,17 @@ func (c *CaseResult) String() string {
 		tab           = tabwriter.NewWriter(&stringBuilder, 0, 0, 2, ' ', 0)
 	)
 
-	result := "PASS"
-	if !c.Success {
-		result = "FAIL"
+	if c.State == "" {
+		c.State = CaseResultStateUnknown
 	}
-	if c.Skipped {
-		result = "SKIPPED"
+	fmt.Fprintf(tab, "--- %s %s (%s)\n", c.State, c.CaseName, c.DateTimeEnd.Sub(c.DateTimeStart).Round(time.Millisecond))
+	if c.Err != nil {
+		fmt.Fprintf(tab, "%sError:\t%v\n", indent, c.Err)
 	}
-
-	fmt.Fprintf(tab, "--- %s %s (%s)\n", result, c.CaseName, c.DateTimeEnd.Sub(c.DateTimeStart).Round(time.Millisecond))
 	if c.Skipped {
 		return stringBuilder.String()
 	}
+
 	fmt.Fprintf(tab, "%sStarted on:\t%s\n", indent, c.DateTimeStart.Format("2006-01-02T15:04:05Z07:00"))
 	fmt.Fprintf(tab, "%sEnded at:\t%s\n", indent, c.DateTimeEnd.Format("2006-01-02T15:04:05Z07:00"))
 
@@ -141,26 +229,15 @@ func (c *CaseResult) String() string {
 		if i == 0 {
 			fmt.Fprintf(tab, "%sExec:\n", indent)
 		}
+		r.indent = strings.Repeat(indent, 2)
+		fmt.Fprintf(tab, "%s", r)
 
-		fmt.Fprintf(tab, "%sCmd: %s\n", strings.Repeat(indent, 2), r.Cmd)
-		if stdout := r.Stdout; stdout != "" {
-			if trimmed := strings.TrimSpace(string(stdout)); trimmed != "" {
-				fmt.Fprintf(tab, "%sStdout: ", strings.Repeat(indent, 2))
-
-				// tabs in stdout are replaced with 4 spaces to avoid conflicts with the
-				// tabwriter output
-				fmt.Fprintf(tab, "%s\n", strings.ReplaceAll(trimmed, "\t", "    "))
-			}
-		}
-
+		// stderr from remote command is often noisy - by default, we don't stringify
+		// it, but stream it to klog at V(3) for debugging purposes
 		if stderr := r.Stderr; stderr != "" {
 			if trimmed := strings.TrimSpace(string(stderr)); trimmed != "" {
-				klog.V(3).InfoS("stderr output for command", "cmd", r.Cmd, "stderr", trimmed)
+				klog.V(3).InfoS("[remote-exec] stderr output", "cmd", r.Cmd, "stderr", trimmed)
 			}
-		}
-
-		if r.Err != "" {
-			fmt.Fprintf(tab, "%sError:\t%v\n", strings.Repeat(indent, 2), r.Err)
 		}
 	}
 
@@ -168,18 +245,8 @@ func (c *CaseResult) String() string {
 		if i == 0 {
 			fmt.Fprintf(tab, "%sMetrics:\n", indent)
 		}
-
-		fmt.Fprintf(tab, "%sQuery: %s\n", strings.Repeat(indent, 2), m.Query)
-		if len(m.Samples) == 0 {
-			fmt.Fprintf(tab, "%sValue: N/A\n", strings.Repeat(indent, 2))
-		} else {
-			for _, s := range m.Samples {
-				fmt.Fprintf(tab, "%sValue: %.4f\t(%s)\n", strings.Repeat(indent, 2), s.Value, s.Timestamp)
-				if s.Histogram != nil {
-					fmt.Fprintf(tab, "%s%s\n", strings.Repeat(indent, 2), s.Histogram)
-				}
-			}
-		}
+		m.indent = strings.Repeat(indent, 2)
+		fmt.Fprintf(tab, "%s", m)
 	}
 
 	for i, obj := range c.Objects {
@@ -196,17 +263,75 @@ func (c *CaseResult) String() string {
 }
 
 // CmdResult represents the result of executing a command in a test case.
+// Err captures errors that occur during command execution, while Stdout and
+// Stderr capture the command's output streams.
 type CmdResult struct {
-	Cmd    string
-	Stdout string
-	Stderr string
-	Err    string
+	Cmd            string
+	Stdout         string
+	Stderr         string
+	Err            error
+	indent         string
+	stderrtostring bool
+}
+
+func (c *CmdResult) String() string {
+	var sb strings.Builder
+
+	fmt.Fprintf(&sb, "%sCmd: %s\n", c.indent, c.Cmd)
+	// tabs in stdout and stderr are replaced with 4 spaces to avoid conflicts with
+	// the tabwriter output
+	if stdout := c.Stdout; stdout != "" {
+		if trimmed := strings.TrimSpace(string(stdout)); trimmed != "" {
+			fmt.Fprintf(&sb, "%sStdout: ", c.indent)
+			fmt.Fprintf(&sb, "%s\n", strings.ReplaceAll(trimmed, "\t", "    "))
+		}
+	}
+
+	// stderr from remote command is often noisy - by default, we don't stringify it
+	if stderr := c.Stderr; stderr != "" && c.stderrtostring {
+		if trimmed := strings.TrimSpace(string(stderr)); trimmed != "" {
+			fmt.Fprintf(&sb, "%sStderr: ", c.indent)
+			fmt.Fprintf(&sb, "%s\n", strings.ReplaceAll(trimmed, "\t", "    "))
+		}
+	}
+
+	if err := c.Err; err != nil {
+		fmt.Fprintf(&sb, "%sError:\t%v\n", c.indent, err)
+	}
+
+	return sb.String()
 }
 
 // MetricResult represents the result of a Prometheus query executed in a test case.
+// Err captures promclient errors that occur during query execution.
 type MetricResult struct {
-	Query   string
-	Samples model.Vector
+	Err      error
+	Query    string
+	Samples  model.Vector
+	Warnings []string
+	indent   string
+}
+
+func (m *MetricResult) String() string {
+	var sb strings.Builder
+
+	fmt.Fprintf(&sb, "%sQuery: %s\n", m.indent, m.Query)
+	for _, s := range m.Samples {
+		fmt.Fprintf(&sb, "%sValue: %v\n", m.indent, s)
+	}
+
+	if m.Err != nil {
+		fmt.Fprintf(&sb, "%sError:\t%v\n", m.indent, m.Err)
+	}
+
+	if len(m.Warnings) > 0 {
+		fmt.Fprintf(&sb, "%sWarnings:\n", m.indent)
+		for _, w := range m.Warnings {
+			fmt.Fprintf(&sb, "%s- %s\n", m.indent, w)
+		}
+	}
+
+	return sb.String()
 }
 
 // objectMeta renders "(kind) namespace/name" for the Objects list in

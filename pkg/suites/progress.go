@@ -38,8 +38,8 @@ func (p *ProgressReporter) SuiteStart(suiteName string, i int) {
 }
 
 // SuiteDone writes a message indicating that a test suite has finished running.
-func (p *ProgressReporter) SuiteDone(suiteName string, elapsed time.Duration) {
-	if _, err := fmt.Fprintf(p.out, "      %s: finished (%s)\n", suiteName, elapsed); err != nil {
+func (p *ProgressReporter) SuiteDone(suiteName string, i int, elapsed time.Duration) {
+	if _, err := fmt.Fprintf(p.out, "[%d/%d] %s: finished (%s)\n", i, p.totalSuites, suiteName, elapsed); err != nil {
 		klog.ErrorS(err, "failed to write suite finished message")
 	}
 }
@@ -53,10 +53,17 @@ func (p *ProgressReporter) CaseStart(suiteName, caseName string) {
 
 // CaseDone writes a message indicating that a test case has finished running,
 // along with its result (pass/fail) and duration.
-func (p *ProgressReporter) CaseDone(suiteName, caseName string, passed bool, dur time.Duration) {
-	mark := "✓"
-	if !passed {
+func (p *ProgressReporter) CaseDone(suiteName, caseName string, state CaseResultState, dur time.Duration) {
+	var mark string
+	switch state {
+	case CaseResultStatePassed:
+		mark = "✓"
+	case CaseResultStateErrored:
 		mark = "✗"
+	case CaseResultStateSkipped:
+		fallthrough
+	default:
+		mark = "!"
 	}
 	if _, err := fmt.Fprintf(p.out, "\r\033[K[%s] %s: %s (%s)\n", suiteName, caseName, mark, dur.Round(time.Millisecond)); err != nil {
 		klog.ErrorS(err, "failed to write case done message")

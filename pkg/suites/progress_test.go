@@ -24,10 +24,10 @@ func TestProgressReporterSuiteDone(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewProgressReporter(&buf, "run-123", 3)
 
-	p.SuiteDone("etcd-benchmark", 2500*time.Millisecond)
+	p.SuiteDone("etcd-benchmark", 1, 2500*time.Millisecond)
 
 	got := strings.TrimSpace(buf.String())
-	want := "etcd-benchmark: finished (2.5s)"
+	want := "[1/3] etcd-benchmark: finished (2.5s)"
 	if got != want {
 		t.Errorf("SuiteDone() output = %q, want it to be %q", got, want)
 	}
@@ -50,19 +50,19 @@ func TestProgressReporterCaseStart(t *testing.T) {
 func TestProgressReporterCaseDone(t *testing.T) {
 	testCases := []struct {
 		name       string
-		passed     bool
+		state      CaseResultState
 		wantMark   string
 		wantNoMark string
 	}{
 		{
 			name:       "passed",
-			passed:     true,
+			state:      CaseResultStatePassed,
 			wantMark:   "✓",
 			wantNoMark: "✗",
 		},
 		{
 			name:       "failed",
-			passed:     false,
+			state:      CaseResultStateErrored,
 			wantMark:   "✗",
 			wantNoMark: "✓",
 		},
@@ -73,7 +73,7 @@ func TestProgressReporterCaseDone(t *testing.T) {
 			var buf bytes.Buffer
 			p := NewProgressReporter(&buf, "run-123", 3)
 
-			p.CaseDone("etcd-benchmark", "etcd healthcheck", tc.passed, 150*time.Millisecond)
+			p.CaseDone("etcd-benchmark", "etcd healthcheck", tc.state, 150*time.Millisecond)
 
 			got := buf.String()
 			for _, want := range []string{"etcd-benchmark", "etcd healthcheck", tc.wantMark, "150ms"} {
