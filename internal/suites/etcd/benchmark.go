@@ -67,6 +67,15 @@ func (s *BenchmarkSuite) RunE(
 	//      return pkgsuites.SuiteResult{}, err
 	// }
 
+	etcd, etcdReady, err := k8s.EnsureEtcdReady(ctx, s.Clients, o.EtcdNamespace, o.EtcdReadyTimeout)
+	if err != nil {
+		return pkgsuites.SuiteResult{}, fmt.Errorf("failed to ensure etcd pods are ready: %w", err)
+	}
+	if !etcdReady {
+		return pkgsuites.SuiteResult{}, fmt.Errorf("etcd pods are not ready in namespace '%s'", o.EtcdNamespace)
+	}
+	klog.V(3).InfoS("etcd pods are ready", "namespace", o.EtcdNamespace, "count", len(etcd.Items))
+
 	nsReadyTimeout := 60 * time.Second
 	if _, err := k8s.EnsureNamespace(ctx, s.Clients, namespace, nsReadyTimeout); err != nil {
 		return pkgsuites.SuiteResult{}, err
@@ -172,7 +181,7 @@ func (s *BenchmarkSuite) RunE(
 	klog.V(3).Infof("running etcd monitoring (promql) in pod '%s'\n", pod.GetName())
 	s.CaseStart(s.Name(), "etcd monitoring (promql)")
 	start = time.Now()
-	metricResults, skipped, err := s.monitoring(ctx, pod, o)
+	metricResults, skipped, err := s.monitoring(ctx, pod, len(etcd.Items), o)
 	caseResults = append(caseResults, &pkgsuites.CaseResult{
 		CaseName:      "etcd monitoring (promql)",
 		DateTimeStart: start,
@@ -347,6 +356,7 @@ func (s *BenchmarkSuite) execBenchmark(
 func (s *BenchmarkSuite) monitoring(
 	ctx context.Context,
 	pod *corev1.Pod,
+	etcdCount int,
 	opts *BenchmarkOptions,
 ) ([]*pkgsuites.MetricResult, bool, error) {
 	// check if monitoring addon is enabled and ready. if not, skip the promql
@@ -363,14 +373,6 @@ func (s *BenchmarkSuite) monitoring(
 
 	// monitoring addon is enabled, so all errors from this point on should be
 	// returned to the caller, as they indicate a failure in the test case.
-	etcd, etcdReady, err := k8s.EnsureEtcdReady(ctx, s.Clients, opts.EtcdNamespace, opts.EtcdReadyTimeout)
-	if err != nil {
-		return nil, false, fmt.Errorf("failed to ensure etcd pods are ready: %w", err)
-	}
-	if !etcdReady {
-		return nil, false, fmt.Errorf("etcd pods are not ready in namespace '%s'", opts.EtcdNamespace)
-	}
-	klog.V(3).InfoS("etcd pods are ready", "namespace", opts.EtcdNamespace, "count", len(etcd.Items))
 
 	// etcd metrics are not exposed by default, so we need to ensure that the pod
 	// monitor is created
@@ -378,7 +380,7 @@ func (s *BenchmarkSuite) monitoring(
 		Name:            s.Name(),
 		Namespace:       pod.GetNamespace(),
 		EndpointScheme:  opts.EtcdMetricsScheme,
-		EtcdCount:       len(etcd.Items),
+		EtcdCount:       etcdCount,
 		LabelSelector:   k8s.EtcdLabelSelector.MatchLabels,
 		MetricsPortName: opts.EtcdMetricsPortName,
 		MetricsPath:     opts.EtcdMetricsPath,
