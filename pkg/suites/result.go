@@ -129,8 +129,9 @@ func (c *CaseResult) String() string {
 	if c.Err != nil {
 		fmt.Fprintf(tab, "%sError:\t%v\n", indent, c.Err)
 	}
-	if c.Skipped {
-		return stringBuilder.String()
+
+	if c.State == CaseResultStateSkipped {
+		return strings.TrimSpace(stringBuilder.String())
 	}
 	fmt.Fprintf(tab, "%sStarted on:\t%s\n", indent, c.DateTimeStart.Format("2006-01-02T15:04:05Z07:00"))
 	fmt.Fprintf(tab, "%sEnded at:\t%s\n", indent, c.DateTimeEnd.Format("2006-01-02T15:04:05Z07:00"))
