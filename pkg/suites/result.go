@@ -50,12 +50,12 @@ func (s *SuiteResult) String() string {
 func (s *SuiteResult) summary() (passed int, failed int, skipped int, total int) {
 	total = len(s.Results)
 	for _, result := range s.Results {
-		switch result.resultState() {
-		case CaseStatePass:
+		switch result.State {
+		case CaseResultStatePass:
 			passed++
-		case CaseStateFail:
+		case CaseResultStateFail:
 			failed++
-		case CaseStateSkipped:
+		case CaseResultStateSkipped:
 			skipped++
 		}
 	}
@@ -115,8 +115,17 @@ type CaseResult struct {
 	Err           error
 	MetricResults []*MetricResult
 	Objects       []runtime.Object
-	Skipped       bool
+	State         CaseResultState
 }
+
+type CaseResultState string
+
+const (
+	CaseResultStatePass    CaseResultState = "PASS"
+	CaseResultStateFail    CaseResultState = "FAIL"
+	CaseResultStateSkipped CaseResultState = "SKIPPED"
+	CaseResultStateUnknown CaseResultState = "UNKNOWN"
+)
 
 func (c *CaseResult) String() string {
 	var (
@@ -124,8 +133,10 @@ func (c *CaseResult) String() string {
 		tab           = tabwriter.NewWriter(&stringBuilder, 0, 0, 2, ' ', 0)
 	)
 
-	result := c.resultState()
-	fmt.Fprintf(tab, "--- %s %s (%s)\n", result, c.CaseName, c.DateTimeEnd.Sub(c.DateTimeStart).Round(time.Millisecond))
+	if c.State == "" {
+		c.State = CaseResultStateUnknown
+	}
+	fmt.Fprintf(tab, "--- %s %s (%s)\n", c.State, c.CaseName, c.DateTimeEnd.Sub(c.DateTimeStart).Round(time.Millisecond))
 	if c.Err != nil {
 		fmt.Fprintf(tab, "%sError:\t%v\n", indent, c.Err)
 	}
@@ -171,36 +182,6 @@ func (c *CaseResult) String() string {
 	//nolint:errcheck
 	tab.Flush()
 	return stringBuilder.String()
-}
-
-const (
-	CaseStatePass    = "PASS"
-	CaseStateFail    = "FAIL"
-	CaseStateSkipped = "SKIPPED"
-)
-
-func (c *CaseResult) resultState() string {
-	if c.Skipped {
-		return CaseStateSkipped
-	}
-
-	if c.Err != nil {
-		return CaseStateFail
-	}
-
-	for _, cmdResult := range c.CmdResults {
-		if cmdResult.Err != nil {
-			return CaseStateFail
-		}
-	}
-
-	for _, metricResult := range c.MetricResults {
-		if metricResult.Err != nil {
-			return CaseStateFail
-		}
-	}
-
-	return CaseStatePass
 }
 
 // CmdResult represents the result of executing a command in a test case.

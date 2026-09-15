@@ -198,6 +198,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "list-nodes",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
+				State:         CaseResultStatePass,
 			},
 			expected: "--- PASS list-nodes (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
@@ -209,6 +210,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "list-nodes",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
+				State:         CaseResultStateFail,
 				CmdResults: []*CmdResult{
 					{
 						Cmd: "ping host.example.com",
@@ -229,6 +231,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd healthcheck",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
+				State:         CaseResultStatePass,
 				CmdResults: []*CmdResult{
 					{
 						Cmd:    "etcdctl endpoint status",
@@ -255,6 +258,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd healthcheck",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
+				State:         CaseResultStatePass,
 				CmdResults: []*CmdResult{
 					{
 						Cmd:    "etcdctl endpoint status",
@@ -274,6 +278,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd benchmark",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
+				State:         CaseResultStatePass,
 				CmdResults: []*CmdResult{
 					{
 						Cmd:    "benchmark put",
@@ -296,6 +301,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd monitoring (promql)",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
+				State:         CaseResultStatePass,
 				MetricResults: []*MetricResult{
 					{Query: "histogram_quantile(0.99, wal_fsync_duration_seconds_bucket)"},
 				},
@@ -312,6 +318,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd monitoring (promql)",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
+				State:         CaseResultStatePass,
 				MetricResults: []*MetricResult{
 					{
 						Query: "up",
@@ -336,6 +343,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "etcd-benchmark",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testEnd,
+				State:         CaseResultStatePass,
 				Objects: []runtime.Object{
 					newPod("harvester-system-perf", "etcd-benchmark-0"),
 					newPod("harvester-system-perf", "etcd-benchmark-1"),
@@ -353,6 +361,7 @@ func TestCaseResultString(t *testing.T) {
 				CaseName:      "list-nodes",
 				DateTimeStart: testStart,
 				DateTimeEnd:   testStart.Add(2*time.Second + 4*time.Microsecond),
+				State:         CaseResultStatePass,
 			},
 			expected: "--- PASS list-nodes (2s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
@@ -362,6 +371,7 @@ func TestCaseResultString(t *testing.T) {
 			name: "zero value case result still renders",
 			result: &CaseResult{
 				CaseName: "",
+				State:    CaseResultStatePass,
 			},
 			expected: "--- PASS  (0s)\n" +
 				"    Started on:  0001-01-01T00:00:00Z\n" +
@@ -409,25 +419,25 @@ func TestSuiteResultSummary(t *testing.T) {
 		},
 		{
 			name:       "all passed",
-			results:    []*CaseResult{{}, {}},
+			results:    []*CaseResult{{State: CaseResultStatePass}, {State: CaseResultStatePass}},
 			wantPassed: 2,
 			wantTot:    2,
 		},
 		{
 			name:       "all failed",
-			results:    []*CaseResult{{Err: errors.New("")}, {Err: errors.New("")}},
+			results:    []*CaseResult{{Err: errors.New(""), State: CaseResultStateFail}, {Err: errors.New(""), State: CaseResultStateFail}},
 			wantFailed: 2,
 			wantTot:    2,
 		},
 		{
 			name:        "all skipped",
-			results:     []*CaseResult{{Skipped: true}, {Skipped: true}},
+			results:     []*CaseResult{{State: CaseResultStateSkipped}, {State: CaseResultStateSkipped}},
 			wantSkipped: 2,
 			wantTot:     2,
 		},
 		{
 			name:        "mixed",
-			results:     []*CaseResult{{}, {Err: errors.New("")}, {}, {Skipped: true}},
+			results:     []*CaseResult{{State: CaseResultStatePass}, {Err: errors.New(""), State: CaseResultStateFail}, {State: CaseResultStatePass}, {State: CaseResultStateSkipped}},
 			wantPassed:  2,
 			wantFailed:  1,
 			wantSkipped: 1,
@@ -464,11 +474,13 @@ func TestSuiteResultString(t *testing.T) {
 		CaseName:      "list-nodes",
 		DateTimeStart: testStart,
 		DateTimeEnd:   testEnd,
+		State:         CaseResultStatePass,
 	}
 	failing := &CaseResult{
 		CaseName:      "list-vms",
 		DateTimeStart: testStart,
 		DateTimeEnd:   testEnd,
+		State:         CaseResultStateFail,
 		CmdResults: []*CmdResult{
 			{
 				Cmd: "ping host.example.com",
@@ -478,7 +490,7 @@ func TestSuiteResultString(t *testing.T) {
 	}
 	skipped := &CaseResult{
 		CaseName: "list-pods",
-		Skipped:  true,
+		State:    CaseResultStateSkipped,
 	}
 
 	testCases := []struct {
