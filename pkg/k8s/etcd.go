@@ -2,12 +2,14 @@ package k8s
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/harvester/hvperf/pkg/suites"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/kubectl/pkg/util/podutils"
 )
 
 var EtcdLabelSelector = &metav1.LabelSelector{
@@ -31,7 +33,6 @@ func EnsureEtcdReady(
 	pollInterval := 5 * time.Second
 	defer cancel()
 
-	var ready bool
 	if err := wait.PollUntilContextCancel(ctxWithTimeout, pollInterval, true, func(ctx context.Context) (bool, error) {
 		list, err := c.K8sClientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: metav1.FormatLabelSelector(EtcdLabelSelector),
@@ -41,20 +42,18 @@ func EnsureEtcdReady(
 		}
 		etcd = list
 
-		var readyCount int
+		if len(etcd.Items) == 0 {
+			return false, fmt.Errorf("no etcd pods found in namespace %s", namespace)
+		}
 		for _, pod := range etcd.Items {
-			for _, condition := range pod.Status.Conditions {
-				if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
-					readyCount++
-				}
+			if !podutils.IsPodReady(&pod) {
+				return false, nil
 			}
 		}
-
-		ready = len(etcd.Items) > 0 && readyCount == len(etcd.Items)
-		return ready, nil
+		return true, nil
 	}); err != nil {
 		return nil, false, err
 	}
 
-	return etcd, ready, nil
+	return etcd, true, nil
 }
