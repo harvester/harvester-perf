@@ -73,7 +73,7 @@ image/run_all:
 	@$(DOCKER) run --rm \
 		--mount type=bind,src=$(HOME)/.kube,dst=/root/.kube,ro=true \
 		--network=host \
-		$(IMAGE_NAME):$(IMAGE_TAG) run all
+		$(IMAGE_NAME):$(IMAGE_TAG) run all $(IMAGE_CMD_ARGS)
 
 image/build:
 	$(DOCKER) build --rm --pull \
