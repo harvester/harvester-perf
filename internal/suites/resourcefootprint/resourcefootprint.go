@@ -72,7 +72,7 @@ func (s *ResourceFootprintSuite) measure(ctx context.Context, queries ...string)
 			failed = true
 		}
 		metrics = append(metrics, &pkgsuites.MetricResult{
-			Err:      err,
+			Err:      err.Error(),
 			Query:    query,
 			Samples:  samples,
 			Warnings: warnings,
@@ -165,6 +165,7 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, _ pk
 	results := make([]*pkgsuites.CaseResult, 0, len(cases))
 	for _, c := range cases {
 		caseResult := c.measure()
+		caseResult.CaseName = c.name
 		results = append(results, caseResult)
 	}
 

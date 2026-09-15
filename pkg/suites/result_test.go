@@ -1,7 +1,6 @@
 package suites
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -214,7 +213,7 @@ func TestCaseResultString(t *testing.T) {
 				CmdResults: []*CmdResult{
 					{
 						Cmd: "ping host.example.com",
-						Err: errors.New("connection refused"),
+						Err: "connection refused",
 					},
 				},
 			},
@@ -484,7 +483,7 @@ func TestSuiteResultString(t *testing.T) {
 		CmdResults: []*CmdResult{
 			{
 				Cmd: "ping host.example.com",
-				Err: errors.New("connection refused"),
+				Err: "connection refused",
 			},
 		},
 	}

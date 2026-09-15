@@ -116,7 +116,7 @@ type CaseResult struct {
 	CmdResults    []*CmdResult
 	DateTimeStart time.Time
 	DateTimeEnd   time.Time
-	Err           error
+	Err           string
 	MetricResults []*MetricResult
 	Objects       []runtime.Object
 	State         CaseResultState
@@ -215,7 +215,7 @@ func (c *CaseResult) String() string {
 		c.State = CaseResultStateUnknown
 	}
 	fmt.Fprintf(tab, "--- %s %s (%s)\n", c.State, c.CaseName, c.DateTimeEnd.Sub(c.DateTimeStart).Round(time.Millisecond))
-	if c.Err != nil {
+	if c.Err != "" {
 		fmt.Fprintf(tab, "%sError:\t%v\n", indent, c.Err)
 	}
 
@@ -267,12 +267,11 @@ func (c *CaseResult) String() string {
 // Err captures errors that occur during command execution, while Stdout and
 // Stderr capture the command's output streams.
 type CmdResult struct {
-	Cmd            string
-	Stdout         string
-	Stderr         string
-	Err            error
-	indent         string
-	stderrtostring bool
+	Cmd    string
+	Err    string
+	Stdout string
+	Stderr string
+	indent string
 }
 
 func (c *CmdResult) String() string {
@@ -288,15 +287,7 @@ func (c *CmdResult) String() string {
 		}
 	}
 
-	// stderr from remote command is often noisy - by default, we don't stringify it
-	if stderr := c.Stderr; stderr != "" && c.stderrtostring {
-		if trimmed := strings.TrimSpace(string(stderr)); trimmed != "" {
-			fmt.Fprintf(&sb, "%sStderr: ", c.indent)
-			fmt.Fprintf(&sb, "%s\n", strings.ReplaceAll(trimmed, "\t", "    "))
-		}
-	}
-
-	if err := c.Err; err != nil {
+	if err := c.Err; err != "" {
 		fmt.Fprintf(&sb, "%sError:\t%v\n", c.indent, err)
 	}
 
@@ -306,7 +297,7 @@ func (c *CmdResult) String() string {
 // MetricResult represents the result of a Prometheus query executed in a test case.
 // Err captures promclient errors that occur during query execution.
 type MetricResult struct {
-	Err      error
+	Err      string
 	Query    string
 	Samples  model.Vector
 	Warnings []string
@@ -321,7 +312,7 @@ func (m *MetricResult) String() string {
 		fmt.Fprintf(&sb, "%sValue: %v\n", m.indent, s)
 	}
 
-	if m.Err != nil {
+	if m.Err != "" {
 		fmt.Fprintf(&sb, "%sError:\t%v\n", m.indent, m.Err)
 	}
 
