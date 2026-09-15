@@ -19,10 +19,10 @@ func DefaultGlobalOptions() *Options {
 		"JobPodReadyTimeout":              3600 * time.Second,
 		"JobSuspend":                      false,
 		"EtcdNamespace":                   "kube-system",
+		"EtcdReadyTimeout":                300 * time.Second,
 		"MonitoringAddonName":             "rancher-monitoring",
 		"MonitoringNamespace":             "cattle-monitoring-system",
-		"MonitoringServiceURL":            "http://rancher-monitoring-prometheus.cattle-monitoring-system:9090",
-		"MonitoringWaitPodMonitorTimeout": 300 * time.Second,
-		"MonitoringScrapeInterval":        60 * time.Second,
+		"MonitoringRangeDuration":         300 * time.Second,
+		"MonitoringWaitPodMonitorTimeout": 600 * time.Second, // 2x the EtcdRangeDuration to allow for Prometheus to scrape etcd metrics
 	}
 }
