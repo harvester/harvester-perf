@@ -556,6 +556,8 @@ type BenchmarkOptions struct {
 	MonitoringOutputFormat          string
 	MonitoringWaitPodMonitorTimeout time.Duration
 
+	NamespaceReadyTimeout time.Duration
+
 	CheckPerfLoadSize string
 	PutLoadSize       uint64
 	PutKeySize        uint64
@@ -602,6 +604,8 @@ func BenchmarkOptionsDefaults() (*BenchmarkOptions, error) {
 		MonitoringRangeDuration:         sysOpts.MonitoringRangeDuration,
 		MonitoringOutputFormat:          "promql",
 		MonitoringWaitPodMonitorTimeout: sysOpts.MonitoringWaitPodMonitorTimeout,
+
+		NamespaceReadyTimeout: sysOpts.NamespaceReadyTimeout,
 
 		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
 		PutLoadSize:       DefaultLoadSize,
