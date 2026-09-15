@@ -155,7 +155,7 @@ func outRun(results []*suites.SuiteResult, format string) error {
 		for _, result := range results {
 			s = append(s, result.String())
 		}
-		out = []byte(strings.Join(s, "\n\n"))
+		out = []byte(strings.Join(s, "\n"))
 	}
 	_, err = fmt.Fprintf(os.Stdout, "%s", out)
 	return err
