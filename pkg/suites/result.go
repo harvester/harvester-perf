@@ -32,6 +32,9 @@ func (s *SuiteResult) String() string {
 	)
 
 	fmt.Fprintf(&stringBuilder, "=== SUITE %s (run %s)\n", s.Name, s.RunID)
+	if SuiteErr := s.Err; SuiteErr != "" {
+		fmt.Fprintf(&stringBuilder, "--- ERROR: %v\n", SuiteErr)
+	}
 	for i, param := range s.Params {
 		if i == 0 {
 			fmt.Fprintf(&stringBuilder, "%sParams:\n", indent)
@@ -48,12 +51,8 @@ func (s *SuiteResult) String() string {
 		fmt.Fprintf(&stringBuilder, "--- No test cases were executed.")
 	}
 
-	if SuiteErr := s.Err; SuiteErr != "" {
-		fmt.Fprintf(&stringBuilder, "\n--- SUITE ERROR: %v\n", SuiteErr)
-	}
-
 	passed, errored, skipped, total := s.summary()
-	fmt.Fprintf(&stringBuilder, "\n=== %s: %d errored, %d passed, %d skipped (%d total)\n", s.Name, errored, passed, skipped, total)
+	fmt.Fprintf(&stringBuilder, "\n=== SUMMARY: %d errored, %d passed, %d skipped (%d total)\n", errored, passed, skipped, total)
 	return stringBuilder.String()
 }
 
@@ -219,16 +218,16 @@ func (c *CaseResult) String() string {
 		c.State = CaseResultStateUnknown
 	}
 	fmt.Fprintf(tab, "--- %s %s (%s)\n", c.State, c.CaseName, c.DateTimeEnd.Sub(c.DateTimeStart).Round(time.Millisecond))
+	fmt.Fprintf(tab, "%sStarted on:\t%s\n", indent, c.DateTimeStart.Format("2006-01-02T15:04:05Z07:00"))
+	fmt.Fprintf(tab, "%sEnded at:\t%s\n", indent, c.DateTimeEnd.Format("2006-01-02T15:04:05Z07:00"))
 	if c.Err != "" {
-		fmt.Fprintf(tab, "%sError:\t%v\n", indent, c.Err)
+		fmt.Fprintf(tab, "%sError:\t%s\n", indent, c.Err)
 	}
 
 	if c.State == CaseResultStateSkipped {
+		tab.Flush()
 		return strings.TrimSpace(stringBuilder.String())
 	}
-
-	fmt.Fprintf(tab, "%sStarted on:\t%s\n", indent, c.DateTimeStart.Format("2006-01-02T15:04:05Z07:00"))
-	fmt.Fprintf(tab, "%sEnded at:\t%s\n", indent, c.DateTimeEnd.Format("2006-01-02T15:04:05Z07:00"))
 
 	for i, r := range c.CmdResults {
 		if i == 0 {

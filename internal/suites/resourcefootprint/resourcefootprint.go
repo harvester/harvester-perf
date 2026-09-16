@@ -131,20 +131,14 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, _ pk
 		return pkgsuites.SuiteResult{
 			Name:  s.Name(),
 			RunID: runID,
-			Err:   fmt.Sprintf("monitoring addon not enabled: %s", err.Error()),
+			Err:   fmt.Sprintf("monitoring add-on not enabled: %s", err.Error()),
 		}
 	}
 	if !enabled {
-		now := time.Now()
-		results := make([]*pkgsuites.CaseResult, len(cases))
-		for i, c := range cases {
-			results[i] = pkgsuites.NewCaseResultSkipped(c.name, now, now, fmt.Errorf("monitoring addon not enabled"))
-		}
 		return pkgsuites.SuiteResult{
-			Name:    s.Name(),
-			Err:     "monitoring addon not enabled",
-			RunID:   runID,
-			Results: results,
+			Name:  s.Name(),
+			Err:   "monitoring add-on not enabled",
+			RunID: runID,
 		}
 	}
 

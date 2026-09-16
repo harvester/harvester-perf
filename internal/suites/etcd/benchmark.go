@@ -358,7 +358,7 @@ func (s *BenchmarkSuite) monitoring(
 
 	// skip if not ready
 	if !ready {
-		err = fmt.Errorf("monitoring addon is not ready, skipping promql execution")
+		err = fmt.Errorf("monitoring add-on is not ready, skipping promql execution")
 		return pkgsuites.NewCaseResultSkipped(name, time.Now(), time.Now(), err)
 	}
 

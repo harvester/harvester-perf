@@ -502,28 +502,28 @@ func TestSuiteResultString(t *testing.T) {
 			result: &SuiteResult{Name: "node-capacity", RunID: "abc123"},
 			expected: "=== SUITE node-capacity (run abc123)\n" +
 				"--- No test cases were executed.\n" +
-				"=== node-capacity: 0 errored, 0 passed, 0 skipped (0 total)\n",
+				"=== SUMMARY: 0 errored, 0 passed, 0 skipped (0 total)\n",
 		},
 		{
 			name:   "single passing case",
 			result: &SuiteResult{Name: "node-capacity", RunID: "abc123", Results: []*CaseResult{passing}},
 			expected: "=== SUITE node-capacity (run abc123)\n" +
 				passing.String() +
-				"\n=== node-capacity: 0 errored, 1 passed, 0 skipped (1 total)\n",
+				"\n=== SUMMARY: 0 errored, 1 passed, 0 skipped (1 total)\n",
 		},
 		{
 			name:   "mixed cases are joined by a newline",
 			result: &SuiteResult{Name: "node-capacity", RunID: "abc123", Results: []*CaseResult{passing, failing, skipped}},
 			expected: "=== SUITE node-capacity (run abc123)\n" +
 				passing.String() + "\n" + failing.String() + "\n" + skipped.String() +
-				"\n=== node-capacity: 1 errored, 1 passed, 1 skipped (3 total)\n",
+				"\n=== SUMMARY: 1 errored, 1 passed, 1 skipped (3 total)\n",
 		},
 		{
 			name:   "zero value suite result still renders",
 			result: &SuiteResult{},
 			expected: "=== SUITE  (run )\n" +
 				"--- No test cases were executed.\n" +
-				"=== : 0 errored, 0 passed, 0 skipped (0 total)\n",
+				"=== SUMMARY: 0 errored, 0 passed, 0 skipped (0 total)\n",
 		},
 	}
 
