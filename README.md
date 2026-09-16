@@ -170,7 +170,7 @@ Overrides: `IMAGE_NAME`, `IMAGE_TAG`, `IMAGE_PLATFORMS` (default
    func (s *MySuite) Name() string        { return "my-suite" }
    func (s *MySuite) Description() string { return "what it measures" }
    func (s *MySuite) IsReadWrite() bool   { return false }
-   func (s *MySuite) RunE(ctx context.Context, runID, namespace string, opts pkgsuites.Options) (pkgsuites.SuiteResult, error)
+   func (s *MySuite) RunE(ctx context.Context, runID, namespace string, opts pkgsuites.Options) pkgsuites.SuiteResult
    func (s *MySuite) SetClients(c *pkgsuites.Clients)
    ```
 
@@ -182,7 +182,9 @@ Overrides: `IMAGE_NAME`, `IMAGE_TAG`, `IMAGE_PLATFORMS` (default
    it back in the `SuiteResult`. `namespace` is where those resources belong.
    Record each check as a `CaseResult`; `Objects` is rendered as
    `(Kind) namespace/name` in the text output, and a case that could not be run
-   for an environmental reason should set `Skipped` instead of failing.
+   for an environmental reason should set `State` to `CaseResultStateSkipped`
+   instead of erroring. `NewCaseResult`/`NewCaseResultSkipped` build a
+   `CaseResult` and finalize its `State` for you.
 
 3. Give the suite an options struct. Settings shared across suites — the default
    namespace, job pod image and timeouts, the monitoring addon coordinates —
