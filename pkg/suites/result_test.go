@@ -406,6 +406,84 @@ func TestCaseResultStringLocalTimeZone(t *testing.T) {
 	}
 }
 
+func TestCaseResultFinalizeState(t *testing.T) {
+	testCases := []struct {
+		name   string
+		result *CaseResult
+		want   CaseResultState
+	}{
+		{
+			name:   "no errors passes",
+			result: &CaseResult{},
+			want:   CaseResultStatePassed,
+		},
+		{
+			name:   "case-level Err errors even with no cmd/metric errors",
+			result: &CaseResult{Err: "setup failed"},
+			want:   CaseResultStateErrored,
+		},
+		{
+			name:   "cmd result error errors",
+			result: &CaseResult{CmdResults: []*CmdResult{{Err: "connection refused"}}},
+			want:   CaseResultStateErrored,
+		},
+		{
+			name:   "metric result error errors",
+			result: &CaseResult{MetricResults: []*MetricResult{{Err: "query failed"}}},
+			want:   CaseResultStateErrored,
+		},
+		{
+			name:   "already skipped is left untouched",
+			result: &CaseResult{State: CaseResultStateSkipped, Err: "addon disabled"},
+			want:   CaseResultStateSkipped,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.result.FinalizeState()
+			if tc.result.State != tc.want {
+				t.Errorf("FinalizeState() State = %q, want %q", tc.result.State, tc.want)
+			}
+		})
+	}
+}
+
+func TestNewCaseResult(t *testing.T) {
+	cr := NewCaseResult("etcd healthcheck", testStart, testEnd,
+		[]*CmdResult{{Cmd: "etcdctl endpoint health"}}, nil, newPod("ns", "pod-0"))
+
+	if cr.CaseName != "etcd healthcheck" {
+		t.Errorf("CaseName = %q, want %q", cr.CaseName, "etcd healthcheck")
+	}
+	if cr.State != CaseResultStatePassed {
+		t.Errorf("State = %q, want %q", cr.State, CaseResultStatePassed)
+	}
+	if len(cr.Objects) != 1 {
+		t.Errorf("Objects = %v, want 1 object", cr.Objects)
+	}
+
+	failing := NewCaseResult("etcd healthcheck", testStart, testEnd,
+		[]*CmdResult{{Cmd: "etcdctl endpoint health", Err: "timeout"}}, nil)
+	if failing.State != CaseResultStateErrored {
+		t.Errorf("State = %q, want %q", failing.State, CaseResultStateErrored)
+	}
+}
+
+func TestNewCaseResultSkipped(t *testing.T) {
+	cr := NewCaseResultSkipped("etcd monitoring (promql)", testStart, testEnd, fmt.Errorf("addon not ready"))
+
+	if cr.State != CaseResultStateSkipped {
+		t.Errorf("State = %q, want %q", cr.State, CaseResultStateSkipped)
+	}
+	if cr.Err != "addon not ready" {
+		t.Errorf("Err = %q, want %q", cr.Err, "addon not ready")
+	}
+	if cr.DateTimeStart != testStart || cr.DateTimeEnd != testEnd {
+		t.Errorf("DateTimeStart/DateTimeEnd = %v/%v, want %v/%v", cr.DateTimeStart, cr.DateTimeEnd, testStart, testEnd)
+	}
+}
+
 func TestSuiteResultSummary(t *testing.T) {
 	testCases := []struct {
 		name                                          string

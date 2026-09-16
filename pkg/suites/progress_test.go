@@ -66,6 +66,12 @@ func TestProgressReporterCaseDone(t *testing.T) {
 			wantMark:   "✗",
 			wantNoMark: "✓",
 		},
+		{
+			name:       "skipped",
+			state:      CaseResultStateSkipped,
+			wantMark:   "!",
+			wantNoMark: "✓",
+		},
 	}
 
 	for _, tc := range testCases {
