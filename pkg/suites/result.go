@@ -184,6 +184,7 @@ func (c *CaseResult) FinalizeState() {
 
 	if c.Err != "" {
 		c.State = CaseResultStateErrored
+		return
 	}
 
 	var hasErr bool

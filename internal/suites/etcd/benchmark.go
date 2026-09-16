@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -97,7 +96,7 @@ func (s *BenchmarkSuite) RunE(
 	klog.V(3).Infof("namespace:'%s' is now ready\n", namespace)
 
 	// ensure the job is created and ready
-	job, pod, err := k8s.EnsureJobReady(ctx, s.Clients,
+	_, pod, err := k8s.EnsureJobReady(ctx, s.Clients,
 		s.Name(),
 		runID,
 		namespace,
@@ -111,7 +110,7 @@ func (s *BenchmarkSuite) RunE(
 		return pkgsuites.SuiteResult{
 			Name:  s.Name(),
 			RunID: runID,
-			Err:   fmt.Sprintf("job %s/%s not ready: %v", job.GetNamespace(), job.GetName(), err.Error()),
+			Err:   fmt.Sprintf("job not ready: %v", err.Error()),
 		}
 	}
 	klog.V(3).Infof("pod:'%s' is now ready, phase:'%s'\n", pod.GetName(), pod.Status.Phase)
@@ -350,16 +349,17 @@ func (s *BenchmarkSuite) monitoring(
 ) *pkgsuites.CaseResult {
 	// check if monitoring addon is enabled and ready. if not, skip the promql
 	// execution.
+	start := time.Now()
 	ready, err := k8s.MonitoringEnabled(ctx, s.Clients, opts.MonitoringNamespace, opts.MonitoringAddonName)
 	if err != nil {
 		err = fmt.Errorf("failed to check if monitoring addon is enabled, skipping promql execution: %w", err)
-		return pkgsuites.NewCaseResultSkipped(name, time.Now(), time.Now(), err)
+		return pkgsuites.NewCaseResultSkipped(name, start, time.Now(), err)
 	}
 
 	// skip if not ready
 	if !ready {
 		err = fmt.Errorf("monitoring add-on is not ready, skipping promql execution")
-		return pkgsuites.NewCaseResultSkipped(name, time.Now(), time.Now(), err)
+		return pkgsuites.NewCaseResultSkipped(name, start, time.Now(), err)
 	}
 
 	// etcd metrics are not exposed by default, so we need to ensure that the pod
@@ -390,12 +390,12 @@ func (s *BenchmarkSuite) monitoring(
 	}()
 	if err != nil {
 		err = fmt.Errorf("failed to ensure pod monitor: %w", err)
-		return pkgsuites.NewCaseResultSkipped(name, time.Now(), time.Now(), err)
+		return pkgsuites.NewCaseResultSkipped(name, start, time.Now(), err)
 	}
 	klog.V(3).InfoS("pod monitor is ready", "name", podMonOpts.Name, "namespace", podMonOpts.Namespace)
 
 	metricResults := s.execPromQL(ctx, opts)
-	return pkgsuites.NewCaseResult(name, time.Now(), time.Now(), nil, metricResults, pod)
+	return pkgsuites.NewCaseResult(name, start, time.Now(), nil, metricResults, pod)
 }
 
 func (s *BenchmarkSuite) execPromQL(
@@ -428,19 +428,15 @@ func (s *BenchmarkSuite) execPromQL(
 		fmt.Sprintf(`sum by (pod, From) (rate(etcd_network_peer_received_failures_total{namespace="%s"}[%s]))`, opts.EtcdNamespace, opts.MonitoringRangeDuration),
 	}
 
-	var (
-		metricResults []*pkgsuites.MetricResult
-		errs          error
-	)
+	var metricResults []*pkgsuites.MetricResult
 	for _, query := range queries {
 		v, _, err := prom.RunInstant(ctx, s.PromClient, query)
 		result := &pkgsuites.MetricResult{
-			Err:     err.Error(),
 			Query:   query,
 			Samples: v,
 		}
 		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to execute promql query '%s': %w", query, err))
+			result.Err = err.Error()
 		}
 		metricResults = append(metricResults, result)
 	}
