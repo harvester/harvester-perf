@@ -9,7 +9,6 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/klog/v2"
 
 	"github.com/harvester/hvperf/pkg/suites"
 	"github.com/spf13/cobra"
@@ -109,17 +108,13 @@ func runSuites(testSuites []suites.Suite, format string) []*suites.SuiteResult {
 		suite = suites.WithClients(suite, runCmdClients)
 		suite = suites.WithProgressReporter(suite, progress)
 
-		result, err := runSuite(ctx, runID, namespace, suite, i+1, suites.Options{})
-		if err != nil {
-			klog.ErrorS(err, "failed to run test suite", "suite", suite.Name())
-			continue
-		}
+		result := runSuite(ctx, runID, namespace, suite, i+1, suites.Options{})
 		results = append(results, &result)
 	}
 	return results
 }
 
-func runSuite(ctx context.Context, runID, namespace string, testSuite suites.Suite, i int, opts suites.Options) (suites.SuiteResult, error) {
+func runSuite(ctx context.Context, runID, namespace string, testSuite suites.Suite, i int, opts suites.Options) suites.SuiteResult {
 	start := time.Now()
 	progress.SuiteStart(testSuite.Name(), i)
 	defer func() {

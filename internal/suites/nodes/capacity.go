@@ -31,10 +31,11 @@ func (s *NodeCapacitySuite) IsReadWrite() bool {
 	return false
 }
 
-func (s *NodeCapacitySuite) RunE(ctx context.Context, runID, namespace string, opts pkgsuites.Options) (pkgsuites.SuiteResult, error) {
+func (s *NodeCapacitySuite) RunE(ctx context.Context, runID, namespace string, opts pkgsuites.Options) pkgsuites.SuiteResult {
 	return pkgsuites.SuiteResult{
-		Name: s.Name(),
-	}, nil
+		Name:  s.Name(),
+		RunID: runID,
+	}
 }
 
 func (s *NodeCapacitySuite) SetClients(clientSets *pkgsuites.Clients) {

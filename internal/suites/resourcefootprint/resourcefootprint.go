@@ -61,31 +61,22 @@ func (s *ResourceFootprintSuite) IsReadWrite() bool                     { return
 func (s *ResourceFootprintSuite) SetClients(clients *pkgsuites.Clients) { s.Clients = clients }
 
 func (s *ResourceFootprintSuite) measure(ctx context.Context, queries ...string) *pkgsuites.CaseResult {
-	caseResult := &pkgsuites.CaseResult{
-		DateTimeStart: time.Now(),
-	}
 	metrics := make([]*pkgsuites.MetricResult, 0, len(queries))
-	var failed bool
+	start := time.Now()
 	for _, query := range queries {
 		samples, warnings, err := pkgprom.RunInstant(ctx, s.Clients.PromClient, query)
-		if err != nil {
-			failed = true
-		}
-		metrics = append(metrics, &pkgsuites.MetricResult{
-			Err:      err.Error(),
+		metric := &pkgsuites.MetricResult{
 			Query:    query,
 			Samples:  samples,
 			Warnings: warnings,
-		})
+		}
+		if err != nil {
+			metric.Err = err.Error()
+		}
+		metrics = append(metrics, metric)
 	}
 
-	caseResult.DateTimeEnd = time.Now()
-	caseResult.MetricResults = metrics
-	caseResult.State = pkgsuites.CaseResultStatePass
-	if failed {
-		caseResult.State = pkgsuites.CaseResultStateFail
-	}
-	return caseResult
+	return pkgsuites.NewCaseResult("", start, time.Now(), nil, metrics)
 }
 
 func (s *ResourceFootprintSuite) measureNamespaceUsage(ctx context.Context) *pkgsuites.CaseResult {
@@ -104,7 +95,7 @@ func (s *ResourceFootprintSuite) measureNodeAllocatable(ctx context.Context) *pk
 	return s.measure(ctx, queryAllocCPU, queryAllocMem)
 }
 
-func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, _ pkgsuites.Options) (pkgsuites.SuiteResult, error) {
+func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, _ pkgsuites.Options) pkgsuites.SuiteResult {
 	cases := []struct {
 		name    string
 		measure func() *pkgsuites.CaseResult
@@ -133,7 +124,7 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, _ pk
 			Name:  s.Name(),
 			RunID: runID,
 			Err:   err.Error(),
-		}, err
+		}
 	}
 	enabled, err := k8s.MonitoringEnabled(ctx, s.Clients, monitoringOpts.MonitoringNamespace, monitoringOpts.MonitoringAddonName)
 	if err != nil {
@@ -141,25 +132,20 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, _ pk
 			Name:  s.Name(),
 			RunID: runID,
 			Err:   fmt.Sprintf("monitoring addon not enabled: %s", err.Error()),
-		}, err
+		}
 	}
 	if !enabled {
 		now := time.Now()
 		results := make([]*pkgsuites.CaseResult, len(cases))
 		for i, c := range cases {
-			results[i] = &pkgsuites.CaseResult{
-				CaseName:      c.name,
-				DateTimeStart: now,
-				DateTimeEnd:   now,
-				State:         pkgsuites.CaseResultStateSkipped,
-			}
+			results[i] = pkgsuites.NewCaseResultSkipped(c.name, now, now, fmt.Errorf("monitoring addon not enabled"))
 		}
 		return pkgsuites.SuiteResult{
 			Name:    s.Name(),
 			Err:     "monitoring addon not enabled",
 			RunID:   runID,
 			Results: results,
-		}, nil
+		}
 	}
 
 	results := make([]*pkgsuites.CaseResult, 0, len(cases))
@@ -173,5 +159,5 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, _ pk
 		Name:    s.Name(),
 		RunID:   runID,
 		Results: results,
-	}, nil
+	}
 }
