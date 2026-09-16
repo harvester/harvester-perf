@@ -2,6 +2,7 @@ package resourcefootprint
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/harvester/hvperf/internal/suites/options"
@@ -59,95 +60,98 @@ func (s *ResourceFootprintSuite) Description() string {
 func (s *ResourceFootprintSuite) IsReadWrite() bool                     { return false }
 func (s *ResourceFootprintSuite) SetClients(clients *pkgsuites.Clients) { s.Clients = clients }
 
-func (s *ResourceFootprintSuite) measure(ctx context.Context, queries ...string) ([]*pkgsuites.MetricResult, error) {
+func (s *ResourceFootprintSuite) measure(ctx context.Context, queries ...string) *pkgsuites.CaseResult {
 	metrics := make([]*pkgsuites.MetricResult, 0, len(queries))
+	start := time.Now()
 	for _, query := range queries {
-		samples, _, err := pkgprom.RunInstant(ctx, s.Clients.PromClient, query)
-		if err != nil {
-			return metrics, err
+		samples, warnings, err := pkgprom.RunInstant(ctx, s.Clients.PromClient, query)
+		metric := &pkgsuites.MetricResult{
+			Query:    query,
+			Samples:  samples,
+			Warnings: warnings,
 		}
-		metrics = append(metrics, &pkgsuites.MetricResult{Query: query, Samples: samples})
+		if err != nil {
+			metric.Err = err.Error()
+		}
+		metrics = append(metrics, metric)
 	}
-	return metrics, nil
+
+	return pkgsuites.NewCaseResult("", start, time.Now(), nil, metrics)
 }
 
-func (s *ResourceFootprintSuite) measureNamespaceUsage(ctx context.Context) ([]*pkgsuites.MetricResult, error) {
+func (s *ResourceFootprintSuite) measureNamespaceUsage(ctx context.Context) *pkgsuites.CaseResult {
 	return s.measure(ctx, queryNsCPU, queryNsMem)
 }
 
-func (s *ResourceFootprintSuite) measureNamespaceResourceRequests(ctx context.Context) ([]*pkgsuites.MetricResult, error) {
+func (s *ResourceFootprintSuite) measureNamespaceResourceRequests(ctx context.Context) *pkgsuites.CaseResult {
 	return s.measure(ctx, queryRequestCPU, queryRequestMem)
 }
 
-func (s *ResourceFootprintSuite) measureHostMemory(ctx context.Context) ([]*pkgsuites.MetricResult, error) {
+func (s *ResourceFootprintSuite) measureHostMemory(ctx context.Context) *pkgsuites.CaseResult {
 	return s.measure(ctx, queryHostMemTotal, queryHostMemAvailable)
 }
 
-func (s *ResourceFootprintSuite) measureNodeAllocatable(ctx context.Context) ([]*pkgsuites.MetricResult, error) {
+func (s *ResourceFootprintSuite) measureNodeAllocatable(ctx context.Context) *pkgsuites.CaseResult {
 	return s.measure(ctx, queryAllocCPU, queryAllocMem)
 }
 
-func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, _ pkgsuites.Options) (pkgsuites.SuiteResult, error) {
+func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, _ pkgsuites.Options) pkgsuites.SuiteResult {
 	cases := []struct {
 		name    string
-		measure func() ([]*pkgsuites.MetricResult, error)
+		measure func() *pkgsuites.CaseResult
 	}{
 		{
 			name:    "per-namespace resource usage",
-			measure: func() ([]*pkgsuites.MetricResult, error) { return s.measureNamespaceUsage(ctx) },
+			measure: func() *pkgsuites.CaseResult { return s.measureNamespaceUsage(ctx) },
 		},
 		{
 			name:    "per-namespace resource requests",
-			measure: func() ([]*pkgsuites.MetricResult, error) { return s.measureNamespaceResourceRequests(ctx) },
+			measure: func() *pkgsuites.CaseResult { return s.measureNamespaceResourceRequests(ctx) },
 		},
 		{
 			name:    "host memory",
-			measure: func() ([]*pkgsuites.MetricResult, error) { return s.measureHostMemory(ctx) },
+			measure: func() *pkgsuites.CaseResult { return s.measureHostMemory(ctx) },
 		},
 		{
 			name:    "node allocatable resources",
-			measure: func() ([]*pkgsuites.MetricResult, error) { return s.measureNodeAllocatable(ctx) },
+			measure: func() *pkgsuites.CaseResult { return s.measureNodeAllocatable(ctx) },
 		},
 	}
 
 	monitoringOpts, err := options.FromOptions[*resourceFootprintOptions](pkgsuites.DefaultGlobalOptions())
 	if err != nil {
-		return pkgsuites.SuiteResult{Name: s.Name(), RunID: runID}, err
+		return pkgsuites.SuiteResult{
+			Name:  s.Name(),
+			RunID: runID,
+			Err:   err.Error(),
+		}
 	}
 	enabled, err := k8s.MonitoringEnabled(ctx, s.Clients, monitoringOpts.MonitoringNamespace, monitoringOpts.MonitoringAddonName)
 	if err != nil {
-		return pkgsuites.SuiteResult{Name: s.Name(), RunID: runID}, err
+		return pkgsuites.SuiteResult{
+			Name:  s.Name(),
+			RunID: runID,
+			Err:   fmt.Sprintf("monitoring add-on not enabled: %s", err.Error()),
+		}
 	}
 	if !enabled {
-		now := time.Now()
-		results := make([]*pkgsuites.CaseResult, len(cases))
-		for i, c := range cases {
-			results[i] = &pkgsuites.CaseResult{
-				CaseName:      c.name,
-				DateTimeStart: now,
-				DateTimeEnd:   now,
-				Skipped:       true,
-			}
+		return pkgsuites.SuiteResult{
+			Name:  s.Name(),
+			Err:   "monitoring add-on not enabled",
+			RunID: runID,
 		}
-		return pkgsuites.SuiteResult{Name: s.Name(), RunID: runID, Results: results}, nil
 	}
 
 	results := make([]*pkgsuites.CaseResult, 0, len(cases))
 	for _, c := range cases {
-		start := time.Now()
-		metrics, err := c.measure()
-		results = append(results, &pkgsuites.CaseResult{
-			CaseName:      c.name,
-			MetricResults: metrics,
-			DateTimeStart: start,
-			DateTimeEnd:   time.Now(),
-			Success:       err == nil,
-		})
+		caseResult := c.measure()
+		caseResult.CaseName = c.name
+		results = append(results, caseResult)
 	}
 
 	return pkgsuites.SuiteResult{
 		Name:    s.Name(),
 		RunID:   runID,
 		Results: results,
-	}, nil
+	}
 }

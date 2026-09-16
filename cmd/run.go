@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -47,8 +46,8 @@ Use 'all' to run every registered test suite, both "read-only" and "read-write".
 		argSuites := strings.Split(args[0], ",")
 		suites := suites.Find(argSuites)
 		outputFormat := *k8sPrintFlags.OutputFormat
-		results, err := runSuites(suites, outputFormat)
-		return outRun(results, outputFormat, err)
+		results := runSuites(suites, outputFormat)
+		return outRun(results, outputFormat)
 	},
 }
 
@@ -62,8 +61,8 @@ Every registered test suite is run, both "read-only" and "read-write".
 	RunE: func(cmd *cobra.Command, args []string) error {
 		testSuites := suites.All()
 		outputFormat := *k8sPrintFlags.OutputFormat
-		results, err := runSuites(testSuites, outputFormat)
-		return outRun(results, outputFormat, err)
+		results := runSuites(testSuites, outputFormat)
+		return outRun(results, outputFormat)
 	},
 }
 
@@ -86,13 +85,11 @@ func init() {
 	}
 }
 
-func runSuites(testSuites []suites.Suite, format string) ([]*suites.SuiteResult, error) {
+func runSuites(testSuites []suites.Suite, format string) []*suites.SuiteResult {
 	var (
-		errs    error
 		results []*suites.SuiteResult
-
-		ctx   = context.Background()
-		runID = time.Now().Format("20060102150405")
+		ctx     = context.Background()
+		runID   = time.Now().Format("20060102150405")
 	)
 
 	namespace := suites.DefaultNamespace
@@ -111,21 +108,17 @@ func runSuites(testSuites []suites.Suite, format string) ([]*suites.SuiteResult,
 		suite = suites.WithClients(suite, runCmdClients)
 		suite = suites.WithProgressReporter(suite, progress)
 
-		result, err := runSuite(ctx, runID, namespace, suite, i+1, suites.Options{})
-		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to run test suite %q: %w", suite.Name(), err))
-			continue
-		}
+		result := runSuite(ctx, runID, namespace, suite, i+1, suites.Options{})
 		results = append(results, &result)
 	}
-	return results, errs
+	return results
 }
 
-func runSuite(ctx context.Context, runID, namespace string, testSuite suites.Suite, i int, opts suites.Options) (suites.SuiteResult, error) {
+func runSuite(ctx context.Context, runID, namespace string, testSuite suites.Suite, i int, opts suites.Options) suites.SuiteResult {
 	start := time.Now()
 	progress.SuiteStart(testSuite.Name(), i)
 	defer func() {
-		progress.SuiteDone(testSuite.Name(), time.Since(start))
+		progress.SuiteDone(testSuite.Name(), i, time.Since(start))
 	}()
 
 	return testSuite.RunE(ctx, runID, namespace, opts)
@@ -134,7 +127,7 @@ func runSuite(ctx context.Context, runID, namespace string, testSuite suites.Sui
 // outRun outputs the results of the test suites in the specified format (json,
 // yaml, or text). The slice of results is always marshaled and printed, even if
 // there are errors. This ensures useful partial results are not discarded.
-func outRun(results []*suites.SuiteResult, format string, runErr error) error {
+func outRun(results []*suites.SuiteResult, format string) error {
 	var (
 		out []byte
 		err error
@@ -142,8 +135,14 @@ func outRun(results []*suites.SuiteResult, format string, runErr error) error {
 	switch format {
 	case "json":
 		out, err = json.Marshal(results)
+		if err != nil {
+			return err
+		}
 	case "yaml":
 		out, err = yaml.Marshal(results)
+		if err != nil {
+			return err
+		}
 	case "text":
 		fallthrough
 	default:
@@ -151,13 +150,8 @@ func outRun(results []*suites.SuiteResult, format string, runErr error) error {
 		for _, result := range results {
 			s = append(s, result.String())
 		}
-		out = []byte(strings.Join(s, "\n\n"))
+		out = []byte(strings.Join(s, "\n"))
 	}
-	if runErr != nil {
-		err = errors.Join(runErr, err)
-	}
-	if _, formatErr := fmt.Fprintf(os.Stdout, "%s", out); formatErr != nil {
-		err = errors.Join(formatErr, err)
-	}
+	_, err = fmt.Fprintf(os.Stdout, "%s", out)
 	return err
 }

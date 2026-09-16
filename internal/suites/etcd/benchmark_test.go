@@ -44,6 +44,8 @@ func TestBenchmarkOptionsDefaults(t *testing.T) {
 		MonitoringRangeDuration:         sysOpts.MonitoringRangeDuration,
 		MonitoringWaitPodMonitorTimeout: sysOpts.MonitoringWaitPodMonitorTimeout,
 
+		NamespaceReadyTimeout: sysOpts.NamespaceReadyTimeout,
+
 		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
 		PutLoadSize:       DefaultLoadSize,
 		PutKeySize:        DefaultKeySize,

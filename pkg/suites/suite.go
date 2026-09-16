@@ -16,7 +16,7 @@ type Suite interface {
 	Name() string
 	Description() string
 	IsReadWrite() bool
-	RunE(ctx context.Context, runID, namespace string, opt Options) (SuiteResult, error)
+	RunE(ctx context.Context, runID, namespace string, opt Options) SuiteResult
 	SetClients(clients *Clients)
 	SetProgressReporter(reporter *ProgressReporter)
 }

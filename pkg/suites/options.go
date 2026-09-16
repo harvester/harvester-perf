@@ -11,6 +11,8 @@ type Options map[string]any
 // DefaultGlobalOptions returns the default options for the system test suite.
 func DefaultGlobalOptions() *Options {
 	return &Options{
+		"EtcdNamespace":                   "kube-system",
+		"EtcdReadyTimeout":                300 * time.Second,
 		"JobActiveDeadline":               3600 * time.Second,
 		"JobPodContainerName":             "benchmark",
 		"JobPodImageName":                 "registry.suse.com/bci/bci-base",
@@ -18,8 +20,7 @@ func DefaultGlobalOptions() *Options {
 		"JobPodTTLAfterFinished":          300 * time.Second,
 		"JobPodReadyTimeout":              3600 * time.Second,
 		"JobSuspend":                      false,
-		"EtcdNamespace":                   "kube-system",
-		"EtcdReadyTimeout":                300 * time.Second,
+		"NamespaceReadyTimeout":           300 * time.Second, // accommodate for cleanup in back-to-back test runs
 		"MonitoringAddonName":             "rancher-monitoring",
 		"MonitoringNamespace":             "cattle-monitoring-system",
 		"MonitoringRangeDuration":         300 * time.Second,
