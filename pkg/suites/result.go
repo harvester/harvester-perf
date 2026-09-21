@@ -3,6 +3,7 @@ package suites
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -115,12 +116,14 @@ func ToSuiteParams(opts any) ([]*SuiteParam, error) {
 // CaseResult represents the result of a single test case execution. Err captures
 // errors that occur during the test case setup and cleanup.
 type CaseResult struct {
+	CmdResults         []*CmdResult
+	K8sResourceResults []*K8sResourceResult
+	MetricResults      []*MetricResult
+
 	CaseName      string
-	CmdResults    []*CmdResult
 	DateTimeStart time.Time
 	DateTimeEnd   time.Time
 	Err           string
-	MetricResults []*MetricResult
 	Objects       []runtime.Object
 	State         CaseResultState
 }
@@ -135,10 +138,11 @@ const (
 )
 
 // NewCaseResult creates a new CaseResult instance with the provided parameters.
-// Typically, NewCaseResult is called after a test case has been executed, to
-// finalize its state based on the command and metric results.
-// If NewCaseResult is called before a test case is executed, caller has to
-// explicitly call CaseResult.FinalizeState() to finalize the case result state.
+// Calling NewCaseResult or one of the With* methods will recompute the finalized
+// state of the CaseResult based on the errors in the CmdResults, MetricResults,
+// K8sResourceResults, and the Err field.
+// Caller can also explicitly call CaseResult.FinalizeState() to finalize the
+// case result state.
 func NewCaseResult(
 	name string,
 	start time.Time,
@@ -187,26 +191,40 @@ func (c *CaseResult) FinalizeState() {
 		return
 	}
 
-	var hasErr bool
 	for _, cr := range c.CmdResults {
 		if cr.Err != "" {
 			c.State = CaseResultStateErrored
-			hasErr = true
-			break
+			return
 		}
 	}
 
 	for _, mr := range c.MetricResults {
 		if mr.Err != "" {
 			c.State = CaseResultStateErrored
-			hasErr = true
-			break
+			return
 		}
 	}
 
-	if !hasErr {
-		c.State = CaseResultStatePassed
+	for _, kr := range c.K8sResourceResults {
+		if kr.Err != nil {
+			c.State = CaseResultStateErrored
+			return
+		}
 	}
+
+	c.State = CaseResultStatePassed
+}
+
+func (c *CaseResult) WithK8sResourceResults(results []*K8sResourceResult) *CaseResult {
+	c.K8sResourceResults = results
+	c.FinalizeState()
+	return c
+}
+
+func (c *CaseResult) WithErr(er error) *CaseResult {
+	c.Err = er.Error()
+	c.FinalizeState()
+	return c
 }
 
 func (c *CaseResult) String() string {
@@ -249,6 +267,14 @@ func (c *CaseResult) String() string {
 	for i, m := range c.MetricResults {
 		if i == 0 {
 			fmt.Fprintf(tab, "%sMetrics:\n", indent)
+		}
+		m.indent = strings.Repeat(indent, 2)
+		fmt.Fprintf(tab, "%s", m)
+	}
+
+	for i, m := range c.K8sResourceResults {
+		if i == 0 {
+			fmt.Fprintf(tab, "%sResources:\n", indent)
 		}
 		m.indent = strings.Repeat(indent, 2)
 		fmt.Fprintf(tab, "%s", m)
@@ -325,6 +351,41 @@ func (m *MetricResult) String() string {
 		for _, w := range m.Warnings {
 			fmt.Fprintf(&sb, "%s- %s\n", m.indent, w)
 		}
+	}
+
+	return sb.String()
+}
+
+// K8sResourceResult represents the result of querying Kubernetes resources
+// in a test case. Data is a map of key-value pairs representing the resource's
+// spec or status attributes and values, while Err captures any errors that occur
+// during the query.
+type K8sResourceResult struct {
+	Resource string
+	Subject  string
+	Data     map[string]string
+	Err      error
+	indent   string
+}
+
+func (k *K8sResourceResult) String() string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%sName: %s/%s\n", k.indent, k.Resource, k.Subject)
+
+	if len(k.Data) >= 0 {
+		fmt.Fprintf(&sb, "%sData:\n", k.indent)
+		var sortedByKeys []string
+		for key, value := range k.Data {
+			sortedByKeys = append(sortedByKeys, fmt.Sprintf("%s: %s", key, value))
+		}
+		sort.Strings(sortedByKeys)
+		for _, s := range sortedByKeys {
+			fmt.Fprintf(&sb, "%s\t%s\n", k.indent, s)
+		}
+	}
+
+	if k.Err != nil {
+		fmt.Fprintf(&sb, "%sError:\t%v\n", k.indent, k.Err)
 	}
 
 	return sb.String()
