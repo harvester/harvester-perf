@@ -249,14 +249,19 @@ and `vm-density` suites and renders a markdown report. It covers more ground
 than the Go CLI does today and is kept as a reference for the suites still to be
 ported. See [`poc/README.md`](poc/README.md).
 
+### reference
+
+* kubevirt-benchmark
+* kubevirt-observability-controller
+
 ## Requirements
 
-- A kubeconfig with cluster-admin on the target Harvester cluster.
-- Docker (or a compatible runtime) for the build and image targets.
-- Go 1.26+ only if you build outside the container.
-- The `rancher-monitoring` addon, only for the metrics cases; suites skip those
+* A kubeconfig with cluster-admin on the target Harvester cluster.
+* Docker (or a compatible runtime) for the build and image targets.
+* Go 1.26+ only if you build outside the container.
+* The `rancher-monitoring` addon, only for the metrics cases; suites skip those
   cases when it is not enabled.
-- For `etcd-benchmark`'s metrics cases, the RKE2 server config
+* For `etcd-benchmark`'s metrics cases, the RKE2 server config
   [`etcd-expose-metrics`](https://docs.rke2.io/reference/server_config#database)
   must be set to `true`; etcd does not expose metrics otherwise.
 
