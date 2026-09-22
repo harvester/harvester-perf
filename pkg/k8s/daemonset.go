@@ -107,12 +107,12 @@ func EnsureDaemonSetReady(
 		}
 	}
 
-	cleanup := func() error {
-		return c.K8sClientSet.AppsV1().DaemonSets(namespace).Delete(ctx, ds.Name, metav1.DeleteOptions{})
-	}
 	created, err := c.K8sClientSet.AppsV1().DaemonSets(namespace).Create(ctx, ds, metav1.CreateOptions{})
 	if err != nil {
-		return nil, nil, cleanup, err
+		return nil, nil, nil, err
+	}
+	cleanup := func() error {
+		return c.K8sClientSet.AppsV1().DaemonSets(namespace).Delete(ctx, created.Name, metav1.DeleteOptions{})
 	}
 	created.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("DaemonSet"))
 
@@ -127,6 +127,7 @@ func EnsureDaemonSetReady(
 		// waitErr is used to capture the last error encountered during the wait, so
 		// that it can be returned to the caller.
 		waitErr = nil
+		pods = nil
 		list, err := c.K8sClientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: metav1.FormatLabelSelector(labelSelector),
 		})

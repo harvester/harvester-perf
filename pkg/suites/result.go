@@ -384,7 +384,7 @@ func (k *K8sResourceResult) String() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "%sName: %s/%s\n", k.indent, k.Resource, k.Subject)
 
-	if len(k.Data) >= 0 {
+	if len(k.Data) > 0 {
 		fmt.Fprintf(&sb, "%sData:\n", k.indent)
 		var sortedByKeys []string
 		for key, value := range k.Data {

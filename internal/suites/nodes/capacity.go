@@ -116,6 +116,7 @@ func (s *NodeCapacitySuite) execNodeOSInfo(ctx context.Context, name string) *su
 		})
 		if err != nil {
 			result.Err = err
+			results = append(results, result)
 			continue
 		}
 
