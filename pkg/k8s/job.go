@@ -16,7 +16,14 @@ import (
 	"k8s.io/client-go/tools/watch"
 )
 
-// EnsureJobReady creates a Kubernetes Job with the specified parameters and waits until the Job's pod is ready.
+// EnsureJobReady creates a Kubernetes Job with the specified parameters and
+// waits until the Job's pod is ready. By default, the pod sleeps for the duration
+// of jobActiveDeadline. While the pod is still alive, caller can issue multiple
+// commands to the pod.
+// The spec of the job can be modified by providing one or more override functions
+// that take a pointer to the job and modify it in place. This can be used to
+// customize the job's behavior, such as changing the command, adding environment
+// variables, or modifying resource requests and limits.
 func EnsureJobReady(
 	ctx context.Context,
 	c *suites.Clients,
@@ -29,7 +36,7 @@ func EnsureJobReady(
 	readyTimeout time.Duration,
 	ttlAfterFinished time.Duration,
 	suspend bool,
-	overrrides ...func(*batchv1.Job) error,
+	overrides ...func(*batchv1.Job) error,
 ) (*batchv1.Job, *corev1.Pod, error) {
 	namePrefix := fmt.Sprintf("%s-%s-", suiteName, runID)
 	job := &batchv1.Job{
@@ -83,7 +90,7 @@ func EnsureJobReady(
 	}
 
 	// if any overrides are provided, apply them to the job spec
-	for _, mod := range overrrides {
+	for _, mod := range overrides {
 		if err := mod(job); err != nil {
 			return nil, nil, err
 		}
