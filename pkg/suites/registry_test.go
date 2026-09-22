@@ -40,6 +40,22 @@ func TestAll(t *testing.T) {
 	}
 }
 
+// TestAllSorted checks that All returns suites sorted by name, not
+// registration order or map iteration order.
+func TestAllSorted(t *testing.T) {
+	got := All()
+	want := []string{readOnlySuite0.Name(), readOnlySuite1.Name(), readWriteSuite.Name()}
+	sort.Strings(want)
+
+	var names []string
+	for _, s := range got {
+		names = append(names, s.Name())
+	}
+	if !reflect.DeepEqual(names, want) {
+		t.Errorf("All() names = %v, want %v", names, want)
+	}
+}
+
 func TestFind(t *testing.T) {
 	testCases := []struct {
 		name     string

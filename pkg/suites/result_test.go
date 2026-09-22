@@ -355,6 +355,48 @@ func TestCaseResultString(t *testing.T) {
 				"                 (Pod) harvester-system-perf/etcd-benchmark-1\n",
 		},
 		{
+			name: "k8s resource result renders sorted data",
+			result: &CaseResult{
+				CaseName:      "node os info",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				State:         CaseResultStatePassed,
+				K8sResourceResults: []*K8sResourceResult{
+					{
+						Resource: "node",
+						Subject:  "harvester-node-0",
+						Data:     map[string]string{"cpu.capacity": "4", "memory.capacity": "16Gi"},
+					},
+				},
+			},
+			expected: "--- PASS node os info (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Resources:\n" +
+				"        Name: node/harvester-node-0\n" +
+				"        Data:\n" +
+				"          cpu.capacity: 4\n" +
+				"          memory.capacity: 16Gi\n",
+		},
+		{
+			name: "k8s resource result error omits the empty data section",
+			result: &CaseResult{
+				CaseName:      "node os info",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				State:         CaseResultStateErrored,
+				K8sResourceResults: []*K8sResourceResult{
+					{Resource: "node", Subject: "harvester-node-0", Err: fmt.Errorf("pod list failed")},
+				},
+			},
+			expected: "--- ERROR node os info (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Resources:\n" +
+				"        Name: node/harvester-node-0\n" +
+				"        Error:  pod list failed\n",
+		},
+		{
 			name: "duration is rounded to the millisecond",
 			result: &CaseResult{
 				CaseName:      "list-nodes",
@@ -433,6 +475,11 @@ func TestCaseResultFinalizeState(t *testing.T) {
 			want:   CaseResultStateErrored,
 		},
 		{
+			name:   "k8s resource result error errors",
+			result: &CaseResult{K8sResourceResults: []*K8sResourceResult{{Err: fmt.Errorf("pod list failed")}}},
+			want:   CaseResultStateErrored,
+		},
+		{
 			name:   "already skipped is left untouched",
 			result: &CaseResult{State: CaseResultStateSkipped, Err: "addon disabled"},
 			want:   CaseResultStateSkipped,
@@ -467,6 +514,20 @@ func TestNewCaseResult(t *testing.T) {
 		[]*CmdResult{{Cmd: "etcdctl endpoint health", Err: "timeout"}}, nil)
 	if failing.State != CaseResultStateErrored {
 		t.Errorf("State = %q, want %q", failing.State, CaseResultStateErrored)
+	}
+}
+
+func TestNewCaseResultErrored(t *testing.T) {
+	cr := NewCaseResultErrored("node disk info", testStart, testEnd, fmt.Errorf("daemonset not ready"))
+
+	if cr.State != CaseResultStateErrored {
+		t.Errorf("State = %q, want %q", cr.State, CaseResultStateErrored)
+	}
+	if cr.Err != "daemonset not ready" {
+		t.Errorf("Err = %q, want %q", cr.Err, "daemonset not ready")
+	}
+	if cr.DateTimeStart != testStart || cr.DateTimeEnd != testEnd {
+		t.Errorf("DateTimeStart/DateTimeEnd = %v/%v, want %v/%v", cr.DateTimeStart, cr.DateTimeEnd, testStart, testEnd)
 	}
 }
 
