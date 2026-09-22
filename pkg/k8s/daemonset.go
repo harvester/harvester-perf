@@ -57,24 +57,6 @@ func EnsureDaemonSetReady(
 							SecurityContext: &corev1.SecurityContext{
 								Privileged: new(true),
 							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "device",
-									MountPath: "/dev",
-									ReadOnly:  true,
-								},
-							},
-						},
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "device",
-							VolumeSource: corev1.VolumeSource{
-								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/dev",
-									Type: new(corev1.HostPathDirectory),
-								},
-							},
 						},
 					},
 					Tolerations: []corev1.Toleration{
