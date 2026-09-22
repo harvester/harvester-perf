@@ -165,6 +165,18 @@ func NewCaseResult(
 	return cr
 }
 
+// NewCaseResultErrored creates a new CaseResult instance for a test case that
+// errored with err during execution.
+func NewCaseResultErrored(name string, start, end time.Time, err error) *CaseResult {
+	return &CaseResult{
+		CaseName:      name,
+		DateTimeStart: start,
+		DateTimeEnd:   end,
+		Err:           err.Error(),
+		State:         CaseResultStateErrored,
+	}
+}
+
 // NewCaseResultSkipped creates a new CaseResult instance for a test case that
 // is skipped with an error during execution.
 func NewCaseResultSkipped(name string, start, end time.Time, err error) *CaseResult {
