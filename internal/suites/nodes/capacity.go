@@ -95,14 +95,13 @@ func (s *NodeCapacitySuite) RunE(ctx context.Context, runID, namespace string, o
 }
 
 func (s *NodeCapacitySuite) execNodeOSInfo(ctx context.Context, name string) *suites.CaseResult {
-	caseResult := suites.NewCaseResult(name, time.Now(), time.Now(), nil, nil)
 	nodes, err := s.K8sClientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		caseResult.WithErr(err)
-		return caseResult
+		return suites.NewCaseResultErrored(name, time.Now(), time.Now(), fmt.Errorf("failed to list nodes: %w", err))
 	}
 
 	var results []*suites.K8sResourceResult
+	start := time.Now()
 	for _, node := range nodes.Items {
 		klog.V(3).InfoS("collecting node resource info", "node", node.GetName(), "suite", s.Name(), "case", name)
 		result := &suites.K8sResourceResult{
@@ -139,7 +138,9 @@ func (s *NodeCapacitySuite) execNodeOSInfo(ctx context.Context, name string) *su
 		results = append(results, result)
 
 	}
-	caseResult.WithK8sResourceResults(results).DateTimeEnd = time.Now()
+
+	caseResult := suites.NewCaseResult(name, start, time.Now(), nil, nil)
+	caseResult = caseResult.WithK8sResourceResults(results)
 	return caseResult
 }
 

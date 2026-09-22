@@ -233,12 +233,6 @@ func (c *CaseResult) WithK8sResourceResults(results []*K8sResourceResult) *CaseR
 	return c
 }
 
-func (c *CaseResult) WithErr(er error) *CaseResult {
-	c.Err = er.Error()
-	c.FinalizeState()
-	return c
-}
-
 func (c *CaseResult) String() string {
 	var (
 		stringBuilder strings.Builder
