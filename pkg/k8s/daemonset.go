@@ -62,17 +62,14 @@ func EnsureDaemonSetReady(
 						{
 							Key:      "node-role.kubernetes.io/control-plane",
 							Operator: corev1.TolerationOpExists,
-							Effect:   corev1.TaintEffectNoSchedule,
 						},
 						{
 							Key:      "node-role.kubernetes.io/master",
 							Operator: corev1.TolerationOpExists,
-							Effect:   corev1.TaintEffectNoSchedule,
 						},
 						{
 							Key:      "node-role.kubernetes.io/etcd",
 							Operator: corev1.TolerationOpExists,
-							Effect:   corev1.TaintEffectNoSchedule,
 						},
 					},
 					HostPID: true,
