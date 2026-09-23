@@ -122,23 +122,3 @@ func TestWithClients(t *testing.T) {
 		t.Errorf("SetClients received %v, want %v", s.clients, clients)
 	}
 }
-
-func TestWithClients_PromClientForwarded(t *testing.T) {
-	clients := NewClients(
-		k8sfake.NewClientset(),
-		dynfake.NewSimpleDynamicClient(emptyScheme),
-		monfake.NewSimpleClientset(),
-		fakePromAPI{},
-		&rest.Config{Host: "https://harvester.example.com:6443"},
-	)
-
-	s := newRecordingSuite("test-prom-client-forwarded")
-	WithClients(s, clients)
-
-	if s.clients == nil {
-		t.Fatal("SetClients was not called")
-	}
-	if s.clients.PromClient == nil {
-		t.Errorf("PromClient in forwarded clients = nil, want non-nil")
-	}
-}

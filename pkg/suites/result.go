@@ -3,6 +3,7 @@ package suites
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -115,12 +116,14 @@ func ToSuiteParams(opts any) ([]*SuiteParam, error) {
 // CaseResult represents the result of a single test case execution. Err captures
 // errors that occur during the test case setup and cleanup.
 type CaseResult struct {
+	CmdResults         []*CmdResult
+	K8sResourceResults []*K8sResourceResult
+	MetricResults      []*MetricResult
+
 	CaseName      string
-	CmdResults    []*CmdResult
 	DateTimeStart time.Time
 	DateTimeEnd   time.Time
 	Err           string
-	MetricResults []*MetricResult
 	Objects       []runtime.Object
 	State         CaseResultState
 }
@@ -135,10 +138,11 @@ const (
 )
 
 // NewCaseResult creates a new CaseResult instance with the provided parameters.
-// Typically, NewCaseResult is called after a test case has been executed, to
-// finalize its state based on the command and metric results.
-// If NewCaseResult is called before a test case is executed, caller has to
-// explicitly call CaseResult.FinalizeState() to finalize the case result state.
+// Calling NewCaseResult or one of the With* methods will recompute the finalized
+// state of the CaseResult based on the errors in the CmdResults, MetricResults,
+// K8sResourceResults, and the Err field.
+// Caller can also explicitly call CaseResult.FinalizeState() to finalize the
+// case result state.
 func NewCaseResult(
 	name string,
 	start time.Time,
@@ -159,6 +163,18 @@ func NewCaseResult(
 	cr.FinalizeState()
 
 	return cr
+}
+
+// NewCaseResultErrored creates a new CaseResult instance for a test case that
+// errored with err during execution.
+func NewCaseResultErrored(name string, start, end time.Time, err error) *CaseResult {
+	return &CaseResult{
+		CaseName:      name,
+		DateTimeStart: start,
+		DateTimeEnd:   end,
+		Err:           err.Error(),
+		State:         CaseResultStateErrored,
+	}
 }
 
 // NewCaseResultSkipped creates a new CaseResult instance for a test case that
@@ -187,26 +203,34 @@ func (c *CaseResult) FinalizeState() {
 		return
 	}
 
-	var hasErr bool
 	for _, cr := range c.CmdResults {
 		if cr.Err != "" {
 			c.State = CaseResultStateErrored
-			hasErr = true
-			break
+			return
 		}
 	}
 
 	for _, mr := range c.MetricResults {
 		if mr.Err != "" {
 			c.State = CaseResultStateErrored
-			hasErr = true
-			break
+			return
 		}
 	}
 
-	if !hasErr {
-		c.State = CaseResultStatePassed
+	for _, kr := range c.K8sResourceResults {
+		if kr.Err != "" {
+			c.State = CaseResultStateErrored
+			return
+		}
 	}
+
+	c.State = CaseResultStatePassed
+}
+
+func (c *CaseResult) WithK8sResourceResults(results []*K8sResourceResult) *CaseResult {
+	c.K8sResourceResults = results
+	c.FinalizeState()
+	return c
 }
 
 func (c *CaseResult) String() string {
@@ -254,6 +278,14 @@ func (c *CaseResult) String() string {
 		fmt.Fprintf(tab, "%s", m)
 	}
 
+	for i, m := range c.K8sResourceResults {
+		if i == 0 {
+			fmt.Fprintf(tab, "%sResources:\n", indent)
+		}
+		m.indent = strings.Repeat(indent, 2)
+		fmt.Fprintf(tab, "%s", m)
+	}
+
 	for i, obj := range c.Objects {
 		label := indent + "Objects:"
 		if i > 0 {
@@ -273,6 +305,7 @@ func (c *CaseResult) String() string {
 type CmdResult struct {
 	Cmd    string
 	Err    string
+	Node   string
 	Stdout string
 	Stderr string
 	indent string
@@ -282,6 +315,13 @@ func (c *CmdResult) String() string {
 	var sb strings.Builder
 
 	fmt.Fprintf(&sb, "%sCmd: %s\n", c.indent, c.Cmd)
+
+	// for cases where the command is executed on a specific node, include the node
+	// name in the output
+	if c.Node != "" {
+		fmt.Fprintf(&sb, "%sNode: %s\n", c.indent, c.Node)
+	}
+
 	// tabs in stdout and stderr are replaced with 4 spaces to avoid conflicts with
 	// the tabwriter output
 	if stdout := c.Stdout; stdout != "" {
@@ -325,6 +365,41 @@ func (m *MetricResult) String() string {
 		for _, w := range m.Warnings {
 			fmt.Fprintf(&sb, "%s- %s\n", m.indent, w)
 		}
+	}
+
+	return sb.String()
+}
+
+// K8sResourceResult represents the result of querying Kubernetes resources
+// in a test case. Data is a map of key-value pairs representing the resource's
+// spec or status attributes and values, while Err captures any errors that occur
+// during the query.
+type K8sResourceResult struct {
+	Resource string
+	Subject  string
+	Data     map[string]string
+	Err      string
+	indent   string
+}
+
+func (k *K8sResourceResult) String() string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%sName: %s/%s\n", k.indent, k.Resource, k.Subject)
+
+	if len(k.Data) > 0 {
+		fmt.Fprintf(&sb, "%sData:\n", k.indent)
+		var sortedByKeys []string
+		for key, value := range k.Data {
+			sortedByKeys = append(sortedByKeys, fmt.Sprintf("%s: %s", key, value))
+		}
+		sort.Strings(sortedByKeys)
+		for _, s := range sortedByKeys {
+			fmt.Fprintf(&sb, "%s\t%s\n", k.indent, s)
+		}
+	}
+
+	if k.Err != "" {
+		fmt.Fprintf(&sb, "%sError:\t%v\n", k.indent, k.Err)
 	}
 
 	return sb.String()

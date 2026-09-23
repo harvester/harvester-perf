@@ -11,6 +11,11 @@ installed on the Harvester nodes; suites that need on-node access (such as the
 etcd benchmark) schedule a short-lived helper job in a namespace of their own,
 which `--keep-alive=false` tears down once the run is over.
 
+These helper pods run **privileged**, since the on-node access they need can't
+be had otherwise: e.g., the etcd benchmark's job pod mounts `/var/lib/rancher` to
+reach the RKE2 etcd TLS certs, and `node-capacity`'s daemonset pod uses `hostPID`
+to run `nsenter`/`lsblk` against the node's disks.
+
 > **Status:** early development. The suite registry, CLI and etcd job plumbing
 > are in place; individual suites are still being filled in. See
 > [Test suites](#test-suites) for what each one currently does.
@@ -84,8 +89,38 @@ is every registered suite.
 
 | Suite | Mode | What it does |
 | --- | --- | --- |
-| `node-capacity` | read-only | Assess node resource capacity. Registered and runnable, but the implementation is still a stub. |
+| `node-capacity` | read-write | Assess node resource capacity: per-node OS info and disk info via a privileged `hostPID` daemonset. |
 | `etcd-benchmark` | read-write | Exercises the cluster's etcd from a privileged `hostNetwork` job pod. |
+| `resource-footprint` | read-only | Measures the cluster's resource footprint: per-namespace CPU/memory usage and requests, host memory, and node allocatable, via Prometheus queries. |
+
+## Result types
+
+A `SuiteResult` holds one `CaseResult` per check the suite ran. Each
+`CaseResult` records what it did in whichever of these it produced —
+a case can populate more than one:
+
+| Type | Use it for |
+| --- | --- |
+| `CmdResult` | The result of executing a command in a test case — e.g. `exec`-ing into a helper pod. `Stdout`/`Stderr` hold the command's output streams. |
+| `MetricResult` | The result of a Prometheus query run in a test case — e.g. reading etcd metrics after a benchmark. `Samples` holds the returned vector, `Warnings` any promclient warnings. |
+| `K8sResourceResult` | The result of querying Kubernetes/node resources in a test case — e.g. `node-capacity`'s per-node OS and disk info. `Data` is a flat map of the resource's spec/status attributes. |
+
+### Errors
+
+Every result type carries its own `Err`, at a different scope:
+
+| Field | Scope |
+| --- | --- |
+| `SuiteResult.Err` | The suite itself failed outside any single case — e.g. setup or cleanup shared by the whole suite. |
+| `CaseResult.Err` | The case failed outside a specific command/query — e.g. a namespace or daemonset never became ready. Setting it marks the case errored immediately, before its `CmdResults`/`MetricResults`/`K8sResourceResults` are even considered. |
+| `CmdResult.Err` | One `exec`'d command failed. |
+| `MetricResult.Err` | One Prometheus query failed. |
+| `K8sResourceResult.Err` | One resource query failed (this is the one `error`-typed field; the others are `string`). |
+
+`CaseResult.FinalizeState()` rolls all of the above up into the case's
+`State`: any non-empty `Err`, or any error in `CmdResults`, `MetricResults`,
+or `K8sResourceResults`, marks the case `CaseResultStateErrored`.
+`NewCaseResult` and the `With*` builders call it for you.
 
 ## Building
 
@@ -215,14 +250,19 @@ and `vm-density` suites and renders a markdown report. It covers more ground
 than the Go CLI does today and is kept as a reference for the suites still to be
 ported. See [`poc/README.md`](poc/README.md).
 
+### reference
+
+* kubevirt-benchmark
+* kubevirt-observability-controller
+
 ## Requirements
 
-- A kubeconfig with cluster-admin on the target Harvester cluster.
-- Docker (or a compatible runtime) for the build and image targets.
-- Go 1.26+ only if you build outside the container.
-- The `rancher-monitoring` addon, only for the metrics cases; suites skip those
+* A kubeconfig with cluster-admin on the target Harvester cluster.
+* Docker (or a compatible runtime) for the build and image targets.
+* Go 1.26+ only if you build outside the container.
+* The `rancher-monitoring` addon, only for the metrics cases; suites skip those
   cases when it is not enabled.
-- For `etcd-benchmark`'s metrics cases, the RKE2 server config
+* For `etcd-benchmark`'s metrics cases, the RKE2 server config
   [`etcd-expose-metrics`](https://docs.rke2.io/reference/server_config#database)
   must be set to `true`; etcd does not expose metrics otherwise.
 

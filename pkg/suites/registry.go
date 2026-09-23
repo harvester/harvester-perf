@@ -2,6 +2,7 @@ package suites
 
 import (
 	"slices"
+	"sort"
 	"sync"
 )
 
@@ -19,11 +20,19 @@ type Registry struct {
 	suites map[string]Suite
 }
 
-// All returns all registered test suites.
+// All returns all registered test suites, sorted by suite name.
 func All() []Suite {
-	suites := []Suite{}
+	var (
+		sortedKey []string
+		suites    []Suite
+	)
 	for _, s := range r.suites {
-		suites = append(suites, s)
+		sortedKey = append(sortedKey, s.Name())
+	}
+	sort.Strings(sortedKey)
+
+	for _, suite := range sortedKey {
+		suites = append(suites, r.suites[suite])
 	}
 	return suites
 }
