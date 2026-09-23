@@ -11,7 +11,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/kubectl/pkg/util/podutils"
 )
 
 // EnsureDaemonSetReady creates a Kubernetes DaemonSet with the specified
@@ -99,8 +98,8 @@ func EnsureDaemonSetReady(
 	created.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("DaemonSet"))
 
 	var (
-		pods    []*corev1.Pod
 		waitErr error
+		updated *appsv1.DaemonSet
 	)
 	if err := wait.PollUntilContextTimeout(ctx, time.Second*30, waitTimeout, true, func(ctx context.Context) (bool, error) {
 		// keep polling until either all pods are ready or the timeout expires.
@@ -109,26 +108,28 @@ func EnsureDaemonSetReady(
 		// waitErr is used to capture the last error encountered during the wait, so
 		// that it can be returned to the caller.
 		waitErr = nil
-		pods = nil
-		list, err := c.K8sClientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
-			LabelSelector: metav1.FormatLabelSelector(labelSelector),
-		})
+		ds, err := c.K8sClientSet.AppsV1().DaemonSets(namespace).Get(ctx, created.Name, metav1.GetOptions{})
 		if err != nil {
 			waitErr = err
 			return false, nil
 		}
-
-		for _, pod := range list.Items {
-			if !podutils.IsPodReady(&pod) {
-				return false, nil
-			}
-			pod.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Pod"))
-			pods = append(pods, &pod)
-		}
-		return true, nil
+		updated = ds
+		return updated.Status.ObservedGeneration >= updated.Generation && updated.Status.DesiredNumberScheduled == updated.Status.NumberReady, nil
 	}); err != nil {
 		return nil, nil, cleanup, errors.Join(fmt.Errorf("failed to wait for DaemonSet pods to be ready: %w", err), waitErr)
 	}
 
-	return created, pods, cleanup, nil
+	var podsWithGVK []*corev1.Pod
+	pods, err := c.K8sClientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: metav1.FormatLabelSelector(labelSelector),
+	})
+	if err != nil {
+		return nil, nil, cleanup, fmt.Errorf("failed to list DaemonSet pods: %w", err)
+	}
+	for _, pod := range pods.Items {
+		pod.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Pod"))
+		podsWithGVK = append(podsWithGVK, &pod)
+	}
+
+	return updated, podsWithGVK, cleanup, nil
 }
