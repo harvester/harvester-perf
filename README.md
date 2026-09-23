@@ -13,8 +13,8 @@ which `--keep-alive=false` tears down once the run is over.
 
 These helper pods run **privileged**, since the on-node access they need can't
 be had otherwise: e.g., the etcd benchmark's job pod mounts `/var/lib/rancher` to
-reach the RKE2 etcd TLS certs, and `node-capacity`'s daemonset pod mounts `/dev`
-and uses `hostPID` to run `nsenter`/`lsblk` against the node's disks.
+reach the RKE2 etcd TLS certs, and `node-capacity`'s daemonset pod uses `hostPID`
+to run `nsenter`/`lsblk` against the node's disks.
 
 > **Status:** early development. The suite registry, CLI and etcd job plumbing
 > are in place; individual suites are still being filled in. See
@@ -89,8 +89,9 @@ is every registered suite.
 
 | Suite | Mode | What it does |
 | --- | --- | --- |
-| `node-capacity` | read-only | Assess node resource capacity. Registered and runnable, but the implementation is still a stub. |
+| `node-capacity` | read-write | Assess node resource capacity: per-node OS info and disk info via a privileged `hostPID` daemonset. |
 | `etcd-benchmark` | read-write | Exercises the cluster's etcd from a privileged `hostNetwork` job pod. |
+| `resource-footprint` | read-only | Measures the cluster's resource footprint: per-namespace CPU/memory usage and requests, host memory, and node allocatable, via Prometheus queries. |
 
 ## Result types
 
