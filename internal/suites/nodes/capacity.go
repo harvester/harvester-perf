@@ -45,7 +45,7 @@ func (s *NodeCapacitySuite) Description() string {
 }
 
 func (s *NodeCapacitySuite) IsReadWrite() bool {
-	return false
+	return true
 }
 
 func (s *NodeCapacitySuite) RunE(ctx context.Context, runID, namespace string, opts suites.Options) suites.SuiteResult {
@@ -114,7 +114,7 @@ func (s *NodeCapacitySuite) execNodeOSInfo(ctx context.Context, name string) *su
 			FieldSelector: "spec.nodeName=" + node.GetName() + ",status.phase=Running",
 		})
 		if err != nil {
-			result.Err = err
+			result.Err = err.Error()
 			results = append(results, result)
 			continue
 		}
@@ -189,6 +189,7 @@ func (s *NodeCapacitySuite) execNodeDiskInfo(
 			out, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
 			cmdResult := &suites.CmdResult{
 				Cmd:    strings.Join(cmd, " "),
+				Node:   pod.Spec.NodeName,
 				Stdout: out.Stdout,
 				Stderr: out.Stderr,
 			}
@@ -203,7 +204,7 @@ func (s *NodeCapacitySuite) execNodeDiskInfo(
 	for _, pod := range pods {
 		objs = append(objs, pod)
 	}
-	return suites.NewCaseResult(s.Name(), start, time.Now(), cmdResults, nil, objs...)
+	return suites.NewCaseResult(caseName, start, time.Now(), cmdResults, nil, objs...)
 }
 
 func (s *NodeCapacitySuite) SetClients(clientSets *suites.Clients) {

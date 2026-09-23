@@ -26,7 +26,6 @@ func DefaultGlobalOptions() *Options {
 		"MonitoringWaitPodMonitorTimeout": 600 * time.Second, // 2x the EtcdRangeDuration to allow for Prometheus to scrape etcd metrics
 		"NamespaceReadyTimeout":           300 * time.Second, // accommodate for cleanup in back-to-back test runs
 		"PodActiveDeadline":               3600 * time.Second,
-		"PodContainerName":                "benchmark",
 		"PodImageName":                    "registry.suse.com/bci/bci-base",
 		"PodImageTag":                     "latest",
 		"PodReadyTimeout":                 3600 * time.Second,

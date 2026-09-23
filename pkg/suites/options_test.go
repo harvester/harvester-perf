@@ -23,7 +23,6 @@ func TestDefaultGlobalOptions(t *testing.T) {
 		"MonitoringWaitPodMonitorTimeout": 600 * time.Second,
 		"NamespaceReadyTimeout":           300 * time.Second,
 		"PodActiveDeadline":               3600 * time.Second,
-		"PodContainerName":                "benchmark",
 		"PodImageName":                    "registry.suse.com/bci/bci-base",
 		"PodImageTag":                     "latest",
 		"PodReadyTimeout":                 3600 * time.Second,

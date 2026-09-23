@@ -218,7 +218,7 @@ func (c *CaseResult) FinalizeState() {
 	}
 
 	for _, kr := range c.K8sResourceResults {
-		if kr.Err != nil {
+		if kr.Err != "" {
 			c.State = CaseResultStateErrored
 			return
 		}
@@ -305,6 +305,7 @@ func (c *CaseResult) String() string {
 type CmdResult struct {
 	Cmd    string
 	Err    string
+	Node   string
 	Stdout string
 	Stderr string
 	indent string
@@ -314,6 +315,13 @@ func (c *CmdResult) String() string {
 	var sb strings.Builder
 
 	fmt.Fprintf(&sb, "%sCmd: %s\n", c.indent, c.Cmd)
+
+	// for cases where the command is executed on a specific node, include the node
+	// name in the output
+	if c.Node != "" {
+		fmt.Fprintf(&sb, "%sNode: %s\n", c.indent, c.Node)
+	}
+
 	// tabs in stdout and stderr are replaced with 4 spaces to avoid conflicts with
 	// the tabwriter output
 	if stdout := c.Stdout; stdout != "" {
@@ -370,7 +378,7 @@ type K8sResourceResult struct {
 	Resource string
 	Subject  string
 	Data     map[string]string
-	Err      error
+	Err      string
 	indent   string
 }
 
@@ -390,7 +398,7 @@ func (k *K8sResourceResult) String() string {
 		}
 	}
 
-	if k.Err != nil {
+	if k.Err != "" {
 		fmt.Fprintf(&sb, "%sError:\t%v\n", k.indent, k.Err)
 	}
 

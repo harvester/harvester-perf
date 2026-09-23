@@ -386,7 +386,7 @@ func TestCaseResultString(t *testing.T) {
 				DateTimeEnd:   testEnd,
 				State:         CaseResultStateErrored,
 				K8sResourceResults: []*K8sResourceResult{
-					{Resource: "node", Subject: "harvester-node-0", Err: fmt.Errorf("pod list failed")},
+					{Resource: "node", Subject: "harvester-node-0", Err: "pod list failed"},
 				},
 			},
 			expected: "--- ERROR node os info (1.5s)\n" +
@@ -476,7 +476,7 @@ func TestCaseResultFinalizeState(t *testing.T) {
 		},
 		{
 			name:   "k8s resource result error errors",
-			result: &CaseResult{K8sResourceResults: []*K8sResourceResult{{Err: fmt.Errorf("pod list failed")}}},
+			result: &CaseResult{K8sResourceResults: []*K8sResourceResult{{Err: "pod list failed"}}},
 			want:   CaseResultStateErrored,
 		},
 		{
