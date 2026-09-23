@@ -1,0 +1,13 @@
+density:
+  concurrency: 10
+  waitTimeout: 20m
+  perVMTimeout: 5m
+
+  vmImage:
+    url: "https://download.cirros-cloud.net/0.6.2/cirros-0.6.2-x86_64-disk.img"
+
+  vm:
+    storageClass: longhorn
+    diskSize: 1Gi
+    memory: 90Mi
+    cpu: 100m

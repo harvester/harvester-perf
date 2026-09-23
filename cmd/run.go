@@ -19,6 +19,7 @@ var (
 	runCmdClients        *suites.Clients
 	keepAlive            bool
 	monitoringServiceURL string
+	configFile           string
 	progress             *suites.ProgressReporter
 )
 
@@ -77,6 +78,8 @@ func init() {
 		fmt.Sprintf("Keep the test namespace and all its resources after test suite execution. Only works if the namespace is %s", suites.DefaultNamespace))
 	runCmd.PersistentFlags().StringVar(&monitoringServiceURL, "monitoring-url", "",
 		"Prometheus HTTP API base URL. Defaults to the in-cluster Prometheus service proxy.")
+	runCmd.PersistentFlags().StringVar(&configFile, "config", "./hvperf.yaml",
+		"Path to config file (YAML).")
 
 	k8sConfigFlags.AddFlags(runCmd.PersistentFlags())
 	k8sPrintFlags.AddFlags(runCmd)
@@ -108,7 +111,7 @@ func runSuites(testSuites []suites.Suite, format string) []*suites.SuiteResult {
 		suite = suites.WithClients(suite, runCmdClients)
 		suite = suites.WithProgressReporter(suite, progress)
 
-		result := runSuite(ctx, runID, namespace, suite, i+1, suites.Options{})
+		result := runSuite(ctx, runID, namespace, suite, i+1, suites.Options{"configFile": configFile})
 		results = append(results, &result)
 	}
 	return results
