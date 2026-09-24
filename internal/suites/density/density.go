@@ -186,6 +186,7 @@ func (s *DensitySuite) createVMsUntilFailure(ctx context.Context, o densityOptio
 	vmErr := s.createAndWaitVMs(ctx, o, namespace, runID, imageID)
 
 	ready, countErr := s.countReadyVMs(ctx, namespace, runID)
+	var resultErr error
 	stoppedBy := "completed"
 	switch {
 	case errors.Is(vmErr, context.DeadlineExceeded) && ctx.Err() != nil:
@@ -196,8 +197,9 @@ func (s *DensitySuite) createVMsUntilFailure(ctx context.Context, o densityOptio
 		stoppedBy = "cancelled"
 	case vmErr != nil:
 		stoppedBy = "VM creation error"
+		resultErr = vmErr
 	}
-	return caseResult(fmt.Sprintf("vm-create: %d ready, stopped by %s", ready, stoppedBy), start, errors.Join(vmErr, countErr))
+	return caseResult(fmt.Sprintf("vm-create: %d ready, stopped by %s", ready, stoppedBy), start, errors.Join(resultErr, countErr))
 }
 
 func (s *DensitySuite) collectDensityMetrics(ctx context.Context, runStart time.Time) (*pkgsuites.CaseResult, error) {
