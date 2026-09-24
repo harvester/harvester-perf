@@ -125,8 +125,10 @@ func loadOptions(path string) (densityOptions, error) {
 		return densityOptions{}, fmt.Errorf("parse %s: %w", path, err)
 	}
 
-	// Ensure the concurrency is positive
 	o.Concurrency = max(o.Concurrency, concurrencyMin)
+	if o.PerVMTimeout <= 0 {
+		return densityOptions{}, fmt.Errorf("perVMTimeout must be positive, got %s", o.PerVMTimeout)
+	}
 	return o, nil
 }
 
@@ -150,7 +152,11 @@ func (s *DensitySuite) RunE(ctx context.Context, runID, namespace string, opts p
 		result.Err = err.Error()
 		return result
 	}
-	defer s.cleanup(namespace, runID)
+	defer func() {
+		if cleanupErr := s.cleanup(namespace, runID); cleanupErr != nil && result.Err == "" {
+			result.Err = cleanupErr.Error()
+		}
+	}()
 
 	image := o.VMImage
 	image.Namespace, image.Name, image.RunID = namespace, "density-"+runID+"-image", runID
@@ -288,36 +294,45 @@ func (s *DensitySuite) measure(ctx context.Context, queries ...string) ([]*pkgsu
 	return metrics, nil
 }
 
-func (s *DensitySuite) cleanup(namespace, runID string) {
+func (s *DensitySuite) cleanup(namespace, runID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Minute)
 	defer cancel()
 	selector := metav1.ListOptions{LabelSelector: resource.RunLabel + "=" + runID}
+	var errs []error
 
 	foreground := metav1.DeletePropagationForeground
 	if err := retry.OnError(retry.DefaultRetry, isRetryableError, func() error {
 		return s.DynClientSet.Resource(resource.VMGVR).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{PropagationPolicy: &foreground}, selector)
 	}); err != nil {
 		slog.Error("cleanup: delete VMs failed", "runID", runID, "err", err)
+		errs = append(errs, fmt.Errorf("delete VMs: %w", err))
 	}
 
 	if err := resource.WaitForDeletion(ctx, s.DynClientSet, resource.VMGVR, namespace, selector); err != nil {
 		slog.Error("cleanup: wait VMs failed", "runID", runID, "err", err)
-		return
+		return fmt.Errorf("wait VMs: %w", err)
 	}
 
 	pvNames, err := resource.DeleteRunVolumes(ctx, s.DynClientSet, namespace, runID)
 	if err != nil {
-		slog.Error("cleanup: list run PVCs failed", "runID", runID, "err", err)
-		return
+		slog.Error("cleanup: delete run volumes failed", "runID", runID, "err", err)
+		return fmt.Errorf("delete run volumes: %w", err)
 	}
 	if err := resource.WaitLonghornVolumesByName(ctx, s.DynClientSet, pvNames); err != nil {
 		slog.Error("cleanup: wait Longhorn volumes failed", "runID", runID, "err", err)
-		return
+		errs = append(errs, fmt.Errorf("wait Longhorn volumes: %w", err))
 	}
 
 	if err := s.DynClientSet.Resource(resource.VMImageGVR).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, selector); err != nil {
 		slog.Error("cleanup: delete VMImage failed", "runID", runID, "err", err)
+		errs = append(errs, fmt.Errorf("delete VMImage: %w", err))
 	}
+	if err := resource.WaitForDeletion(ctx, s.DynClientSet, resource.VMImageGVR, namespace, selector); err != nil {
+		slog.Error("cleanup: wait VMImages failed", "runID", runID, "err", err)
+		errs = append(errs, fmt.Errorf("wait VMImages: %w", err))
+	}
+
+	return errors.Join(errs...)
 }
 
 func isRetryableError(err error) bool {
