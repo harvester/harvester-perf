@@ -1,6 +1,5 @@
 density:
   concurrency: 10
-  waitTimeout: 20m
   perVMTimeout: 5m
 
   vmImage:

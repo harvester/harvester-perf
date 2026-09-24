@@ -26,6 +26,8 @@ import (
 const (
 	systemNamespaceFilter = `namespace=~"kube-system|kubevirt|cdi|longhorn-system|cattle-monitoring-system|cattle-logging-system|harvester-system|fleet-local"`
 	promWindowMin         = 5 * time.Minute
+	imageImportTimeout    = 30 * time.Minute
+	concurrencyMin        = 1
 )
 
 // promWindow returns a Prometheus range string clamped to promWindowMin.
@@ -82,7 +84,6 @@ type DensitySuite struct {
 // plus the VM and VMImage shape nested underneath.
 type densityOptions struct {
 	Concurrency  int              `yaml:"concurrency"`
-	WaitTimeout  time.Duration    `yaml:"waitTimeout"`
 	PerVMTimeout time.Duration    `yaml:"perVMTimeout"`
 	VMImage      resource.VMImage `yaml:"vmImage"`
 	VM           resource.VM      `yaml:"vm"`
@@ -91,7 +92,6 @@ type densityOptions struct {
 func defaultOptions() densityOptions {
 	return densityOptions{
 		Concurrency:  10,
-		WaitTimeout:  30 * time.Minute,
 		PerVMTimeout: 5 * time.Minute,
 		VMImage: resource.VMImage{
 			URL: "https://download.cirros-cloud.net/0.6.2/cirros-0.6.2-x86_64-disk.img",
@@ -111,6 +111,9 @@ func loadOptions(path string) (densityOptions, error) {
 	o := defaultOptions()
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if !os.IsNotExist(err) {
+			return densityOptions{}, fmt.Errorf("read %s: %w", path, err)
+		}
 		slog.Info("config not found, using defaults", "path", path)
 		return o, nil
 	}
@@ -121,6 +124,9 @@ func loadOptions(path string) (densityOptions, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return densityOptions{}, fmt.Errorf("parse %s: %w", path, err)
 	}
+
+	// Ensure the concurrency is positive
+	o.Concurrency = max(o.Concurrency, concurrencyMin)
 	return o, nil
 }
 
@@ -147,8 +153,8 @@ func (s *DensitySuite) RunE(ctx context.Context, runID, namespace string, opts p
 	defer s.cleanup(namespace, runID)
 
 	image := o.VMImage
-	image.Namespace, image.Name, image.RunID = namespace, runID+"-image", runID
-	imageResult, imageErr := s.runImageImport(ctx, image, o.WaitTimeout)
+	image.Namespace, image.Name, image.RunID = namespace, "density-"+runID+"-image", runID
+	imageResult, imageErr := s.runImageImport(ctx, image, imageImportTimeout)
 	result.Results = append(result.Results, imageResult)
 	if imageErr != nil {
 		return result
@@ -214,7 +220,7 @@ func (s *DensitySuite) createAndWaitVMs(ctx context.Context, o densityOptions, n
 	for index := 0; ctx.Err() == nil; index++ {
 		vm := o.VM
 		vm.Namespace, vm.RunID, vm.ImageID = namespace, runID, imageID
-		vm.Name = fmt.Sprintf("%s-vm-%d", runID, index)
+		vm.Name = fmt.Sprintf("%s-density-vm-%d", runID, index)
 
 		eg.Go(func() error {
 			vmCtx, cancel := context.WithTimeout(ctx, o.PerVMTimeout)

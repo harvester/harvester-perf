@@ -54,7 +54,7 @@ func DeleteRunVolumes(ctx context.Context, client dynamic.Interface, namespace, 
 	}
 
 	if err := client.Resource(PVCGVR).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, selector); err != nil {
-		slog.Error("DeleteRunVolumes: delete PVCs failed", "runID", runID, "err", err)
+		return pvNames, fmt.Errorf("delete run PVCs: %w", err)
 	}
 
 	for _, name := range pvNames {
