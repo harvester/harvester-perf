@@ -51,7 +51,6 @@ repo root to tune suite parameters before running:
 ```yaml
 density:
   concurrency: 10      # VMs to create in parallel
-  waitTimeout: 20m     # wall-clock limit for the whole ramp
   perVMTimeout: 5m     # per-VM boot timeout
 
   vmImage:
