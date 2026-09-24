@@ -293,8 +293,9 @@ func (s *DensitySuite) cleanup(namespace, runID string) {
 	defer cancel()
 	selector := metav1.ListOptions{LabelSelector: resource.RunLabel + "=" + runID}
 
+	foreground := metav1.DeletePropagationForeground
 	if err := retry.OnError(retry.DefaultRetry, isRetryableError, func() error {
-		return s.DynClientSet.Resource(resource.VMGVR).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, selector)
+		return s.DynClientSet.Resource(resource.VMGVR).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{PropagationPolicy: &foreground}, selector)
 	}); err != nil {
 		slog.Error("cleanup: delete VMs failed", "runID", runID, "err", err)
 	}

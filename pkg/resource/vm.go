@@ -86,7 +86,6 @@ func WaitForDeletion(ctx context.Context, client dynamic.Interface, gvr schema.G
 
 // WaitLonghornVolumesByName polls until all named Longhorn volumes are gone.
 // After 30 min, force-removes finalizers on stuck volumes so Kubernetes GC can proceed.
-// ponytail: 30m grace hardcoded; make configurable if suites need different budgets.
 func WaitLonghornVolumesByName(ctx context.Context, client dynamic.Interface, names []string) error {
 	grace := time.Now().Add(longhornFinalizerGrace)
 	var patched bool

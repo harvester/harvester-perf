@@ -81,10 +81,6 @@ func vmImageCondition(name string) watch.ConditionFunc {
 				if cond["status"] == "True" {
 					return true, nil
 				}
-				if cond["status"] == "False" {
-					reason, _, _ := unstructured.NestedString(cond, "reason")
-					return false, fmt.Errorf("VMImage %s failed: %s", name, reason)
-				}
 			case "RetryLimitExceeded":
 				if cond["status"] == "True" {
 					return false, fmt.Errorf("VMImage %s: retry limit exceeded", name)
