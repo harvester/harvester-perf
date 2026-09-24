@@ -40,6 +40,33 @@ make go/build
 
 # run every registered suite
 ./bin/hvperf run all
+
+# run with a custom config file (default: ./hvperf.yaml)
+./bin/hvperf run density --config /path/to/hvperf.yaml
+```
+
+`hvperf run` reads `./hvperf.yaml` by default. Copy and edit the file at the
+repo root to tune suite parameters before running:
+
+```yaml
+density:
+  concurrency: 10      # VMs to create in parallel
+  perVMTimeout: 5m     # per-VM boot timeout
+
+  vmImage:
+    url: "https://download.cirros-cloud.net/0.6.2/cirros-0.6.2-x86_64-disk.img"
+
+  vm:
+    storageClass: longhorn
+    diskSize: 1Gi
+    memory: 90Mi
+    cpu: 100m
+```
+
+Pass `--config` to point at a different file:
+
+```bash
+./bin/hvperf run density --config ~/my-cluster.yaml
 ```
 
 Every command that talks to a cluster accepts the standard kubectl connection
@@ -70,6 +97,9 @@ built binary rather than the image will fail unless `etcdctl`, `benchmark` and
 | `hvperf version [--client-only]` | Print the client version and, unless `--client-only` is set, the cluster's server version. |
 | `hvperf report` | Placeholder — not implemented yet. |
 
+`run` also takes `--config` (default `./hvperf.yaml`) to point at a config file
+for suites that read it (currently `density`).
+
 `run` also takes `--keep-alive` (default `true`), which decides what happens to
 the test namespace once the run finishes. With `--keep-alive=false` the
 namespace and everything in it is deleted afterwards — but only when it is the
@@ -92,6 +122,7 @@ is every registered suite.
 | `node-capacity` | read-write | Assess node resource capacity: per-node OS info and disk info via a privileged `hostPID` daemonset. |
 | `etcd-benchmark` | read-write | Exercises the cluster's etcd from a privileged `hostNetwork` job pod. |
 | `resource-footprint` | read-only | Measures the cluster's resource footprint: per-namespace CPU/memory usage and requests, host memory, and node allocatable, via Prometheus queries. |
+| `density` | read-write | Import a VM image, ramp up VMs concurrently until failure, and record VMI boot-latency percentiles (p50/p95/p99). |
 
 ## Result types
 
