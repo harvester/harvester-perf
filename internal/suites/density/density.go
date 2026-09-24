@@ -140,13 +140,13 @@ func (s *DensitySuite) Description() string {
 func (s *DensitySuite) IsReadWrite() bool                     { return true }
 func (s *DensitySuite) SetClients(clients *pkgsuites.Clients) { s.Clients = clients }
 
-func (s *DensitySuite) RunE(ctx context.Context, runID, namespace string, opts pkgsuites.Options) pkgsuites.SuiteResult {
+func (s *DensitySuite) RunE(ctx context.Context, runID, namespace string, opts pkgsuites.Options) (result pkgsuites.SuiteResult) {
 	runStart := time.Now()
 	configPath := "./hvperf.yaml"
 	if p, ok := opts["configFile"].(string); ok && p != "" {
 		configPath = p
 	}
-	result := pkgsuites.SuiteResult{Name: s.Name(), RunID: runID}
+	result = pkgsuites.SuiteResult{Name: s.Name(), RunID: runID}
 	o, err := loadOptions(configPath)
 	if err != nil {
 		result.Err = err.Error()
