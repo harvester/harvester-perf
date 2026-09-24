@@ -56,6 +56,9 @@ func DeleteRunVolumes(ctx context.Context, client dynamic.Interface, namespace, 
 	if err := client.Resource(PVCGVR).Namespace(namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, selector); err != nil {
 		return pvNames, fmt.Errorf("delete run PVCs: %w", err)
 	}
+	if err := WaitForDeletion(ctx, client, PVCGVR, namespace, selector); err != nil {
+		return pvNames, fmt.Errorf("wait PVC deletion: %w", err)
+	}
 
 	for _, name := range pvNames {
 		if err := client.Resource(LonghornVolumeGVR).Namespace(longhornNamespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
@@ -66,7 +69,7 @@ func DeleteRunVolumes(ctx context.Context, client dynamic.Interface, namespace, 
 }
 
 // WaitForDeletion polls until no resources matching selector exist in the given GVR/namespace,
-// or ctx is cancelled. Poll interval is 5s.
+// or ctx is cancelled. Poll interval is 1s.
 func WaitForDeletion(ctx context.Context, client dynamic.Interface, gvr schema.GroupVersionResource, namespace string, selector metav1.ListOptions) error {
 	for {
 		list, err := client.Resource(gvr).Namespace(namespace).List(ctx, selector)
