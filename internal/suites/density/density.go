@@ -302,6 +302,7 @@ func (s *DensitySuite) cleanup(namespace, runID string) {
 
 	if err := resource.WaitForDeletion(ctx, s.DynClientSet, resource.VMGVR, namespace, selector); err != nil {
 		slog.Error("cleanup: wait VMs failed", "runID", runID, "err", err)
+		return
 	}
 
 	pvNames, err := resource.DeleteRunVolumes(ctx, s.DynClientSet, namespace, runID)
