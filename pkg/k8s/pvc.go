@@ -43,14 +43,16 @@ func EnsurePVCReady(
 			AccessModes: []corev1.PersistentVolumeAccessMode{
 				corev1.ReadWriteOnce,
 			},
-			VolumeMode:       new(corev1.PersistentVolumeFilesystem),
-			StorageClassName: new(storageClassName),
+			VolumeMode: new(corev1.PersistentVolumeFilesystem),
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceStorage: storageSize,
 				},
 			},
 		},
+	}
+	if storageClassName != "" {
+		pvc.Spec.StorageClassName = &storageClassName
 	}
 
 	for _, mod := range overrides {
