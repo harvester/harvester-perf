@@ -39,10 +39,12 @@ func EnsureJobReady(
 	overrides ...func(*batchv1.Job) error,
 ) (*batchv1.Job, *corev1.Pod, error) {
 	namePrefix := fmt.Sprintf("%s-%s-", suiteName, runID)
+	labelSelector := defaultLabelSelector(suiteName, runID)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: namePrefix,
 			Namespace:    namespace,
+			Labels:       labelSelector.MatchLabels,
 		},
 		Spec: batchv1.JobSpec{
 			ActiveDeadlineSeconds:   new(int64(jobActiveDeadline.Seconds())),
@@ -103,14 +105,14 @@ func EnsureJobReady(
 	created.SetGroupVersionKind(batchv1.SchemeGroupVersion.WithKind("Job"))
 
 	// wait till job pods are ready
-	labelSelector := batchv1.JobNameLabel
+	podLabelSelector := batchv1.JobNameLabel
 	listWatch := &cache.ListWatch{
 		ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
-			options.LabelSelector = fmt.Sprintf("%s=%s", labelSelector, created.GetName())
+			options.LabelSelector = fmt.Sprintf("%s=%s", podLabelSelector, created.GetName())
 			return c.K8sClientSet.CoreV1().Pods(created.GetNamespace()).List(ctx, options)
 		},
 		WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watchapi.Interface, error) {
-			options.LabelSelector = fmt.Sprintf("%s=%s", labelSelector, created.GetName())
+			options.LabelSelector = fmt.Sprintf("%s=%s", podLabelSelector, created.GetName())
 			return c.K8sClientSet.CoreV1().Pods(created.GetNamespace()).Watch(ctx, options)
 		},
 	}
@@ -137,4 +139,73 @@ func EnsureJobReady(
 	jobPod := event.Object.(*corev1.Pod)
 	jobPod.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Pod"))
 	return created, jobPod, nil
+}
+
+func EnsureJobCompleted(
+	ctx context.Context,
+	c *suites.Clients,
+	suiteName string,
+	runID string,
+	namespace string,
+	node string,
+	imageName string,
+	jobActiveDeadline time.Duration,
+	readyTimeout time.Duration,
+	ttlAfterFinished time.Duration,
+	suspend bool,
+	overrides ...func(*batchv1.Job) error,
+) (*batchv1.Job, *corev1.Pod, error) {
+	job, pod, err := EnsureJobReady(
+		ctx,
+		c,
+		suiteName,
+		runID,
+		namespace,
+		node,
+		imageName,
+		jobActiveDeadline,
+		readyTimeout,
+		ttlAfterFinished,
+		suspend,
+		overrides...,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// job is ready, now wait for it to complete
+	labelSelector := defaultLabelSelector(suiteName, runID)
+	listWatch := &cache.ListWatch{
+		ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
+			options.LabelSelector = metav1.FormatLabelSelector(labelSelector)
+			return c.K8sClientSet.BatchV1().Jobs(job.GetNamespace()).List(ctx, options)
+		},
+		WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watchapi.Interface, error) {
+			options.LabelSelector = metav1.FormatLabelSelector(labelSelector)
+			return c.K8sClientSet.BatchV1().Jobs(job.GetNamespace()).Watch(ctx, options)
+		},
+	}
+	ctxWithTimeout, cancel := watch.ContextWithOptionalTimeout(ctx, readyTimeout)
+	defer cancel()
+	event, err := watch.UntilWithSync(ctxWithTimeout, listWatch, &batchv1.Job{}, nil, func(event watchapi.Event) (bool, error) {
+		job, ok := event.Object.(*batchv1.Job)
+		if !ok {
+			return false, fmt.Errorf("unexpected object type: %T", event.Object)
+		}
+
+		// check if job status has a Complete condition set to True
+		for _, condition := range job.Status.Conditions {
+			if condition.Type == batchv1.JobComplete && condition.Status == corev1.ConditionTrue {
+				return true, nil
+			}
+		}
+		return false, nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	latest := event.Object.(*batchv1.Job)
+	latest.SetGroupVersionKind(batchv1.SchemeGroupVersion.WithKind("Job"))
+	return latest, pod, nil
 }

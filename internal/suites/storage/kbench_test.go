@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 func TestKBenchOptionsDefaults(t *testing.T) {
@@ -35,6 +37,11 @@ func TestKBenchOptionsDefaults(t *testing.T) {
 		JobPodTTLAfterFinished: 300 * time.Second,
 		JobPodReadyTimeout:     3600 * time.Second,
 		JobSuspend:             false,
+
+		NamespaceReadyTimeout: 300 * time.Second,
+		PVCReadyTimeout:       300 * time.Second,
+		PVCStorageClassName:   "",
+		PVCStorageSize:        resource.MustParse("33Gi"),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("KBenchOptionsDefaults() = %+v, want %+v", got, want)

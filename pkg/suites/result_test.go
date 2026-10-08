@@ -2,6 +2,7 @@ package suites
 
 import (
 	"fmt"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
@@ -397,6 +398,46 @@ func TestCaseResultString(t *testing.T) {
 				"        Error:  pod list failed\n",
 		},
 		{
+			name: "pod log result renders the log output",
+			result: &CaseResult{
+				CaseName:      "pod logs",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				State:         CaseResultStatePassed,
+				PodLogResults: []*PodLogResult{
+					{
+						Subject: "daemonset-pod-0",
+						Out:     io.NopCloser(strings.NewReader("hello\n")),
+					},
+				},
+			},
+			expected: "--- PASS pod logs (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Logs:\n" +
+				"        Name: daemonset-pod-0\n" +
+				"        Logs:\n" +
+				"hello\n",
+		},
+		{
+			name: "pod log result error omits the empty logs section",
+			result: &CaseResult{
+				CaseName:      "pod logs",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				State:         CaseResultStateErrored,
+				PodLogResults: []*PodLogResult{
+					{Subject: "daemonset-pod-1", Err: "failed to get log stream"},
+				},
+			},
+			expected: "--- ERROR pod logs (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Logs:\n" +
+				"        Name: daemonset-pod-1\n" +
+				"        Error:  failed to get log stream\n",
+		},
+		{
 			name: "duration is rounded to the millisecond",
 			result: &CaseResult{
 				CaseName:      "list-nodes",
@@ -477,6 +518,11 @@ func TestCaseResultFinalizeState(t *testing.T) {
 		{
 			name:   "k8s resource result error errors",
 			result: &CaseResult{K8sResourceResults: []*K8sResourceResult{{Err: "pod list failed"}}},
+			want:   CaseResultStateErrored,
+		},
+		{
+			name:   "pod log result error errors",
+			result: &CaseResult{PodLogResults: []*PodLogResult{{Err: "failed to get log stream"}}},
 			want:   CaseResultStateErrored,
 		},
 		{

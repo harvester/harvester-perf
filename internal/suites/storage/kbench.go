@@ -3,10 +3,17 @@ package storage
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/harvester/hvperf/internal/suites/options"
+	"github.com/harvester/hvperf/pkg/k8s"
 	"github.com/harvester/hvperf/pkg/suites"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/klog/v2"
+
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 func init() {
@@ -27,19 +34,19 @@ func NewKbenchSuite() *KBenchSuite {
 	return k
 }
 
-func (k *KBenchSuite) Name() string {
+func (s *KBenchSuite) Name() string {
 	return "storage-kbench"
 }
 
-func (k *KBenchSuite) Description() string {
+func (s *KBenchSuite) Description() string {
 	return "run kbench to benchmark the storage performance of the cluster"
 }
 
-func (k *KBenchSuite) IsReadWrite() bool {
+func (s *KBenchSuite) IsReadWrite() bool {
 	return true
 }
 
-func (k *KBenchSuite) RunE(
+func (s *KBenchSuite) RunE(
 	ctx context.Context,
 	runID string,
 	namespace string,
@@ -48,24 +55,142 @@ func (k *KBenchSuite) RunE(
 	o, err := KBenchOptionsDefaults()
 	if err != nil {
 		return suites.SuiteResult{
-			Name:  k.Name(),
+			Name:  s.Name(),
 			RunID: runID,
 			Err:   err.Error(),
 		}
 	}
-	fmt.Printf("Running kbench suite with options: %+v\n", o)
 
-	result := suites.SuiteResult{}
+	if _, err := k8s.EnsureNamespace(ctx, s.Clients, namespace, o.NamespaceReadyTimeout); err != nil {
+		return suites.SuiteResult{
+			Name:  s.Name(),
+			RunID: runID,
+			Err:   fmt.Sprintf("namespace %s not ready: %v", namespace, err.Error()),
+		}
+	}
+	klog.V(3).InfoS("namespace is ready\n", "name", namespace)
 
-	return result
+	var caseResults []*suites.CaseResult
+	caseName := "kbench-pvc"
+	s.CaseStart(s.Name(), caseName)
+	caseResult := s.kbenchPodPVC(ctx, caseName, runID, namespace, o)
+	caseResults = append(caseResults, caseResult)
+	s.CaseDone(s.Name(), caseName, caseResult.State, time.Since(caseResult.DateTimeStart))
+
+	suiteParams, err := suites.ToSuiteParams(o)
+	if err != nil {
+		// just log the params conversion error, don't fail the suite. the only effect
+		// is that the suite params won't be reported in the results.
+		klog.V(3).ErrorS(err, "failed to convert suite options to suite params\n")
+	}
+
+	return suites.SuiteResult{
+		Name:    s.Name(),
+		Params:  suiteParams,
+		RunID:   runID,
+		Results: caseResults,
+	}
 }
 
-func (k *KBenchSuite) SetClients(clients *suites.Clients) {
-	k.Clients = clients
+func (s *KBenchSuite) kbenchPodPVC(ctx context.Context, caseName string, runID string, namespace string, opts *KBenchOptions) *suites.CaseResult {
+	start := time.Now()
+	pvc, err := k8s.EnsurePVCReady(
+		ctx,
+		s.Clients,
+		s.Name(),
+		runID,
+		namespace,
+		opts.PVCReadyTimeout,
+		opts.PVCStorageClassName,
+		opts.PVCStorageSize,
+		opts.TestSize,
+	)
+	if err != nil {
+		return suites.NewCaseResultErrored(s.Name(), time.Now(), time.Now(), fmt.Errorf("pvc not ready: %v", err))
+	}
+	klog.V(3).InfoS("pvc is ready\n", "name", pvc.Name, "namespace", pvc.Namespace)
+
+	// job spec from https://github.com/longhorn/kbench/blob/main/deploy/fio.yaml
+	overrides := func(job *batchv1.Job) error {
+		job.Spec.Template.Spec.HostNetwork = false
+		job.Spec.Template.Spec.Containers[0].Command = []string{} // use kbench default entrypoint
+		job.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
+			{Name: "MODE", Value: string(opts.Mode)},
+			{Name: "FILE_NAME", Value: "/volume/test"},
+			{Name: "SIZE", Value: opts.TestSize},
+			{Name: "CPU_IDLE_PROF", Value: string(opts.CPUIdleProf)},
+			{Name: "IOPS_BS", Value: opts.IOPSBlockSize},
+			{Name: "IOPS_IODEPTH", Value: strconv.Itoa(opts.IOPSIoDepth)},
+			{Name: "IOPS_NUMJOBS", Value: strconv.Itoa(opts.IOPSNumJobs)},
+			{Name: "BW_BS", Value: opts.BandwidthBlockSize},
+			{Name: "BW_IODEPTH", Value: strconv.Itoa(opts.BandwidthIoDepth)},
+			{Name: "BW_NUMJOBS", Value: strconv.Itoa(opts.BandwidthNumJobs)},
+			{Name: "LAT_BS", Value: opts.LatencyBlockSize},
+			{Name: "LAT_IODEPTH", Value: strconv.Itoa(opts.LatencyIoDepth)},
+			{Name: "LAT_NUMJOBS", Value: strconv.Itoa(opts.LatencyNumJobs)},
+		}
+		job.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+			{Name: "vol", MountPath: "/volume/"},
+			{Name: "temp-storage", MountPath: "/temp"},
+		}
+		job.Spec.Template.Spec.Volumes = []corev1.Volume{
+			{
+				Name: "vol",
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: pvc.Name,
+					},
+				},
+			},
+			{
+				Name: "temp-storage",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		}
+		return nil
+	}
+	job, pod, err := k8s.EnsureJobCompleted(
+		ctx,
+		s.Clients,
+		s.Name(),
+		runID,
+		namespace,
+		"", // let k8s pick any node for this pod
+		opts.JobPodImageName+":"+opts.JobPodImageTag,
+		opts.JobActiveDeadline,
+		opts.JobPodReadyTimeout,
+		opts.JobPodTTLAfterFinished,
+		opts.JobSuspend,
+		overrides,
+	)
+	if err != nil {
+		return suites.NewCaseResultErrored(s.Name(), time.Now(), time.Now(), fmt.Errorf("job not ready: %v", err))
+	}
+	klog.V(3).InfoS("job is ready\n", "name", job.Name, "namespace", job.Namespace, "pod", pod.Name)
+
+	logOpts := &corev1.PodLogOptions{}
+	logs, err := s.K8sClientSet.CoreV1().Pods(namespace).GetLogs(pod.GetName(), logOpts).Stream(ctx)
+	result := &suites.PodLogResult{
+		Out:     logs,
+		Subject: fmt.Sprintf("%s/%s", pod.GetNamespace(), pod.GetName()),
+	}
+	if err != nil {
+		result.Err = fmt.Sprintf("failed to get logs for pod %s: %v", pod.GetName(), err)
+	}
+
+	caseResult := suites.NewCaseResult(caseName, start, time.Now(), nil, nil)
+	caseResult = caseResult.WithPodLogResults([]*suites.PodLogResult{result})
+	return caseResult
 }
 
-func (k *KBenchSuite) SetProgressReporter(reporter *suites.ProgressReporter) {
-	k.ProgressReporter = reporter
+func (s *KBenchSuite) SetClients(clients *suites.Clients) {
+	s.Clients = clients
+}
+
+func (s *KBenchSuite) SetProgressReporter(reporter *suites.ProgressReporter) {
+	s.ProgressReporter = reporter
 }
 
 type KBenchOptions struct {
@@ -91,6 +216,12 @@ type KBenchOptions struct {
 	JobPodTTLAfterFinished time.Duration
 	JobPodReadyTimeout     time.Duration
 	JobSuspend             bool
+
+	NamespaceReadyTimeout time.Duration
+
+	PVCReadyTimeout     time.Duration
+	PVCStorageClassName string
+	PVCStorageSize      resource.Quantity
 }
 
 // KBenchOptionsDefaults returns the default options for the kbench test suite.
@@ -111,6 +242,7 @@ func KBenchOptionsDefaults() (*KBenchOptions, error) {
 	o.JobPodTTLAfterFinished = sysOpts.JobPodTTLAfterFinished
 	o.JobPodReadyTimeout = sysOpts.JobPodReadyTimeout
 	o.JobSuspend = sysOpts.JobSuspend
+	o.NamespaceReadyTimeout = sysOpts.NamespaceReadyTimeout
 	return o, nil
 }
 
