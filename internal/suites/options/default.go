@@ -23,10 +23,17 @@ func DefaultGlobalOptions() *suites.Options {
 		"MonitoringRangeDuration":         300 * time.Second,
 		"MonitoringWaitPodMonitorTimeout": 600 * time.Second, // 2x the EtcdRangeDuration to allow for Prometheus to scrape etcd metrics
 		"NamespaceReadyTimeout":           300 * time.Second, // accommodate for cleanup in back-to-back test runs
-		"PodActiveDeadline":               3600 * time.Second,
-		"PodImageName":                    "registry.suse.com/bci/bci-base",
-		"PodImageTag":                     "latest",
-		"PodReadyTimeout":                 3600 * time.Second,
+	}
+}
+
+// DefaultNodeCapacityOptions returns the default options for the node capacity
+// test suite.
+func DefaultNodeCapacityOptions() *suites.Options {
+	return &suites.Options{
+		"PodActiveDeadline": 3600 * time.Second,
+		"PodImageName":      "registry.suse.com/bci/bci-base",
+		"PodImageTag":       "latest",
+		"PodReadyTimeout":   3600 * time.Second,
 	}
 }
 

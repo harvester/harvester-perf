@@ -24,10 +24,6 @@ func TestDefaultGlobalOptions(t *testing.T) {
 		"MonitoringRangeDuration":         300 * time.Second,
 		"MonitoringWaitPodMonitorTimeout": 600 * time.Second,
 		"NamespaceReadyTimeout":           300 * time.Second,
-		"PodActiveDeadline":               3600 * time.Second,
-		"PodImageName":                    "registry.suse.com/bci/bci-base",
-		"PodImageTag":                     "latest",
-		"PodReadyTimeout":                 3600 * time.Second,
 	}
 
 	if got := DefaultGlobalOptions(); !reflect.DeepEqual(got, want) {
