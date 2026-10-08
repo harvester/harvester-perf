@@ -2,7 +2,6 @@ package suites
 
 import (
 	"fmt"
-	"io"
 	"reflect"
 	"strings"
 	"testing"
@@ -407,7 +406,7 @@ func TestCaseResultString(t *testing.T) {
 				PodLogResults: []*PodLogResult{
 					{
 						Subject: "daemonset-pod-0",
-						Out:     io.NopCloser(strings.NewReader("hello\n")),
+						Logs:    "hello\n",
 					},
 				},
 			},

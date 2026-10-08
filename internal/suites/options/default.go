@@ -51,8 +51,6 @@ func DefaultKBenchOptions() *suites.Options {
 		"LatencyIoDepth":      1,
 		"LatencyNumJobs":      1,
 		"Mode":                "full",
-		"RampTime":            60 * time.Second,
-		"RunTime":             120 * time.Second,
 		"TestSize":            "30G",
 		"JobPodImageName":     "longhornio/kbench",
 		"JobPodImageTag":      "main-head",

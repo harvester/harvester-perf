@@ -2,7 +2,6 @@ package suites
 
 import (
 	"fmt"
-	"io"
 	"reflect"
 	"sort"
 	"strings"
@@ -462,7 +461,7 @@ func (k *K8sResourceResult) String() string {
 // PodLogResult represents the result of querying logs from a Kubernetes pod.
 type PodLogResult struct {
 	Err     string
-	Out     io.ReadCloser
+	Logs    string
 	Subject string
 	indent  string
 }
@@ -471,16 +470,9 @@ func (p *PodLogResult) String() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "%sName: %s\n", p.indent, p.Subject)
 
-	if out := p.Out; out != nil {
-		//nolint:errcheck
-		defer out.Close()
-
+	if out := p.Logs; out != "" {
 		fmt.Fprintf(&sb, "%sLogs:\n", p.indent)
-		b, err := io.ReadAll(out)
-		if err != nil {
-			p.Err = fmt.Sprintf("failed to read logs for pod %s: %v", p.Subject, err)
-		}
-		fmt.Fprintf(&sb, "%s", b)
+		fmt.Fprint(&sb, out)
 	}
 
 	if p.Err != "" {

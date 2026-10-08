@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"time"
 
@@ -61,6 +62,14 @@ func (s *KBenchSuite) RunE(
 		}
 	}
 
+	if o.TestSize.Cmp(o.PVCStorageSize) >= 0 {
+		return suites.SuiteResult{
+			Name:  s.Name(),
+			RunID: runID,
+			Err:   fmt.Sprintf("test size %s must be smaller than PVC storage size %s", o.TestSize.String(), o.PVCStorageSize.String()),
+		}
+	}
+
 	if _, err := k8s.EnsureNamespace(ctx, s.Clients, namespace, o.NamespaceReadyTimeout); err != nil {
 		return suites.SuiteResult{
 			Name:  s.Name(),
@@ -94,7 +103,7 @@ func (s *KBenchSuite) RunE(
 
 func (s *KBenchSuite) kbenchPodPVC(ctx context.Context, caseName string, runID string, namespace string, opts *KBenchOptions) *suites.CaseResult {
 	start := time.Now()
-	pvc, err := k8s.EnsurePVCReady(
+	pvc, cleanup, err := k8s.EnsurePVCReady(
 		ctx,
 		s.Clients,
 		s.Name(),
@@ -103,8 +112,13 @@ func (s *KBenchSuite) kbenchPodPVC(ctx context.Context, caseName string, runID s
 		opts.PVCReadyTimeout,
 		opts.PVCStorageClassName,
 		opts.PVCStorageSize,
-		opts.TestSize,
 	)
+	defer func() {
+		if cleanup != nil {
+			// nolint: errcheck
+			cleanup()
+		}
+	}()
 	if err != nil {
 		return suites.NewCaseResultErrored(s.Name(), time.Now(), time.Now(), fmt.Errorf("pvc not ready: %v", err))
 	}
@@ -117,7 +131,7 @@ func (s *KBenchSuite) kbenchPodPVC(ctx context.Context, caseName string, runID s
 		job.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
 			{Name: "MODE", Value: string(opts.Mode)},
 			{Name: "FILE_NAME", Value: "/volume/test"},
-			{Name: "SIZE", Value: opts.TestSize},
+			{Name: "SIZE", Value: opts.TestSize.String()},
 			{Name: "CPU_IDLE_PROF", Value: string(opts.CPUIdleProf)},
 			{Name: "IOPS_BS", Value: opts.IOPSBlockSize},
 			{Name: "IOPS_IODEPTH", Value: strconv.Itoa(opts.IOPSIoDepth)},
@@ -171,13 +185,20 @@ func (s *KBenchSuite) kbenchPodPVC(ctx context.Context, caseName string, runID s
 	klog.V(3).InfoS("job is ready\n", "name", job.Name, "namespace", job.Namespace, "pod", pod.Name)
 
 	logOpts := &corev1.PodLogOptions{}
-	logs, err := s.K8sClientSet.CoreV1().Pods(namespace).GetLogs(pod.GetName(), logOpts).Stream(ctx)
 	result := &suites.PodLogResult{
-		Out:     logs,
 		Subject: fmt.Sprintf("%s/%s", pod.GetNamespace(), pod.GetName()),
 	}
+	logs, err := s.K8sClientSet.CoreV1().Pods(namespace).GetLogs(pod.GetName(), logOpts).Stream(ctx)
 	if err != nil {
 		result.Err = fmt.Sprintf("failed to get logs for pod %s: %v", pod.GetName(), err)
+	}
+	if logs != nil {
+		b, err := io.ReadAll(logs)
+		if err != nil {
+			result.Err = fmt.Sprintf("failed to read logs for pod %s: %v", pod.GetName(), err)
+		} else {
+			result.Logs = string(b)
+		}
 	}
 
 	caseResult := suites.NewCaseResult(caseName, start, time.Now(), nil, nil)
@@ -205,9 +226,7 @@ type KBenchOptions struct {
 	LatencyIoDepth     int
 	LatencyNumJobs     int
 	Mode               ModeType
-	RampTime           time.Duration
-	RunTime            time.Duration
-	TestSize           string
+	TestSize           resource.Quantity
 
 	JobActiveDeadline      time.Duration
 	JobPodContainerName    string

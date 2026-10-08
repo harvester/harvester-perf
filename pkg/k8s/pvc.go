@@ -19,6 +19,9 @@ import (
 // attributes and waits until the PVC is bound. The spec of the PVC can be
 // modified by providing one or more override functions that take a pointer to
 // the PVC and modify it in place.
+// It returns the created PVC, a cleanup function to delete the PVC, and an error
+// if any occurred during the process. The call site is responsible for calling
+// the cleanup function to delete the PVC when it is no longer needed.
 func EnsurePVCReady(
 	ctx context.Context,
 	c *suites.Clients,
@@ -28,9 +31,8 @@ func EnsurePVCReady(
 	readyTimeout time.Duration,
 	storageClassName string,
 	storageSize resource.Quantity,
-	kbenchTestSize string,
 	overrides ...func(*corev1.PersistentVolumeClaim) error,
-) (*corev1.PersistentVolumeClaim, error) {
+) (*corev1.PersistentVolumeClaim, func() error, error) {
 	namePrefix := fmt.Sprintf("%s-%s-", suiteName, runID)
 	labelSelector := defaultLabelSelector(suiteName, runID)
 	pvc := &corev1.PersistentVolumeClaim{
@@ -57,13 +59,19 @@ func EnsurePVCReady(
 
 	for _, mod := range overrides {
 		if err := mod(pvc); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	created, err := c.K8sClientSet.CoreV1().PersistentVolumeClaims(namespace).Create(ctx, pvc, metav1.CreateOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create PVC: %w", err)
+		return nil, nil, fmt.Errorf("failed to create PVC: %w", err)
+	}
+
+	cleanup := func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		return c.K8sClientSet.CoreV1().PersistentVolumeClaims(namespace).Delete(ctx, created.GetName(), metav1.DeleteOptions{})
 	}
 
 	listWatch := &cache.ListWatch{
@@ -86,10 +94,10 @@ func EnsurePVCReady(
 		return pvc.Status.Phase == corev1.ClaimBound, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("pvc %s not ready: %w", created.GetName(), err)
+		return nil, cleanup, fmt.Errorf("pvc %s not ready: %w", created.GetName(), err)
 	}
 
 	latest := event.Object.(*corev1.PersistentVolumeClaim)
 	latest.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PersistentVolumeClaim"))
-	return latest, nil
+	return latest, cleanup, nil
 }

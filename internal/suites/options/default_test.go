@@ -57,8 +57,6 @@ func TestDefaultKBenchOptions(t *testing.T) {
 		"LatencyIoDepth":      1,
 		"LatencyNumJobs":      1,
 		"Mode":                "full",
-		"RampTime":            60 * time.Second,
-		"RunTime":             120 * time.Second,
 		"TestSize":            "30G",
 		"JobPodImageName":     "longhornio/kbench",
 		"JobPodImageTag":      "main-head",
@@ -112,8 +110,6 @@ func TestDefaultOptionsFromOptions(t *testing.T) {
 			LatencyIoDepth      int
 			LatencyNumJobs      int
 			Mode                string
-			RampTime            time.Duration
-			RunTime             time.Duration
 			TestSize            string
 			JobPodImageName     string
 			JobPodImageTag      string
@@ -138,8 +134,6 @@ func TestDefaultOptionsFromOptions(t *testing.T) {
 			LatencyIoDepth:      1,
 			LatencyNumJobs:      1,
 			Mode:                "full",
-			RampTime:            60 * time.Second,
-			RunTime:             120 * time.Second,
 			TestSize:            "30G",
 			JobPodImageName:     "longhornio/kbench",
 			JobPodImageTag:      "main-head",

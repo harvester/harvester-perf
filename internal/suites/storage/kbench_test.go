@@ -26,9 +26,7 @@ func TestKBenchOptionsDefaults(t *testing.T) {
 		LatencyIoDepth:     1,
 		LatencyNumJobs:     1,
 		Mode:               ModeFull,
-		RampTime:           60 * time.Second,
-		RunTime:            120 * time.Second,
-		TestSize:           "30G",
+		TestSize:           resource.MustParse("30G"),
 
 		JobActiveDeadline:      3600 * time.Second,
 		JobPodContainerName:    "benchmark",
