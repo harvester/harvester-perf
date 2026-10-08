@@ -5,11 +5,10 @@ import (
 	"testing"
 
 	"github.com/harvester/hvperf/internal/suites/options"
-	pkgsuites "github.com/harvester/hvperf/pkg/suites"
 )
 
 func TestBenchmarkOptionsDefaults(t *testing.T) {
-	sysOpts, err := options.FromOptions[*BenchmarkOptions](pkgsuites.DefaultGlobalOptions())
+	sysOpts, err := options.FromOptions[*BenchmarkOptions](options.DefaultGlobalOptions())
 	if err != nil {
 		t.Fatalf("Failed to convert default global options to BenchmarkOptions: %v", err)
 	}

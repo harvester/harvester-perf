@@ -1,13 +1,15 @@
-package suites
+package options
 
 import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/harvester/hvperf/pkg/suites"
 )
 
 func TestDefaultGlobalOptions(t *testing.T) {
-	want := &Options{
+	want := &suites.Options{
 		"EtcdNamespace":                   "kube-system",
 		"EtcdReadyTimeout":                300 * time.Second,
 		"JobActiveDeadline":               3600 * time.Second,
