@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/harvester/hvperf/pkg/suites"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 func TestDefaultGlobalOptions(t *testing.T) {
@@ -19,6 +20,7 @@ func TestDefaultGlobalOptions(t *testing.T) {
 		"JobPodTTLAfterFinished":          300 * time.Second,
 		"JobPodReadyTimeout":              3600 * time.Second,
 		"JobSuspend":                      false,
+		"LonghornNamespace":               "longhorn-system",
 		"MonitoringAddonName":             "rancher-monitoring",
 		"MonitoringNamespace":             "cattle-monitoring-system",
 		"MonitoringRangeDuration":         300 * time.Second,
@@ -51,15 +53,20 @@ func TestDefaultKBenchOptions(t *testing.T) {
 		"BandwidthIoDepth":    16,
 		"BandwidthNumJobs":    4,
 		"IOPSBlockSize":       "4K",
-		"IOPSIoDepth":         128,
-		"IOPSNumJobs":         8,
+		"IOPSIoDepth":         32,
+		"IOPSNumJobs":         4,
 		"LatencyBlockSize":    "4K",
 		"LatencyIoDepth":      1,
 		"LatencyNumJobs":      1,
 		"Mode":                "full",
+		"RampTime":            60 * time.Second,
 		"TestSize":            "30G",
-		"JobPodImageName":     "longhornio/kbench",
-		"JobPodImageTag":      "main-head",
+		"KBenchImageName":     "longhornio/kbench",
+		"KBenchImageTag":      "main-head",
+		"KBenchLimitCPU":      "4",
+		"KBenchLimitMem":      "512Mi",
+		"KBenchRequestCPU":    "4",
+		"KBenchRequestMem":    "256Mi",
 		"PVCReadyTimeout":     300 * time.Second,
 		"PVCStorageClassName": "",
 		"PVCStorageSize":      "33Gi",
@@ -110,9 +117,14 @@ func TestDefaultOptionsFromOptions(t *testing.T) {
 			LatencyIoDepth      int
 			LatencyNumJobs      int
 			Mode                string
+			RampTime            time.Duration
 			TestSize            string
-			JobPodImageName     string
-			JobPodImageTag      string
+			KBenchImageName     string
+			KBenchImageTag      string
+			KBenchLimitCPU      resource.Quantity
+			KBenchLimitMem      resource.Quantity
+			KBenchRequestCPU    resource.Quantity
+			KBenchRequestMem    resource.Quantity
 			PVCReadyTimeout     time.Duration
 			PVCStorageClassName string
 			PVCStorageSize      string
@@ -128,15 +140,20 @@ func TestDefaultOptionsFromOptions(t *testing.T) {
 			BandwidthIoDepth:    16,
 			BandwidthNumJobs:    4,
 			IOPSBlockSize:       "4K",
-			IOPSIoDepth:         128,
-			IOPSNumJobs:         8,
+			IOPSIoDepth:         32,
+			IOPSNumJobs:         4,
 			LatencyBlockSize:    "4K",
 			LatencyIoDepth:      1,
 			LatencyNumJobs:      1,
 			Mode:                "full",
+			RampTime:            60 * time.Second,
 			TestSize:            "30G",
-			JobPodImageName:     "longhornio/kbench",
-			JobPodImageTag:      "main-head",
+			KBenchImageName:     "longhornio/kbench",
+			KBenchImageTag:      "main-head",
+			KBenchLimitCPU:      resource.MustParse("4"),
+			KBenchLimitMem:      resource.MustParse("512Mi"),
+			KBenchRequestCPU:    resource.MustParse("4"),
+			KBenchRequestMem:    resource.MustParse("256Mi"),
 			PVCReadyTimeout:     300 * time.Second,
 			PVCStorageClassName: "",
 			PVCStorageSize:      "33Gi",

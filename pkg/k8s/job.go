@@ -174,14 +174,13 @@ func EnsureJobCompleted(
 	}
 
 	// job is ready, now wait for it to complete
-	labelSelector := defaultLabelSelector(suiteName, runID)
 	listWatch := &cache.ListWatch{
 		ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
-			options.LabelSelector = metav1.FormatLabelSelector(labelSelector)
+			options.FieldSelector = fmt.Sprintf("metadata.name=%s", job.GetName())
 			return c.K8sClientSet.BatchV1().Jobs(job.GetNamespace()).List(ctx, options)
 		},
 		WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watchapi.Interface, error) {
-			options.LabelSelector = metav1.FormatLabelSelector(labelSelector)
+			options.FieldSelector = fmt.Sprintf("metadata.name=%s", job.GetName())
 			return c.K8sClientSet.BatchV1().Jobs(job.GetNamespace()).Watch(ctx, options)
 		},
 	}

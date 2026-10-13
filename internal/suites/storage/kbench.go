@@ -9,12 +9,14 @@ import (
 
 	"github.com/harvester/hvperf/internal/suites/options"
 	"github.com/harvester/hvperf/pkg/k8s"
+	prom "github.com/harvester/hvperf/pkg/prometheus"
 	"github.com/harvester/hvperf/pkg/suites"
-	"k8s.io/apimachinery/pkg/api/resource"
+
 	"k8s.io/klog/v2"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 func init() {
@@ -62,14 +64,6 @@ func (s *KBenchSuite) RunE(
 		}
 	}
 
-	if o.TestSize.Cmp(o.PVCStorageSize) >= 0 {
-		return suites.SuiteResult{
-			Name:  s.Name(),
-			RunID: runID,
-			Err:   fmt.Sprintf("test size %s must be smaller than PVC storage size %s", o.TestSize.String(), o.PVCStorageSize.String()),
-		}
-	}
-
 	if _, err := k8s.EnsureNamespace(ctx, s.Clients, namespace, o.NamespaceReadyTimeout); err != nil {
 		return suites.SuiteResult{
 			Name:  s.Name(),
@@ -80,11 +74,31 @@ func (s *KBenchSuite) RunE(
 	klog.V(3).InfoS("namespace is ready\n", "name", namespace)
 
 	var caseResults []*suites.CaseResult
-	caseName := "kbench-pvc"
+	caseName := "kbench-pod-pvc-full"
+	klog.V(3).InfoS("running kbench pod with pvc\n", "suite", s.Name(), "case", caseName)
 	s.CaseStart(s.Name(), caseName)
 	caseResult := s.kbenchPodPVC(ctx, caseName, runID, namespace, o)
 	caseResults = append(caseResults, caseResult)
-	s.CaseDone(s.Name(), caseName, caseResult.State, time.Since(caseResult.DateTimeStart))
+	caseRunDuration := time.Since(caseResult.DateTimeStart)
+	s.CaseDone(s.Name(), caseName, caseResult.State, caseRunDuration)
+
+	var nodeName, pvcName string
+	for _, obj := range caseResult.Objects {
+		switch v := obj.(type) {
+		case *corev1.Pod:
+			nodeName = v.Spec.NodeName
+		case *corev1.PersistentVolumeClaim:
+			pvcName = v.GetName()
+		}
+	}
+	if nodeName != "" && pvcName != "" {
+		caseName = caseName + "-monitoring"
+		klog.V(3).InfoS("running monitoring pod on node\n", "suite", s.Name(), "case", caseName, "node", nodeName)
+		s.CaseStart(s.Name(), caseName)
+		caseResult = s.monitoring(ctx, caseName, namespace, nodeName, pvcName, caseRunDuration, o)
+		caseResults = append(caseResults, caseResult)
+		s.CaseDone(s.Name(), caseName, caseResult.State, time.Since(caseResult.DateTimeStart))
+	}
 
 	suiteParams, err := suites.ToSuiteParams(o)
 	if err != nil {
@@ -101,7 +115,13 @@ func (s *KBenchSuite) RunE(
 	}
 }
 
-func (s *KBenchSuite) kbenchPodPVC(ctx context.Context, caseName string, runID string, namespace string, opts *KBenchOptions) *suites.CaseResult {
+func (s *KBenchSuite) kbenchPodPVC(
+	ctx context.Context,
+	caseName string,
+	runID string,
+	namespace string,
+	opts *KBenchOptions,
+) *suites.CaseResult {
 	start := time.Now()
 	pvc, cleanup, err := k8s.EnsurePVCReady(
 		ctx,
@@ -115,54 +135,20 @@ func (s *KBenchSuite) kbenchPodPVC(ctx context.Context, caseName string, runID s
 	)
 	defer func() {
 		if cleanup != nil {
-			// nolint: errcheck
-			cleanup()
+			if err := cleanup(); err != nil {
+				klog.ErrorS(err, "failed to clean up pvc", "suite", s.Name(), "case", caseName)
+			}
 		}
 	}()
 	if err != nil {
-		return suites.NewCaseResultErrored(s.Name(), time.Now(), time.Now(), fmt.Errorf("pvc not ready: %v", err))
+		return suites.NewCaseResultErrored(s.Name(), start, time.Now(), fmt.Errorf("pvc not ready: %v", err))
 	}
 	klog.V(3).InfoS("pvc is ready\n", "name", pvc.Name, "namespace", pvc.Namespace)
 
 	// job spec from https://github.com/longhorn/kbench/blob/main/deploy/fio.yaml
 	overrides := func(job *batchv1.Job) error {
-		job.Spec.Template.Spec.HostNetwork = false
-		job.Spec.Template.Spec.Containers[0].Command = []string{} // use kbench default entrypoint
-		job.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
-			{Name: "MODE", Value: string(opts.Mode)},
-			{Name: "FILE_NAME", Value: "/volume/test"},
-			{Name: "SIZE", Value: opts.TestSize.String()},
-			{Name: "CPU_IDLE_PROF", Value: string(opts.CPUIdleProf)},
-			{Name: "IOPS_BS", Value: opts.IOPSBlockSize},
-			{Name: "IOPS_IODEPTH", Value: strconv.Itoa(opts.IOPSIoDepth)},
-			{Name: "IOPS_NUMJOBS", Value: strconv.Itoa(opts.IOPSNumJobs)},
-			{Name: "BW_BS", Value: opts.BandwidthBlockSize},
-			{Name: "BW_IODEPTH", Value: strconv.Itoa(opts.BandwidthIoDepth)},
-			{Name: "BW_NUMJOBS", Value: strconv.Itoa(opts.BandwidthNumJobs)},
-			{Name: "LAT_BS", Value: opts.LatencyBlockSize},
-			{Name: "LAT_IODEPTH", Value: strconv.Itoa(opts.LatencyIoDepth)},
-			{Name: "LAT_NUMJOBS", Value: strconv.Itoa(opts.LatencyNumJobs)},
-		}
-		job.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
-			{Name: "vol", MountPath: "/volume/"},
-			{Name: "temp-storage", MountPath: "/temp"},
-		}
-		job.Spec.Template.Spec.Volumes = []corev1.Volume{
-			{
-				Name: "vol",
-				VolumeSource: corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: pvc.Name,
-					},
-				},
-			},
-			{
-				Name: "temp-storage",
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
-		}
+		overrideKBenchSpec(caseName, runID, job, opts)
+		overrideKBenchPVCMount(job, pvc)
 		return nil
 	}
 	job, pod, err := k8s.EnsureJobCompleted(
@@ -172,7 +158,7 @@ func (s *KBenchSuite) kbenchPodPVC(ctx context.Context, caseName string, runID s
 		runID,
 		namespace,
 		"", // let k8s pick any node for this pod
-		opts.JobPodImageName+":"+opts.JobPodImageTag,
+		opts.KBenchImageName+":"+opts.KBenchImageTag,
 		opts.JobActiveDeadline,
 		opts.JobPodReadyTimeout,
 		opts.JobPodTTLAfterFinished,
@@ -180,9 +166,9 @@ func (s *KBenchSuite) kbenchPodPVC(ctx context.Context, caseName string, runID s
 		overrides,
 	)
 	if err != nil {
-		return suites.NewCaseResultErrored(s.Name(), time.Now(), time.Now(), fmt.Errorf("job not ready: %v", err))
+		return suites.NewCaseResultErrored(s.Name(), start, time.Now(), fmt.Errorf("job not completed: %v", err))
 	}
-	klog.V(3).InfoS("job is ready\n", "name", job.Name, "namespace", job.Namespace, "pod", pod.Name)
+	klog.V(3).InfoS("job is completed\n", "name", job.Name, "namespace", job.Namespace, "pod", pod.Name)
 
 	logOpts := &corev1.PodLogOptions{}
 	result := &suites.PodLogResult{
@@ -201,9 +187,159 @@ func (s *KBenchSuite) kbenchPodPVC(ctx context.Context, caseName string, runID s
 		}
 	}
 
-	caseResult := suites.NewCaseResult(caseName, start, time.Now(), nil, nil)
+	caseResult := suites.NewCaseResult(caseName, start, time.Now(), nil, nil, job, pod, pvc)
 	caseResult = caseResult.WithPodLogResults([]*suites.PodLogResult{result})
 	return caseResult
+}
+
+func (s KBenchSuite) monitoring(
+	ctx context.Context,
+	caseName string,
+	namespace string,
+	nodeName string,
+	pvcName string,
+	kbenchRunDuration time.Duration,
+	opts *KBenchOptions,
+) *suites.CaseResult {
+	start := time.Now()
+	ready, err := k8s.MonitoringEnabled(ctx, s.Clients, opts.MonitoringNamespace, opts.MonitoringAddonName)
+	if err != nil {
+		err = fmt.Errorf("failed to check if monitoring addon is enabled, skipping promql execution: %w", err)
+		return suites.NewCaseResultSkipped(caseName, start, time.Now(), err)
+	}
+
+	// skip if not ready
+	if !ready {
+		err = fmt.Errorf("monitoring add-on is not ready, skipping promql execution")
+		return suites.NewCaseResultSkipped(caseName, start, time.Now(), err)
+	}
+
+	results := s.execPromQL(ctx, namespace, nodeName, pvcName, kbenchRunDuration, opts)
+	caseResult := suites.NewCaseResult(caseName, time.Now(), time.Now(), nil, results)
+	return caseResult
+}
+
+func (s *KBenchSuite) execPromQL(
+	ctx context.Context,
+	namespace string,
+	nodeName string,
+	pvcName string,
+	kbenchRunDuration time.Duration,
+	opts *KBenchOptions,
+) []*suites.MetricResult {
+	var (
+		queryRangeWithRampTime = int(opts.RampTime.Seconds()) + int(kbenchRunDuration.Seconds())
+		queryRange             = int(kbenchRunDuration.Seconds())
+	)
+
+	// validityCheckQueries are queries that check the validity of the test, such as
+	// whether the volume remained. Any non-normal values imply that the test result
+	// is invalid.
+	// a result of 1 means healthy at every sample during the run; 0 means it was
+	// not healthy at least once.
+	// the inner min_over_time checks the time series over the query range, assessing
+	// if the volume was ever unhealthy during the range window.
+	// the outer min handles multiple time series for the same volume (e.g., due to
+	// volume movement among nodes). It ensures only the lowest value is returned.
+	validityCheckQueries := []string{
+		// pvc should remain healthy during the test
+		fmt.Sprintf(`min(min_over_time(longhorn_volume_robustness{namespace='%s', pvc='%s', pvc_namespace='%s', state='healthy'}[%ds]))`, opts.LonghornNamespace, pvcName, namespace, queryRangeWithRampTime),
+
+		// volume should remain attached
+		fmt.Sprintf(`min(min_over_time(longhorn_volume_state{namespace='%s', pvc='%s', pvc_namespace='%s', state='attached'}[%ds]))`, opts.LonghornNamespace, pvcName, namespace, queryRangeWithRampTime),
+	}
+
+	// crossCheckQueries are queries that check the performance of the volume during
+	// the test. the results should roughly match kbench results.
+	// use avg_over_time because these metrics are gauge, not counters. the function
+	// turns the series of samples in the given time range into a single value.
+	crossCheckQueries := []string{
+		fmt.Sprintf(`avg_over_time(longhorn_volume_read_iops{namespace='%s', pvc='%s', pvc_namespace='%s'}[%ds])`, opts.LonghornNamespace, pvcName, namespace, queryRange),
+		fmt.Sprintf(`avg_over_time(longhorn_volume_write_iops{namespace='%s', pvc='%s', pvc_namespace='%s'}[%ds])`, opts.LonghornNamespace, pvcName, namespace, queryRange),
+		fmt.Sprintf(`avg_over_time(longhorn_volume_read_throughput{namespace='%s', pvc='%s', pvc_namespace='%s'}[%ds])`, opts.LonghornNamespace, pvcName, namespace, queryRange),
+		fmt.Sprintf(`avg_over_time(longhorn_volume_write_throughput{namespace='%s', pvc='%s', pvc_namespace='%s'}[%ds])`, opts.LonghornNamespace, pvcName, namespace, queryRange),
+		fmt.Sprintf(`avg_over_time(longhorn_volume_read_latency{namespace='%s', pvc='%s', pvc_namespace='%s'}[%ds])`, opts.LonghornNamespace, pvcName, namespace, queryRange),
+		fmt.Sprintf(`avg_over_time(longhorn_volume_write_latency{namespace='%s', pvc='%s', pvc_namespace='%s'}[%ds])`, opts.LonghornNamespace, pvcName, namespace, queryRange),
+	}
+
+	// overheadQueries are queries that check the resource usage of the instance
+	// manager. these overheads happen outside of the kbench pods so they are not
+	// captured in the kbench results, but they are important to understand the
+	// overall performance of the system.
+	overheadQueries := []string{
+		fmt.Sprintf(`sum(avg_over_time(longhorn_instance_manager_cpu_usage_millicpu{namespace='%s', node='%s'}[%ds])) by (node)`, opts.LonghornNamespace, nodeName, queryRange),
+		fmt.Sprintf(`sum(avg_over_time(longhorn_instance_manager_memory_usage_bytes{namespace='%s', node='%s'}[%ds])) by (node)`, opts.LonghornNamespace, nodeName, queryRange),
+	}
+
+	queries := append(validityCheckQueries, crossCheckQueries...)
+	queries = append(queries, overheadQueries...)
+	var metricResults []*suites.MetricResult
+	for _, query := range queries {
+		v, _, err := prom.RunInstant(ctx, s.PromClient, query)
+		result := &suites.MetricResult{
+			Query:   query,
+			Samples: v,
+		}
+		if err != nil {
+			result.Err = err.Error()
+		}
+		metricResults = append(metricResults, result)
+	}
+	return metricResults
+}
+
+func overrideKBenchSpec(caseName string, runID string, job *batchv1.Job, opts *KBenchOptions) {
+	fileName := fmt.Sprintf("/volume/hvperf-%s-%s.perf", caseName, runID)
+	job.Spec.Template.Spec.HostNetwork = false
+	job.Spec.Template.Spec.Containers[0].Command = []string{} // use kbench default entrypoint
+	job.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{
+		{Name: "MODE", Value: string(opts.Mode)},
+		{Name: "FILE_NAME", Value: fileName},
+		{Name: "SIZE", Value: opts.TestSize},
+		{Name: "CPU_IDLE_PROF", Value: string(opts.CPUIdleProf)},
+		{Name: "IOPS_BS", Value: opts.IOPSBlockSize},
+		{Name: "IOPS_IODEPTH", Value: strconv.Itoa(opts.IOPSIoDepth)},
+		{Name: "IOPS_NUMJOBS", Value: strconv.Itoa(opts.IOPSNumJobs)},
+		{Name: "BW_BS", Value: opts.BandwidthBlockSize},
+		{Name: "BW_IODEPTH", Value: strconv.Itoa(opts.BandwidthIoDepth)},
+		{Name: "BW_NUMJOBS", Value: strconv.Itoa(opts.BandwidthNumJobs)},
+		{Name: "LAT_BS", Value: opts.LatencyBlockSize},
+		{Name: "LAT_IODEPTH", Value: strconv.Itoa(opts.LatencyIoDepth)},
+		{Name: "LAT_NUMJOBS", Value: strconv.Itoa(opts.LatencyNumJobs)},
+	}
+	job.Spec.Template.Spec.Containers[0].Resources = corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    opts.KBenchLimitCPU,
+			corev1.ResourceMemory: opts.KBenchLimitMem,
+		},
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    opts.KBenchRequestCPU,
+			corev1.ResourceMemory: opts.KBenchRequestMem,
+		},
+	}
+}
+
+func overrideKBenchPVCMount(job *batchv1.Job, pvc *corev1.PersistentVolumeClaim) {
+	job.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{
+		{Name: "vol", MountPath: "/volume/"},
+		{Name: "temp-storage", MountPath: "/temp"},
+	}
+	job.Spec.Template.Spec.Volumes = []corev1.Volume{
+		{
+			Name: "vol",
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: pvc.GetName(),
+				},
+			},
+		},
+		{
+			Name: "temp-storage",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+	}
 }
 
 func (s *KBenchSuite) SetClients(clients *suites.Clients) {
@@ -226,16 +362,25 @@ type KBenchOptions struct {
 	LatencyIoDepth     int
 	LatencyNumJobs     int
 	Mode               ModeType
-	TestSize           resource.Quantity
+	RampTime           time.Duration // used in the promql range; kbench doesn't support overriding ramp time
+	TestSize           string
 
 	JobActiveDeadline      time.Duration
 	JobPodContainerName    string
-	JobPodImageName        string
-	JobPodImageTag         string
 	JobPodTTLAfterFinished time.Duration
 	JobPodReadyTimeout     time.Duration
 	JobSuspend             bool
 
+	KBenchImageName  string
+	KBenchImageTag   string
+	KBenchLimitCPU   resource.Quantity
+	KBenchLimitMem   resource.Quantity
+	KBenchRequestCPU resource.Quantity
+	KBenchRequestMem resource.Quantity
+
+	LonghornNamespace     string
+	MonitoringAddonName   string
+	MonitoringNamespace   string
 	NamespaceReadyTimeout time.Duration
 
 	PVCReadyTimeout     time.Duration
@@ -256,11 +401,24 @@ func KBenchOptionsDefaults() (*KBenchOptions, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	q, err := resource.ParseQuantity(o.TestSize)
+	if err != nil {
+		return nil, err
+	}
+	if q.Cmp(o.PVCStorageSize) >= 0 {
+		return nil, fmt.Errorf("test size %s must be smaller than PVC storage size %s", o.TestSize, o.PVCStorageSize.String())
+	}
+
+	// merge global options into kbench options
 	o.JobActiveDeadline = sysOpts.JobActiveDeadline
 	o.JobPodContainerName = sysOpts.JobPodContainerName
 	o.JobPodTTLAfterFinished = sysOpts.JobPodTTLAfterFinished
 	o.JobPodReadyTimeout = sysOpts.JobPodReadyTimeout
 	o.JobSuspend = sysOpts.JobSuspend
+	o.LonghornNamespace = sysOpts.LonghornNamespace
+	o.MonitoringAddonName = sysOpts.MonitoringAddonName
+	o.MonitoringNamespace = sysOpts.MonitoringNamespace
 	o.NamespaceReadyTimeout = sysOpts.NamespaceReadyTimeout
 	return o, nil
 }
@@ -276,7 +434,6 @@ type ModeType string
 
 const (
 	ModeFull              ModeType = "full"
-	ModeQuick             ModeType = "quick"
 	ModeRandReadIOPS      ModeType = "random-read-iops"
 	ModeRandReadLatency   ModeType = "random-read-latency"
 	ModeRandWriteIOPS     ModeType = "random-write-iops"
