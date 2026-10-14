@@ -154,7 +154,7 @@ func EnsureJobCompleted(
 	ttlAfterFinished time.Duration,
 	suspend bool,
 	overrides ...func(*batchv1.Job) error,
-) (*batchv1.Job, *corev1.Pod, error) {
+) (*batchv1.Job, *corev1.Pod, func() error, error) {
 	job, pod, err := EnsureJobReady(
 		ctx,
 		c,
@@ -170,7 +170,13 @@ func EnsureJobCompleted(
 		overrides...,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	cleanup := func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		return c.K8sClientSet.BatchV1().Jobs(job.GetNamespace()).Delete(ctx, job.GetName(), metav1.DeleteOptions{})
 	}
 
 	// job is ready, now wait for it to complete
@@ -197,14 +203,17 @@ func EnsureJobCompleted(
 			if condition.Type == batchv1.JobComplete && condition.Status == corev1.ConditionTrue {
 				return true, nil
 			}
+			if condition.Type == batchv1.JobFailed && condition.Status == corev1.ConditionTrue {
+				return false, fmt.Errorf("job %s failed: %s", job.GetName(), condition.Message)
+			}
 		}
 		return false, nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return job, nil, cleanup, err
 	}
 
 	latest := event.Object.(*batchv1.Job)
 	latest.SetGroupVersionKind(batchv1.SchemeGroupVersion.WithKind("Job"))
-	return latest, pod, nil
+	return latest, pod, cleanup, nil
 }

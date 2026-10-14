@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/harvester/hvperf/internal/suites/options"
+	"github.com/harvester/hvperf/pkg/suites"
 )
 
 func TestBenchmarkOptionsDefaults(t *testing.T) {
@@ -52,7 +53,7 @@ func TestBenchmarkOptionsDefaults(t *testing.T) {
 		GRPCClientCount:   DefaultClientCount,
 		GRPCConnCount:     DefaultConnCount,
 	}
-	actual, err := BenchmarkOptionsDefaults(*pkgsuites.DefaultGlobalOptions())
+	actual, err := BenchmarkOptionsDefaults(*suites.DefaultGlobalOptions())
 	if err != nil {
 		t.Fatalf("BenchmarkOptionsDefaults() returned an error: %v", err)
 	}

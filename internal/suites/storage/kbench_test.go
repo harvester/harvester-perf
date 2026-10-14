@@ -30,7 +30,6 @@ func TestKBenchOptionsDefaults(t *testing.T) {
 		TestSize:           "30G",
 
 		JobActiveDeadline:      3600 * time.Second,
-		JobPodContainerName:    "benchmark",
 		JobPodTTLAfterFinished: 300 * time.Second,
 		JobPodReadyTimeout:     3600 * time.Second,
 		JobSuspend:             false,
