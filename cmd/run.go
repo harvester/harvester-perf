@@ -19,6 +19,7 @@ var (
 	runCmdClients        *suites.Clients
 	keepAlive            bool
 	monitoringServiceURL string
+	configFile           string
 	progress             *suites.ProgressReporter
 )
 
@@ -43,10 +44,14 @@ Use 'all' to run every registered test suite, both "read-only" and "read-write".
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		runOptions, err := loadRunOptions(configFile)
+		if err != nil {
+			return err
+		}
 		argSuites := strings.Split(args[0], ",")
-		suites := suites.Find(argSuites)
+		testSuites := suites.Find(argSuites)
 		outputFormat := *k8sPrintFlags.OutputFormat
-		results := runSuites(suites, outputFormat)
+		results := runSuites(testSuites, outputFormat, runOptions)
 		return outRun(results, outputFormat)
 	},
 }
@@ -59,9 +64,13 @@ var runAllCmd = &cobra.Command{
 Every registered test suite is run, both "read-only" and "read-write".
 "read-write" test suites create or modify resources in the cluster.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		runOptions, err := loadRunOptions(configFile)
+		if err != nil {
+			return err
+		}
 		testSuites := suites.All()
 		outputFormat := *k8sPrintFlags.OutputFormat
-		results := runSuites(testSuites, outputFormat)
+		results := runSuites(testSuites, outputFormat, runOptions)
 		return outRun(results, outputFormat)
 	},
 }
@@ -77,6 +86,8 @@ func init() {
 		fmt.Sprintf("Keep the test namespace and all its resources after test suite execution. Only works if the namespace is %s", suites.DefaultNamespace))
 	runCmd.PersistentFlags().StringVar(&monitoringServiceURL, "monitoring-url", "",
 		"Prometheus HTTP API base URL. Defaults to the in-cluster Prometheus service proxy.")
+	runCmd.PersistentFlags().StringVar(&configFile, "config", "",
+		"Optional path to config file (YAML). Omit to use global defaults.")
 
 	k8sConfigFlags.AddFlags(runCmd.PersistentFlags())
 	k8sPrintFlags.AddFlags(runCmd)
@@ -85,7 +96,7 @@ func init() {
 	}
 }
 
-func runSuites(testSuites []suites.Suite, format string) []*suites.SuiteResult {
+func runSuites(testSuites []suites.Suite, format string, opts suites.Options) []*suites.SuiteResult {
 	var (
 		results []*suites.SuiteResult
 		ctx     = context.Background()
@@ -108,7 +119,7 @@ func runSuites(testSuites []suites.Suite, format string) []*suites.SuiteResult {
 		suite = suites.WithClients(suite, runCmdClients)
 		suite = suites.WithProgressReporter(suite, progress)
 
-		result := runSuite(ctx, runID, namespace, suite, i+1, suites.Options{})
+		result := runSuite(ctx, runID, namespace, suite, i+1, opts)
 		results = append(results, &result)
 	}
 	return results

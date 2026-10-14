@@ -4,6 +4,12 @@ The metrics that are used in the different test suites are listed below. The lis
 provides a brief description of the metric, why it is important, and what to watch
 for when analyzing the metric.
 
+## Density
+
+Metrics | Why | Watch For
+------- | --- | ---------
+`kubevirt_vmi_phase_transition_time_from_creation_seconds_bucket{phase="Running"}` (histogram) | Time from VMI creation to `Running` phase — the primary VM boot latency signal | p50, p95, and p99 are reported; p99 climbing relative to p50 indicates tail-latency pressure under load; compare across runs at the same concurrency level
+
 ## Etcd Benchmark
 
 Metrics | Why | Watch For
