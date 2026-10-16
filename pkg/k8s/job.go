@@ -48,6 +48,7 @@ func EnsureJobReady(
 		},
 		Spec: batchv1.JobSpec{
 			ActiveDeadlineSeconds:   new(int64(jobActiveDeadline.Seconds())),
+			BackoffLimit:            new(int32(0)),
 			TTLSecondsAfterFinished: new(int32(ttlAfterFinished.Seconds())),
 			Suspend:                 new(suspend),
 			Template: corev1.PodTemplateSpec{
