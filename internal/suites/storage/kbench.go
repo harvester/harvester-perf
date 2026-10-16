@@ -133,27 +133,26 @@ func (s *KBenchSuite) kbenchPodPVC(
 	opts *KBenchOptions,
 ) *suites.CaseResult {
 	start := time.Now()
-	pvc, cleanupPVC, err := k8s.EnsurePVCReady(
+	pvc, pvcCleanup, err := k8s.CreatePVC(
 		ctx,
 		s.Clients,
 		s.Name(),
 		runID,
 		namespace,
-		opts.PVCReadyTimeout,
 		opts.PVCStorageClassName,
 		opts.PVCStorageSize,
 	)
 	defer func() {
-		if cleanupPVC != nil {
-			if err := cleanupPVC(); err != nil {
+		if pvcCleanup != nil {
+			if err := pvcCleanup(); err != nil {
 				klog.V(3).ErrorS(err, "failed to clean up pvc", "suite", s.Name(), "case", caseName)
 			}
 		}
 	}()
 	if err != nil {
-		return suites.NewCaseResultErrored(s.Name(), start, time.Now(), fmt.Errorf("pvc not ready: %v", err))
+		return suites.NewCaseResultErrored(s.Name(), start, time.Now(), fmt.Errorf("failed to create pvc: %v", err))
 	}
-	klog.V(3).InfoS("pvc is ready\n", "name", pvc.Name, "namespace", pvc.Namespace)
+	klog.V(3).InfoS("pvc is created\n", "name", pvc.Name, "namespace", pvc.Namespace)
 
 	// job spec from https://github.com/longhorn/kbench/blob/main/deploy/fio.yaml
 	overrides := func(job *batchv1.Job) error {
@@ -162,7 +161,7 @@ func (s *KBenchSuite) kbenchPodPVC(
 		return nil
 	}
 
-	job, pod, cleanupJob, err := k8s.EnsureJobCompleted(
+	job, pod, cleanup, err := k8s.EnsureJobCompleted(
 		ctx,
 		s.Clients,
 		s.Name(),
@@ -176,17 +175,29 @@ func (s *KBenchSuite) kbenchPodPVC(
 		opts.JobSuspend,
 		overrides,
 	)
-	if cleanupJob != nil {
-		defer func() {
-			if err := cleanupJob(); err != nil {
+	defer func() {
+		if cleanup != nil {
+			if err := cleanup(); err != nil {
 				klog.V(3).ErrorS(err, "failed to clean up job", "suite", s.Name(), "case", caseName)
 			}
-		}()
-	}
+		}
+	}()
 	if err != nil {
 		return suites.NewCaseResultErrored(s.Name(), start, time.Now(), fmt.Errorf("job not completed: %v", err))
 	}
 	klog.V(3).InfoS("job is completed\n", "name", job.Name, "namespace", job.Namespace, "pod", pod.Name)
+
+	// fetch the latest bound pvc to ensure we have the correct status and volume
+	// name. this is unlikely to return an error since the job has completed.
+	bound, err := k8s.WaitPVCBound(
+		ctx,
+		s.Clients,
+		pvc,
+		opts.PVCBoundTimeout,
+	)
+	if err != nil {
+		return suites.NewCaseResultErrored(s.Name(), start, time.Now(), fmt.Errorf("pvc not bound: %v", err))
+	}
 
 	logOpts := &corev1.PodLogOptions{}
 	result := &suites.PodLogResult{
@@ -208,7 +219,7 @@ func (s *KBenchSuite) kbenchPodPVC(
 		}
 	}
 
-	caseResult := suites.NewCaseResult(caseName, start, time.Now(), nil, nil, job, pod, pvc)
+	caseResult := suites.NewCaseResult(caseName, start, time.Now(), nil, nil, job, pod, bound)
 	caseResult = caseResult.WithPodLogResults([]*suites.PodLogResult{result})
 	return caseResult
 }
@@ -288,8 +299,7 @@ func (s *KBenchSuite) execPromQL(
 		}
 		if err != nil {
 			result.Err = err.Error()
-		}
-		if len(v) == 0 {
+		} else if len(v) == 0 {
 			result.Err = fmt.Sprintf("no samples returned for volume validity check query %q", query)
 		}
 		metricResults = append(metricResults, result)
@@ -403,7 +413,7 @@ type KBenchOptions struct {
 	MonitoringNamespace   string
 	NamespaceReadyTimeout time.Duration
 
-	PVCReadyTimeout     time.Duration
+	PVCBoundTimeout     time.Duration
 	PVCStorageClassName string
 	PVCStorageSize      resource.Quantity
 }

@@ -15,20 +15,18 @@ import (
 	"k8s.io/client-go/tools/watch"
 )
 
-// EnsurePVCReady creates a Kubernetes PersistentVolumeClaim with the specified
-// attributes and waits until the PVC is bound. The spec of the PVC can be
-// modified by providing one or more override functions that take a pointer to
-// the PVC and modify it in place.
+// CreatePVC creates a Kubernetes PersistentVolumeClaim with the specified
+// attributes. The spec of the PVC can be modified by providing one or more
+// override functions that take a pointer to the PVC and modify it in place.
 // It returns the created PVC, a cleanup function to delete the PVC, and an error
 // if any occurred during the process. The call site is responsible for calling
 // the cleanup function to delete the PVC when it is no longer needed.
-func EnsurePVCReady(
+func CreatePVC(
 	ctx context.Context,
 	c *suites.Clients,
 	suiteName string,
 	runID string,
 	namespace string,
-	readyTimeout time.Duration,
 	storageClassName string,
 	storageSize resource.Quantity,
 	overrides ...func(*corev1.PersistentVolumeClaim) error,
@@ -65,7 +63,7 @@ func EnsurePVCReady(
 
 	created, err := c.K8sClientSet.CoreV1().PersistentVolumeClaims(namespace).Create(ctx, pvc, metav1.CreateOptions{})
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create PVC: %w", err)
+		return nil, nil, err
 	}
 
 	cleanup := func() error {
@@ -74,17 +72,29 @@ func EnsurePVCReady(
 		return c.K8sClientSet.CoreV1().PersistentVolumeClaims(namespace).Delete(ctx, created.GetName(), metav1.DeleteOptions{})
 	}
 
+	created.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PersistentVolumeClaim"))
+	return created, cleanup, nil
+}
+
+// WaitPVCBound waits for the specified PersistentVolumeClaim to reach the "Bound" phase.
+func WaitPVCBound(
+	ctx context.Context,
+	c *suites.Clients,
+	pvc *corev1.PersistentVolumeClaim,
+	boundTimeout time.Duration,
+) (*corev1.PersistentVolumeClaim, error) {
 	listWatch := &cache.ListWatch{
 		ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
-			options.FieldSelector = fmt.Sprintf("metadata.name=%s", created.GetName())
-			return c.K8sClientSet.CoreV1().PersistentVolumeClaims(created.GetNamespace()).List(ctx, options)
+			options.FieldSelector = fmt.Sprintf("metadata.name=%s", pvc.GetName())
+			return c.K8sClientSet.CoreV1().PersistentVolumeClaims(pvc.GetNamespace()).List(ctx, options)
 		},
 		WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watchapi.Interface, error) {
-			options.FieldSelector = fmt.Sprintf("metadata.name=%s", created.GetName())
-			return c.K8sClientSet.CoreV1().PersistentVolumeClaims(created.GetNamespace()).Watch(ctx, options)
+			options.FieldSelector = fmt.Sprintf("metadata.name=%s", pvc.GetName())
+			return c.K8sClientSet.CoreV1().PersistentVolumeClaims(pvc.GetNamespace()).Watch(ctx, options)
 		},
 	}
-	ctxWithTimeout, cancel := watch.ContextWithOptionalTimeout(ctx, readyTimeout)
+
+	ctxWithTimeout, cancel := watch.ContextWithOptionalTimeout(ctx, boundTimeout)
 	defer cancel()
 	event, err := watch.UntilWithSync(ctxWithTimeout, listWatch, &corev1.PersistentVolumeClaim{}, nil, func(event watchapi.Event) (bool, error) {
 		pvc, ok := event.Object.(*corev1.PersistentVolumeClaim)
@@ -94,10 +104,10 @@ func EnsurePVCReady(
 		return pvc.Status.Phase == corev1.ClaimBound, nil
 	})
 	if err != nil {
-		return nil, cleanup, fmt.Errorf("pvc %s not ready: %w", created.GetName(), err)
+		return nil, fmt.Errorf("pvc %s not ready: %w", pvc.GetName(), err)
 	}
 
 	latest := event.Object.(*corev1.PersistentVolumeClaim)
 	latest.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PersistentVolumeClaim"))
-	return latest, cleanup, nil
+	return latest, nil
 }

@@ -46,7 +46,7 @@ func TestKBenchOptionsDefaults(t *testing.T) {
 		MonitoringNamespace:   "cattle-monitoring-system",
 		NamespaceReadyTimeout: 300 * time.Second,
 
-		PVCReadyTimeout:     300 * time.Second,
+		PVCBoundTimeout:     300 * time.Second,
 		PVCStorageClassName: "",
 		PVCStorageSize:      resource.MustParse("33Gi"),
 	}

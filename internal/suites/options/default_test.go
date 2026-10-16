@@ -67,7 +67,7 @@ func TestDefaultKBenchOptions(t *testing.T) {
 		"KBenchLimitMem":      "512Mi",
 		"KBenchRequestCPU":    "4",
 		"KBenchRequestMem":    "256Mi",
-		"PVCReadyTimeout":     300 * time.Second,
+		"PVCBoundTimeout":     300 * time.Second,
 		"PVCStorageClassName": "",
 		"PVCStorageSize":      "33Gi",
 	}
@@ -125,7 +125,7 @@ func TestDefaultOptionsFromOptions(t *testing.T) {
 			KBenchLimitMem      resource.Quantity
 			KBenchRequestCPU    resource.Quantity
 			KBenchRequestMem    resource.Quantity
-			PVCReadyTimeout     time.Duration
+			PVCBoundTimeout     time.Duration
 			PVCStorageClassName string
 			PVCStorageSize      string
 		}
@@ -154,7 +154,7 @@ func TestDefaultOptionsFromOptions(t *testing.T) {
 			KBenchLimitMem:      resource.MustParse("512Mi"),
 			KBenchRequestCPU:    resource.MustParse("4"),
 			KBenchRequestMem:    resource.MustParse("256Mi"),
-			PVCReadyTimeout:     300 * time.Second,
+			PVCBoundTimeout:     300 * time.Second,
 			PVCStorageClassName: "",
 			PVCStorageSize:      "33Gi",
 		}

@@ -60,7 +60,7 @@ func DefaultKBenchOptions() *suites.Options {
 		"KBenchLimitMem":      "512Mi",
 		"KBenchRequestCPU":    "4",
 		"KBenchRequestMem":    "256Mi",
-		"PVCReadyTimeout":     300 * time.Second,
+		"PVCBoundTimeout":     300 * time.Second,
 		"PVCStorageClassName": "", // use cluster default storage class
 		"PVCStorageSize":      "33Gi",
 	}

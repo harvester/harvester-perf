@@ -216,7 +216,7 @@ func EnsureJobCompleted(
 		return false, nil
 	})
 	if err != nil {
-		return job, nil, cleanup, err
+		return job, pod, cleanup, err
 	}
 
 	latest := event.Object.(*batchv1.Job)
