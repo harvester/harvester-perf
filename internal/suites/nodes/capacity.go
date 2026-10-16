@@ -229,11 +229,10 @@ func CapacityOptionsDefaults(opts suites.Options) (*CapacityOptions, error) {
 		return nil, err
 	}
 
-	return &CapacityOptions{
-		NamespaceReadyTimeout: sysOpts.NamespaceReadyTimeout,
-		PodActiveDeadline:     sysOpts.PodActiveDeadline,
-		PodImageName:          sysOpts.PodImageName,
-		PodImageTag:           sysOpts.PodImageTag,
-		PodReadyTimeout:       sysOpts.PodReadyTimeout,
-	}, nil
+	o, err := options.FromOptions[*CapacityOptions](options.DefaultNodeCapacityOptions())
+	if err != nil {
+		return nil, err
+	}
+	o.NamespaceReadyTimeout = sysOpts.NamespaceReadyTimeout
+	return o, nil
 }

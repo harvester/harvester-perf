@@ -1,12 +1,27 @@
 package suites
 
-import "time"
+import (
+	"maps"
+	"time"
+)
 
 const DefaultNamespace = "harvester-perf-system"
 
 // Options contains custom options for test suites. The keys are the names of the
 // test suites, and the values are the options for each suite.
 type Options map[string]any
+
+// Merge merges the current Options with another Options, returning a new Options.
+// If a key exists in both Options, the value from the other Options will
+// overwrite the value in the current Options.
+func (o Options) Merge(other Options) *Options {
+	merged := maps.Clone(o)
+	if merged == nil {
+		merged = Options{}
+	}
+	maps.Copy(merged, other)
+	return &merged
+}
 
 // DefaultGlobalOptions returns the default options for the system test suite.
 func DefaultGlobalOptions() *Options {
