@@ -85,7 +85,9 @@ func (s *KBenchSuite) RunE(
 		nodeName, pvcName string
 
 		// the kbenchJobDuration is used to determine the promql query range. it is
-		// calculated as the time since the pod was ready.
+		// calculated as the time since the pod was ready. it captures the time for the
+		// kbench pod to finish its task and additional cleanup time. the overshoot is
+		// acceptable to account for late-arriving scrape samples.
 		kbenchJobDuration time.Duration
 	)
 	for _, obj := range caseResult.Objects {
