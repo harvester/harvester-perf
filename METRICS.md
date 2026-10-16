@@ -29,3 +29,12 @@ Metrics | Why | Watch For
 `kube_pod_container_resource_requests` | CPU and memory reserved by Harvester control-plane pods, per namespace and node | An increase across releases is the primary footprint regression signal — requests are what the scheduler locks away from users, regardless of actual usage
 `kube_node_status_allocatable` | CPU and memory available for user workloads after node-level reservations | A decrease across releases means users have less schedulable capacity — the direct user-visible impact of footprint growth
 `node_memory_MemTotal_bytes` / `node_memory_MemAvailable_bytes` | Host memory capacity and available memory | A sustained drop in `MemAvailable` across releases without a change in `MemTotal` indicates the control plane is consuming more host memory
+
+## Storage
+
+Metrics | Why | Watch For
+------- | --- | ---------
+`longhorn_volume_robustness{state="healthy"}` | Confirm every replica was present and in sync for the whole run | `1` for the whole run. Any sample below `1` during the run means the volume was unhealthy due to either missing replica, replicas rebuild, unhealthy volume etc.
+`longhorn_volume_state{state="attached"}` | Confirm whether the volume stayed attached to the same node throughout  | Any sample below `1`. A detach and reattach means the engine restarted, so `kbench` might see I/O errors  or stalls. More than one `node` label value in the window means a detach and reattach happened.
+`longhorn_instance_manager_cpu_usage_millicpu` | CPU used by the Longhorn datapath (engine and replica) processes on each node. This is the cost invisible to `kbench` and is spread across nodes holding a replica | The raw value includes every other volume's work on the node. Look for spikes in CPU usage that correlate with `kbench` I/O latency spikes. |
+`longhorn_instance_manager_memory_usage_bytes` by node | Memory footprint of Longhorn datapath on each node. Matters for capacity planning, as the number of of volumes increases, Longhorn's memory cost scales with it | Memory that keeps growing during the run, or doesn't return to baseline afterwards. Also watch for large spikes over the baseline, uneven usage distributed across nodes.

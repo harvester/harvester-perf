@@ -117,6 +117,7 @@ is every registered suite.
 | `etcd-benchmark` | read-write | Exercises the cluster's etcd from a privileged `hostNetwork` job pod. |
 | `resource-footprint` | read-only | Measures the cluster's resource footprint: per-namespace CPU/memory usage and requests, host memory, and node allocatable, via Prometheus queries. |
 | `density` | read-write | Import a VM image, ramp up VMs concurrently until failure, and record VMI boot-latency percentiles (p50/p95/p99). |
+| `storage-kbench` | read-write | Run Longhorn's `kbench` job against a fresh PVC to benchmark bandwidth, IOPS and latency, then read the matching Longhorn metrics from Prometheus. |
 
 ## Result types
 
@@ -128,6 +129,7 @@ a case can populate more than one:
 | --- | --- |
 | `CmdResult` | The result of executing a command in a test case — e.g. `exec`-ing into a helper pod. `Stdout`/`Stderr` hold the command's output streams. |
 | `MetricResult` | The result of a Prometheus query run in a test case — e.g. reading etcd metrics after a benchmark. `Samples` holds the returned vector, `Warnings` any promclient warnings. |
+| `PodLogResult` | The logs of a pod in a test case — e.g. the `kbench` job pod's output. `Subject` names the pod, `Logs` holds its output. |
 | `K8sResourceResult` | The result of querying Kubernetes/node resources in a test case — e.g. `node-capacity`'s per-node OS and disk info. `Data` is a flat map of the resource's spec/status attributes. |
 
 ### Errors
@@ -140,11 +142,12 @@ Every result type carries its own `Err`, at a different scope:
 | `CaseResult.Err` | The case failed outside a specific command/query — e.g. a namespace or daemonset never became ready. Setting it marks the case errored immediately, before its `CmdResults`/`MetricResults`/`K8sResourceResults` are even considered. |
 | `CmdResult.Err` | One `exec`'d command failed. |
 | `MetricResult.Err` | One Prometheus query failed. |
+| `PodLogResult.Err` | Fetching one pod's logs failed. |
 | `K8sResourceResult.Err` | One resource query failed (this is the one `error`-typed field; the others are `string`). |
 
 `CaseResult.FinalizeState()` rolls all of the above up into the case's
 `State`: any non-empty `Err`, or any error in `CmdResults`, `MetricResults`,
-or `K8sResourceResults`, marks the case `CaseResultStateErrored`.
+`PodLogResults`, or `K8sResourceResults`, marks the case `CaseResultStateErrored`.
 `NewCaseResult` and the `With*` builders call it for you.
 
 ## Building
@@ -207,8 +210,11 @@ Overrides: `IMAGE_NAME`, `IMAGE_TAG`, `IMAGE_PLATFORMS` (default
 ├── pkg/suites/            # public API: Suite interface, registry, options, results, marshalling
 ├── pkg/k8s/               # cluster helpers the suites share: namespaces, jobs, exec, logs, pod monitors
 ├── internal/suites/
+│   ├── density/           # density suite
 │   ├── etcd/              # etcd-benchmark suite
 │   ├── nodes/             # node-capacity suite
+│   ├── resourcefootprint/ # resource-footprint suite
+│   ├── storage/           # storage-kbench suite
 │   └── options/           # decodes the generic pkg/suites.Options into a suite's own options struct
 ├── poc/                   # shell-based prototype this CLI is being ported from
 ├── METRICS.md             # the metrics the suites collect and how to read them
