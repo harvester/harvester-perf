@@ -133,7 +133,7 @@ func EnsureJobReady(
 		return false, nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return created, nil, err
 	}
 
 	jobPod := event.Object.(*corev1.Pod)
@@ -169,14 +169,19 @@ func EnsureJobCompleted(
 		suspend,
 		overrides...,
 	)
-	if err != nil {
-		return nil, nil, nil, err
-	}
 	cleanup := func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+		if job != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
 
-		return c.K8sClientSet.BatchV1().Jobs(job.GetNamespace()).Delete(ctx, job.GetName(), metav1.DeleteOptions{})
+			return c.K8sClientSet.BatchV1().Jobs(namespace).Delete(ctx, job.GetName(), metav1.DeleteOptions{
+				PropagationPolicy: new(metav1.DeletePropagationForeground),
+			})
+		}
+		return nil
+	}
+	if err != nil {
+		return nil, nil, cleanup, err
 	}
 
 	// job is ready, now wait for it to complete

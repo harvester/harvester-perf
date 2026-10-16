@@ -76,11 +76,11 @@ func EnsurePVCReady(
 
 	listWatch := &cache.ListWatch{
 		ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
-			options.LabelSelector = metav1.FormatLabelSelector(labelSelector)
+			options.FieldSelector = fmt.Sprintf("metadata.name=%s", created.GetName())
 			return c.K8sClientSet.CoreV1().PersistentVolumeClaims(created.GetNamespace()).List(ctx, options)
 		},
 		WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watchapi.Interface, error) {
-			options.LabelSelector = metav1.FormatLabelSelector(labelSelector)
+			options.FieldSelector = fmt.Sprintf("metadata.name=%s", created.GetName())
 			return c.K8sClientSet.CoreV1().PersistentVolumeClaims(created.GetNamespace()).Watch(ctx, options)
 		},
 	}

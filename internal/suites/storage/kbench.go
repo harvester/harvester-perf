@@ -77,15 +77,26 @@ func (s *KBenchSuite) RunE(
 	caseName := "kbench-pod-pvc-full"
 	klog.V(3).InfoS("running kbench pod with pvc\n", "suite", s.Name(), "case", caseName)
 	s.CaseStart(s.Name(), caseName)
-	caseResult, jobDuration := s.kbenchPodPVC(ctx, caseName, runID, namespace, o)
+	caseResult := s.kbenchPodPVC(ctx, caseName, runID, namespace, o)
 	caseResults = append(caseResults, caseResult)
 	s.CaseDone(s.Name(), caseName, caseResult.State, time.Since(caseResult.DateTimeStart))
 
-	var nodeName, pvcName string
+	var (
+		nodeName, pvcName string
+
+		// the kbenchJobDuration is used to determine the promql query range. it is
+		// calculated as the time since the pod was ready.
+		kbenchJobDuration time.Duration
+	)
 	for _, obj := range caseResult.Objects {
 		switch v := obj.(type) {
 		case *corev1.Pod:
 			nodeName = v.Spec.NodeName
+			for _, condition := range v.Status.Conditions {
+				if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
+					kbenchJobDuration = time.Since(condition.LastTransitionTime.Time)
+				}
+			}
 		case *corev1.PersistentVolumeClaim:
 			pvcName = v.GetName()
 		}
@@ -94,7 +105,7 @@ func (s *KBenchSuite) RunE(
 		caseName = caseName + "-monitoring"
 		klog.V(3).InfoS("running monitoring pod on node\n", "suite", s.Name(), "case", caseName, "node", nodeName)
 		s.CaseStart(s.Name(), caseName)
-		caseResult = s.monitoring(ctx, caseName, namespace, nodeName, pvcName, jobDuration, o)
+		caseResult = s.monitoring(ctx, caseName, namespace, nodeName, pvcName, kbenchJobDuration, o)
 		caseResults = append(caseResults, caseResult)
 		s.CaseDone(s.Name(), caseName, caseResult.State, time.Since(caseResult.DateTimeStart))
 	}
@@ -120,7 +131,7 @@ func (s *KBenchSuite) kbenchPodPVC(
 	runID string,
 	namespace string,
 	opts *KBenchOptions,
-) (*suites.CaseResult, time.Duration) {
+) *suites.CaseResult {
 	start := time.Now()
 	pvc, cleanupPVC, err := k8s.EnsurePVCReady(
 		ctx,
@@ -140,7 +151,7 @@ func (s *KBenchSuite) kbenchPodPVC(
 		}
 	}()
 	if err != nil {
-		return suites.NewCaseResultErrored(s.Name(), start, time.Now(), fmt.Errorf("pvc not ready: %v", err)), time.Duration(0)
+		return suites.NewCaseResultErrored(s.Name(), start, time.Now(), fmt.Errorf("pvc not ready: %v", err))
 	}
 	klog.V(3).InfoS("pvc is ready\n", "name", pvc.Name, "namespace", pvc.Namespace)
 
@@ -151,7 +162,6 @@ func (s *KBenchSuite) kbenchPodPVC(
 		return nil
 	}
 
-	jobStart := time.Now()
 	job, pod, cleanupJob, err := k8s.EnsureJobCompleted(
 		ctx,
 		s.Clients,
@@ -166,7 +176,6 @@ func (s *KBenchSuite) kbenchPodPVC(
 		opts.JobSuspend,
 		overrides,
 	)
-	jobDuration := time.Since(jobStart)
 	if cleanupJob != nil {
 		defer func() {
 			if err := cleanupJob(); err != nil {
@@ -175,7 +184,7 @@ func (s *KBenchSuite) kbenchPodPVC(
 		}()
 	}
 	if err != nil {
-		return suites.NewCaseResultErrored(s.Name(), start, time.Now(), fmt.Errorf("job not completed: %v", err)), jobDuration
+		return suites.NewCaseResultErrored(s.Name(), start, time.Now(), fmt.Errorf("job not completed: %v", err))
 	}
 	klog.V(3).InfoS("job is completed\n", "name", job.Name, "namespace", job.Namespace, "pod", pod.Name)
 
@@ -201,7 +210,7 @@ func (s *KBenchSuite) kbenchPodPVC(
 
 	caseResult := suites.NewCaseResult(caseName, start, time.Now(), nil, nil, job, pod, pvc)
 	caseResult = caseResult.WithPodLogResults([]*suites.PodLogResult{result})
-	return caseResult, jobDuration
+	return caseResult
 }
 
 func (s *KBenchSuite) monitoring(
@@ -270,9 +279,23 @@ func (s *KBenchSuite) execPromQL(
 		fmt.Sprintf(`sum(avg_over_time(longhorn_instance_manager_memory_usage_bytes{namespace='%s'}[%ds])) by (node)`, opts.LonghornNamespace, queryRange),
 	}
 
-	queries := append(validityCheckQueries, overheadQueries...)
 	var metricResults []*suites.MetricResult
-	for _, query := range queries {
+	for _, query := range validityCheckQueries {
+		v, _, err := prom.RunInstant(ctx, s.PromClient, query)
+		result := &suites.MetricResult{
+			Query:   query,
+			Samples: v,
+		}
+		if err != nil {
+			result.Err = err.Error()
+		}
+		if len(v) == 0 {
+			result.Err = fmt.Sprintf("no samples returned for volume validity check query %q", query)
+		}
+		metricResults = append(metricResults, result)
+	}
+
+	for _, query := range overheadQueries {
 		v, _, err := prom.RunInstant(ctx, s.PromClient, query)
 		result := &suites.MetricResult{
 			Query:   query,
