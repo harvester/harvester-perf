@@ -21,6 +21,7 @@ var (
 	monitoringServiceURL string
 	configFile           string
 	progress             *suites.ProgressReporter
+	runOptions           = map[string]suites.Options{}
 )
 
 // runCmd represents the run command
@@ -41,13 +42,18 @@ Use 'all' to run every registered test suite, both "read-only" and "read-write".
 			return err
 		}
 		runCmdClients = clientSets
+
+		if configFile != "" {
+			ro, err := loadRunOptions(configFile)
+			if err != nil {
+				return err
+			}
+			runOptions = ro
+		}
+
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		runOptions, err := loadRunOptions(configFile)
-		if err != nil {
-			return err
-		}
 		argSuites := strings.Split(args[0], ",")
 		testSuites := suites.Find(argSuites)
 		outputFormat := *k8sPrintFlags.OutputFormat
@@ -64,10 +70,6 @@ var runAllCmd = &cobra.Command{
 Every registered test suite is run, both "read-only" and "read-write".
 "read-write" test suites create or modify resources in the cluster.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		runOptions, err := loadRunOptions(configFile)
-		if err != nil {
-			return err
-		}
 		testSuites := suites.All()
 		outputFormat := *k8sPrintFlags.OutputFormat
 		results := runSuites(testSuites, outputFormat, runOptions)
@@ -87,7 +89,7 @@ func init() {
 	runCmd.PersistentFlags().StringVar(&monitoringServiceURL, "monitoring-url", "",
 		"Prometheus HTTP API base URL. Defaults to the in-cluster Prometheus service proxy.")
 	runCmd.PersistentFlags().StringVar(&configFile, "config", "",
-		"Optional path to config file (YAML). Omit to use global defaults.")
+		"Path to config file (YAML) used to override test suite default parameters. If omitted, the test suite default parameters are used.")
 
 	k8sConfigFlags.AddFlags(runCmd.PersistentFlags())
 	k8sPrintFlags.AddFlags(runCmd)
@@ -96,7 +98,7 @@ func init() {
 	}
 }
 
-func runSuites(testSuites []suites.Suite, format string, opts suites.Options) []*suites.SuiteResult {
+func runSuites(testSuites []suites.Suite, format string, opts map[string]suites.Options) []*suites.SuiteResult {
 	var (
 		results []*suites.SuiteResult
 		ctx     = context.Background()
@@ -113,13 +115,17 @@ func runSuites(testSuites []suites.Suite, format string, opts suites.Options) []
 			runCmdClients.K8sClientSet.CoreV1().Namespaces().Delete(context.Background(), namespace, metav1.DeleteOptions{})
 		}
 	}()
-
 	progress = suites.NewProgressReporter(os.Stderr, runID, len(testSuites))
+
 	for i, suite := range testSuites {
+		suiteOptions := suites.Options{}
+		if o, exists := opts[suite.Name()]; exists {
+			suiteOptions = o
+		}
+
 		suite = suites.WithClients(suite, runCmdClients)
 		suite = suites.WithProgressReporter(suite, progress)
-
-		result := runSuite(ctx, runID, namespace, suite, i+1, opts)
+		result := runSuite(ctx, runID, namespace, suite, i+1, suiteOptions)
 		results = append(results, &result)
 	}
 	return results

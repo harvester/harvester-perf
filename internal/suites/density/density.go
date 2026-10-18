@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	pkgoptions "github.com/harvester/hvperf/internal/suites/options"
 	pkgk8s "github.com/harvester/hvperf/pkg/k8s"
 	pkgprom "github.com/harvester/hvperf/pkg/prometheus"
 	"github.com/harvester/hvperf/pkg/resource"
@@ -18,8 +17,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/kubectl/pkg/util/podutils"
 	"k8s.io/klog/v2"
+	"k8s.io/kubectl/pkg/util/podutils"
 )
 
 const (
@@ -77,19 +76,9 @@ func (s *DensitySuite) Description() string {
 func (s *DensitySuite) IsReadWrite() bool                     { return true }
 func (s *DensitySuite) SetClients(clients *pkgsuites.Clients) { s.Clients = clients }
 
-type densityGlobalOpts struct {
-	EtcdNamespace         string        `json:"EtcdNamespace"`
-	NamespaceReadyTimeout time.Duration `json:"NamespaceReadyTimeout"`
-}
-
 func (s *DensitySuite) RunE(ctx context.Context, runID, namespace string, opts pkgsuites.Options) (result pkgsuites.SuiteResult) {
 	result = pkgsuites.SuiteResult{Name: s.Name(), RunID: runID}
-	global, err := pkgoptions.FromOptions[densityGlobalOpts](&opts)
-	if err != nil {
-		result.Err = err.Error()
-		return result
-	}
-	o, err := pkgoptions.DecodeSection(opts, s.Name(), DefaultOptions())
+	o, err := NewOptions(opts)
 	if err != nil {
 		result.Err = err.Error()
 		return result
@@ -101,7 +90,7 @@ func (s *DensitySuite) RunE(ctx context.Context, runID, namespace string, opts p
 	if params, err := pkgsuites.ToSuiteParams(o); err == nil {
 		result.Params = params
 	}
-	if _, err := pkgk8s.EnsureNamespace(ctx, s.Clients, namespace, global.NamespaceReadyTimeout); err != nil {
+	if _, err := pkgk8s.EnsureNamespace(ctx, s.Clients, namespace, o.NamespaceReadyTimeout); err != nil {
 		return pkgsuites.SuiteResult{
 			Name:  s.Name(),
 			RunID: runID,
@@ -117,7 +106,7 @@ func (s *DensitySuite) RunE(ctx context.Context, runID, namespace string, opts p
 	}
 
 	runStart := time.Now()
-	caseResult, _ := s.createVMIsUntilFailure(ctx, o, namespace, runID, global.EtcdNamespace)
+	caseResult, _ := s.createVMIsUntilFailure(ctx, o, namespace, runID, o.EtcdNamespace)
 	result.Results = append(result.Results, caseResult)
 	metricResult, err := s.collectDensityMetrics(ctx, runStart)
 	result.Results = append(result.Results, metricResult)

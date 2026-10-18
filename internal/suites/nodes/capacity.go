@@ -62,7 +62,7 @@ func (s *NodeCapacitySuite) RunE(ctx context.Context, runID, namespace string, o
 		{
 			caseName: "node disk info",
 			caseFunc: func(ctx context.Context, caseName string) *suites.CaseResult {
-				o, err := CapacityOptionsDefaults(opts)
+				o, err := NewCapacityOptions(opts)
 				if err != nil {
 					return suites.NewCaseResultErrored(caseName, time.Now(), time.Now(), err)
 				}
@@ -156,6 +156,7 @@ func (s *NodeCapacitySuite) execNodeDiskInfo(
 	}
 	klog.V(3).InfoS("namespace is ready", "name", namespace, "suite", s.Name(), "case", caseName)
 
+	start := time.Now()
 	ds, pods, cleanup, err := k8s.EnsureDaemonSetReady(
 		ctx,
 		s.Clients,
@@ -179,7 +180,6 @@ func (s *NodeCapacitySuite) execNodeDiskInfo(
 	klog.V(3).InfoS("daemonset is ready", "name", ds.Name, "readyPodCount", ds.Status.NumberReady, "suite", s.Name(), "case", caseName)
 
 	var cmdResults []*suites.CmdResult
-	start := time.Now()
 	cmds := [][]string{
 		{"nsenter", "--target", "1", "--mount", "--", "lsblk", "-o", "NAME,KNAME,SIZE,FSTYPE,LABEL,MOUNTPOINT,TYPE,PKNAME"},
 	}
@@ -223,16 +223,9 @@ type CapacityOptions struct {
 	PodReadyTimeout       time.Duration
 }
 
-func CapacityOptionsDefaults(opts suites.Options) (*CapacityOptions, error) {
-	sysOpts, err := options.FromOptions[*CapacityOptions](&opts)
-	if err != nil {
-		return nil, err
-	}
-
-	o, err := options.FromOptions[*CapacityOptions](options.DefaultNodeCapacityOptions())
-	if err != nil {
-		return nil, err
-	}
-	o.NamespaceReadyTimeout = sysOpts.NamespaceReadyTimeout
-	return o, nil
+func NewCapacityOptions(override suites.Options) (*CapacityOptions, error) {
+	runOpts := options.DefaultGlobalOptions().
+		Merge(options.DefaultNodeCapacityOptions()).
+		Merge(override)
+	return options.FromOptions[*CapacityOptions](runOpts)
 }

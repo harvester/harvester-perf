@@ -4,20 +4,23 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/harvester/hvperf/pkg/suites"
 )
 
 func TestLoadRunOptionsOverridesGlobalsAndPreservesSections(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hvperf.yaml")
 	config := `
-EtcdNamespace: custom-etcd
-example-suite:
-  enabled: true
-  workload:
-    name: sample
+density:
+  EtcdNamespace: custom-etcd
+  densityDuration: "5s"
+  example-suite:
+    enabled: true
+    suiteDuration: "10s"
+    workload:
+      name: sample
 `
 	if err := os.WriteFile(path, []byte(config), 0o600); err != nil {
 		t.Fatal(err)
@@ -27,25 +30,26 @@ example-suite:
 		t.Fatal(err)
 	}
 
-	want := *suites.DefaultGlobalOptions()
-	want["EtcdNamespace"] = "custom-etcd"
-	want["example-suite"] = suites.Options{
-		"enabled": true,
-		"workload": suites.Options{
-			"name": "sample",
+	want := map[string]suites.Options{
+		"density": {
+			"EtcdNamespace":   "custom-etcd",
+			"densityDuration": "5s",
+			"example-suite": suites.Options{
+				"enabled":       true,
+				"suiteDuration": "10s",
+				"workload": suites.Options{
+					"name": "sample",
+				},
+			},
 		},
 	}
-	if !reflect.DeepEqual(opts, want) {
-		t.Fatalf("options:\n got  %#v\n want %#v", opts, want)
+	if diff := cmp.Diff(want, opts); diff != "" {
+		t.Fatalf("loadRunOptions() mismatch (-want +got):\n%s", diff)
 	}
 }
 
 func TestLoadRunOptionsOptionalConfig(t *testing.T) {
 	t.Chdir(t.TempDir())
-	opts, err := loadRunOptions("")
-	if err != nil || !reflect.DeepEqual(opts, *suites.DefaultGlobalOptions()) {
-		t.Fatalf("default options = %#v, err = %v", opts, err)
-	}
 	if _, err := loadRunOptions("./hvperf.yaml"); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("explicit missing config error = %v", err)
 	}

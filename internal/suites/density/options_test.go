@@ -1,41 +1,41 @@
 package density
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
-	pkgoptions "github.com/harvester/hvperf/internal/suites/options"
-	pkgsuites "github.com/harvester/hvperf/pkg/suites"
+	"github.com/google/go-cmp/cmp"
+	"github.com/harvester/hvperf/pkg/resource"
+	"github.com/harvester/hvperf/pkg/suites"
 )
 
-func TestDecodeOptionsUsesDefaultsWhenSectionMissing(t *testing.T) {
-	got, err := pkgoptions.DecodeSection(pkgsuites.Options{}, "density", DefaultOptions())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := DefaultOptions(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("options:\n got  %+v\n want %+v", got, want)
-	}
-}
-
 func TestDecodeOptionsOverridesProvidedFields(t *testing.T) {
-	opts := pkgsuites.Options{
-		"density": pkgsuites.Options{
-			"batchWaitTimeout": "90s",
-			"vmi": pkgsuites.Options{
-				"cpu": "200m",
-			},
+	override := suites.Options{
+		"BatchWaitTimeout": "90s",
+		"MaxVMs":           1000,
+		"VMI": suites.Options{
+			"CPU": "200m",
 		},
 	}
-	got, err := pkgoptions.DecodeSection(opts, "density", DefaultOptions())
+	got, err := NewOptions(override)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("NewOptions() error = %v, want nil", err)
 	}
-	want := DefaultOptions()
-	want.BatchWaitTimeout = 90 * time.Second
-	want.VMI.CPU = "200m"
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("options:\n got  %+v\n want %+v", got, want)
+
+	want := Options{
+		BatchSize:             10,
+		BatchWaitTimeout:      90 * time.Second,
+		EtcdNamespace:         "kube-system",
+		MaxVMs:                1000,
+		NamespaceReadyTimeout: 300 * time.Second,
+		VMI: resource.VMI{
+			ContainerDisk: "quay.io/kubevirt/cirros-container-disk-demo:latest",
+			Memory:        "90Mi",
+			CPU:           "200m",
+		},
+	}
+
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("NewOptions() mismatch (-want +got):\n%s", diff)
 	}
 }

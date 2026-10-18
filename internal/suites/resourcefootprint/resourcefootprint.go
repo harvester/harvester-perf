@@ -8,7 +8,7 @@ import (
 	"github.com/harvester/hvperf/internal/suites/options"
 	"github.com/harvester/hvperf/pkg/k8s"
 	pkgprom "github.com/harvester/hvperf/pkg/prometheus"
-	pkgsuites "github.com/harvester/hvperf/pkg/suites"
+	"github.com/harvester/hvperf/pkg/suites"
 )
 
 const (
@@ -31,17 +31,17 @@ const (
 	queryAllocMem = `kube_node_status_allocatable{resource="memory"}`
 )
 
-var _ pkgsuites.Suite = &ResourceFootprintSuite{}
+var _ suites.Suite = &ResourceFootprintSuite{}
 
 func init() {
 	suite := &ResourceFootprintSuite{}
 	suite.Marshal = suite
-	pkgsuites.Register(suite)
+	suites.Register(suite)
 }
 
 type ResourceFootprintSuite struct {
-	pkgsuites.SuiteMarshaler
-	*pkgsuites.Clients
+	suites.SuiteMarshaler
+	*suites.Clients
 }
 
 type resourceFootprintOptions struct {
@@ -49,7 +49,7 @@ type resourceFootprintOptions struct {
 	MonitoringNamespace string
 }
 
-func (s *ResourceFootprintSuite) SetProgressReporter(_ *pkgsuites.ProgressReporter) {}
+func (s *ResourceFootprintSuite) SetProgressReporter(_ *suites.ProgressReporter) {}
 func (s *ResourceFootprintSuite) Name() string {
 	return "resource-footprint"
 }
@@ -57,15 +57,15 @@ func (s *ResourceFootprintSuite) Name() string {
 func (s *ResourceFootprintSuite) Description() string {
 	return "measure the resource footprint of the cluster"
 }
-func (s *ResourceFootprintSuite) IsReadWrite() bool                     { return false }
-func (s *ResourceFootprintSuite) SetClients(clients *pkgsuites.Clients) { s.Clients = clients }
+func (s *ResourceFootprintSuite) IsReadWrite() bool                  { return false }
+func (s *ResourceFootprintSuite) SetClients(clients *suites.Clients) { s.Clients = clients }
 
-func (s *ResourceFootprintSuite) measure(ctx context.Context, queries ...string) *pkgsuites.CaseResult {
-	metrics := make([]*pkgsuites.MetricResult, 0, len(queries))
+func (s *ResourceFootprintSuite) measure(ctx context.Context, queries ...string) *suites.CaseResult {
+	metrics := make([]*suites.MetricResult, 0, len(queries))
 	start := time.Now()
 	for _, query := range queries {
 		samples, warnings, err := pkgprom.RunInstant(ctx, s.Clients.PromClient, query)
-		metric := &pkgsuites.MetricResult{
+		metric := &suites.MetricResult{
 			Query:    query,
 			Samples:  samples,
 			Warnings: warnings,
@@ -76,51 +76,52 @@ func (s *ResourceFootprintSuite) measure(ctx context.Context, queries ...string)
 		metrics = append(metrics, metric)
 	}
 
-	return pkgsuites.NewCaseResult("", start, time.Now(), nil, metrics)
+	return suites.NewCaseResult("", start, time.Now(), nil, metrics)
 }
 
-func (s *ResourceFootprintSuite) measureNamespaceUsage(ctx context.Context) *pkgsuites.CaseResult {
+func (s *ResourceFootprintSuite) measureNamespaceUsage(ctx context.Context) *suites.CaseResult {
 	return s.measure(ctx, queryNsCPU, queryNsMem)
 }
 
-func (s *ResourceFootprintSuite) measureNamespaceResourceRequests(ctx context.Context) *pkgsuites.CaseResult {
+func (s *ResourceFootprintSuite) measureNamespaceResourceRequests(ctx context.Context) *suites.CaseResult {
 	return s.measure(ctx, queryRequestCPU, queryRequestMem)
 }
 
-func (s *ResourceFootprintSuite) measureHostMemory(ctx context.Context) *pkgsuites.CaseResult {
+func (s *ResourceFootprintSuite) measureHostMemory(ctx context.Context) *suites.CaseResult {
 	return s.measure(ctx, queryHostMemTotal, queryHostMemAvailable)
 }
 
-func (s *ResourceFootprintSuite) measureNodeAllocatable(ctx context.Context) *pkgsuites.CaseResult {
+func (s *ResourceFootprintSuite) measureNodeAllocatable(ctx context.Context) *suites.CaseResult {
 	return s.measure(ctx, queryAllocCPU, queryAllocMem)
 }
 
-func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, opts pkgsuites.Options) pkgsuites.SuiteResult {
+func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, opts suites.Options) suites.SuiteResult {
 	cases := []struct {
 		name    string
-		measure func() *pkgsuites.CaseResult
+		measure func() *suites.CaseResult
 	}{
 		{
 			name:    "per-namespace resource usage",
-			measure: func() *pkgsuites.CaseResult { return s.measureNamespaceUsage(ctx) },
+			measure: func() *suites.CaseResult { return s.measureNamespaceUsage(ctx) },
 		},
 		{
 			name:    "per-namespace resource requests",
-			measure: func() *pkgsuites.CaseResult { return s.measureNamespaceResourceRequests(ctx) },
+			measure: func() *suites.CaseResult { return s.measureNamespaceResourceRequests(ctx) },
 		},
 		{
 			name:    "host memory",
-			measure: func() *pkgsuites.CaseResult { return s.measureHostMemory(ctx) },
+			measure: func() *suites.CaseResult { return s.measureHostMemory(ctx) },
 		},
 		{
 			name:    "node allocatable resources",
-			measure: func() *pkgsuites.CaseResult { return s.measureNodeAllocatable(ctx) },
+			measure: func() *suites.CaseResult { return s.measureNodeAllocatable(ctx) },
 		},
 	}
 
-	monitoringOpts, err := options.FromOptions[*resourceFootprintOptions](&opts)
+	merged := options.DefaultGlobalOptions().Merge(opts)
+	monitoringOpts, err := options.FromOptions[*resourceFootprintOptions](merged)
 	if err != nil {
-		return pkgsuites.SuiteResult{
+		return suites.SuiteResult{
 			Name:  s.Name(),
 			RunID: runID,
 			Err:   err.Error(),
@@ -128,28 +129,28 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, opts
 	}
 	enabled, err := k8s.MonitoringEnabled(ctx, s.Clients, monitoringOpts.MonitoringNamespace, monitoringOpts.MonitoringAddonName)
 	if err != nil {
-		return pkgsuites.SuiteResult{
+		return suites.SuiteResult{
 			Name:  s.Name(),
 			RunID: runID,
 			Err:   fmt.Sprintf("monitoring add-on not enabled: %s", err.Error()),
 		}
 	}
 	if !enabled {
-		return pkgsuites.SuiteResult{
+		return suites.SuiteResult{
 			Name:  s.Name(),
 			Err:   "monitoring add-on not enabled",
 			RunID: runID,
 		}
 	}
 
-	results := make([]*pkgsuites.CaseResult, 0, len(cases))
+	results := make([]*suites.CaseResult, 0, len(cases))
 	for _, c := range cases {
 		caseResult := c.measure()
 		caseResult.CaseName = c.name
 		results = append(results, caseResult)
 	}
 
-	return pkgsuites.SuiteResult{
+	return suites.SuiteResult{
 		Name:    s.Name(),
 		RunID:   runID,
 		Results: results,

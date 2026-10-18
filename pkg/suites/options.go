@@ -2,7 +2,6 @@ package suites
 
 import (
 	"maps"
-	"time"
 )
 
 const DefaultNamespace = "harvester-perf-system"
@@ -13,36 +12,33 @@ type Options map[string]any
 
 // Merge merges the current Options with another Options, returning a new Options.
 // If a key exists in both Options, the value from the other Options will
-// overwrite the value in the current Options.
-func (o Options) Merge(other Options) *Options {
-	merged := maps.Clone(o)
-	if merged == nil {
-		merged = Options{}
+// overwrite the value in the current Options. Nested Options will be merged
+// recursively.
+func (o Options) Merge(other Options) Options {
+	merged := Options{}
+	maps.Copy(merged, o)
+
+	// iterate over the other Options to identify nested Options. if the same nested
+	// Options also exists in merged, merge them recursively with the other Options
+	// taking precedence. otherwise, just copy the value to merged.
+	for k, v := range other {
+		src, srcIsOptions := isOptions(v)
+		dst, dstIsOptions := isOptions(merged[k])
+		if srcIsOptions && dstIsOptions {
+			merged[k] = dst.Merge(src)
+			continue
+		}
+		merged[k] = v
 	}
-	maps.Copy(merged, other)
-	return &merged
+	return merged
 }
 
-// DefaultGlobalOptions returns the default options for the system test suite.
-func DefaultGlobalOptions() *Options {
-	return &Options{
-		"EtcdNamespace":                   "kube-system",
-		"EtcdReadyTimeout":                300 * time.Second,
-		"JobActiveDeadline":               3600 * time.Second,
-		"JobPodContainerName":             "benchmark",
-		"JobPodImageName":                 "registry.suse.com/bci/bci-base",
-		"JobPodImageTag":                  "latest",
-		"JobPodTTLAfterFinished":          300 * time.Second,
-		"JobPodReadyTimeout":              3600 * time.Second,
-		"JobSuspend":                      false,
-		"MonitoringAddonName":             "rancher-monitoring",
-		"MonitoringNamespace":             "cattle-monitoring-system",
-		"MonitoringRangeDuration":         300 * time.Second,
-		"MonitoringWaitPodMonitorTimeout": 600 * time.Second, // 2x the EtcdRangeDuration to allow for Prometheus to scrape etcd metrics
-		"NamespaceReadyTimeout":           300 * time.Second, // accommodate for cleanup in back-to-back test runs
-		"PodActiveDeadline":               3600 * time.Second,
-		"PodImageName":                    "registry.suse.com/bci/bci-base",
-		"PodImageTag":                     "latest",
-		"PodReadyTimeout":                 3600 * time.Second,
+func isOptions(v any) (Options, bool) {
+	switch m := v.(type) {
+	case Options:
+		return m, true
+	case map[string]any:
+		return m, true
 	}
+	return nil, false
 }

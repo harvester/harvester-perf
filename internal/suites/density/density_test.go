@@ -10,9 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/harvester/hvperf/internal/suites/options"
 	pkgprom "github.com/harvester/hvperf/pkg/prometheus"
 	"github.com/harvester/hvperf/pkg/resource"
-	pkgsuites "github.com/harvester/hvperf/pkg/suites"
+	"github.com/harvester/hvperf/pkg/suites"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -65,7 +66,7 @@ func TestDynamicQueriesUseVMIRunning(t *testing.T) {
 func TestCountRunningVMIs(t *testing.T) {
 	objs := []runtime.Object{vmiWithPhase("run-vmi-0", "Running"), vmiWithPhase("run-vmi-1", "Pending"), vmiWithPhase("run-vmi-2", "Running")}
 	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{resource.VMIGVR: "VirtualMachineInstanceList"}, objs...)
-	s := &DensitySuite{Clients: &pkgsuites.Clients{DynClientSet: dyn}}
+	s := &DensitySuite{Clients: &suites.Clients{DynClientSet: dyn}}
 	running, err := s.countRunningVMIs(context.Background(), "ns", "run")
 	if err != nil {
 		t.Fatal(err)
@@ -80,9 +81,9 @@ func TestRunEReturnsNamespaceSetupError(t *testing.T) {
 	client.PrependReactor("patch", "namespaces", func(k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("namespace unavailable")
 	})
-	s := &DensitySuite{Clients: &pkgsuites.Clients{K8sClientSet: client}}
+	s := &DensitySuite{Clients: &suites.Clients{K8sClientSet: client}}
 
-	result := s.RunE(context.Background(), "run", "benchmark", *pkgsuites.DefaultGlobalOptions())
+	result := s.RunE(context.Background(), "run", "benchmark", options.DefaultGlobalOptions())
 	if result.Name != s.Name() || result.RunID != "run" || !strings.Contains(result.Err, "namespace benchmark not ready: namespace unavailable") {
 		t.Fatalf("result = %+v", result)
 	}
@@ -90,7 +91,7 @@ func TestRunEReturnsNamespaceSetupError(t *testing.T) {
 
 func TestCreateVMIsInBatchesStopsOnFailure(t *testing.T) {
 	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{resource.VMIGVR: "VirtualMachineInstanceList", corev1.SchemeGroupVersion.WithResource("pods"): "PodList"})
-	s := &DensitySuite{Clients: &pkgsuites.Clients{DynClientSet: dyn, K8sClientSet: healthyClient()}}
+	s := &DensitySuite{Clients: &suites.Clients{DynClientSet: dyn, K8sClientSet: healthyClient()}}
 	o := Options{BatchSize: 2, BatchWaitTimeout: 100 * time.Millisecond, VMI: resource.VMI{ContainerDisk: "img", Memory: "64Mi", CPU: "100m"}}
 	max, capacityStop, runErr := s.createVMIsInBatches(context.Background(), o, "ns", "run", "kube-system")
 	if !errors.Is(capacityStop, context.DeadlineExceeded) || runErr != nil || max != 0 {
@@ -109,10 +110,10 @@ func TestCapacityIncludesSchedulingError(t *testing.T) {
 		action.(k8stesting.CreateAction).GetObject().(*unstructured.Unstructured).SetUID("vmi-uid")
 		return false, nil, nil
 	})
-	s := &DensitySuite{Clients: &pkgsuites.Clients{DynClientSet: dyn, K8sClientSet: healthyClient()}}
+	s := &DensitySuite{Clients: &suites.Clients{DynClientSet: dyn, K8sClientSet: healthyClient()}}
 	o := Options{BatchSize: 2, BatchWaitTimeout: 100 * time.Millisecond, VMI: resource.VMI{ContainerDisk: "img", Memory: "64Mi", CPU: "100m"}}
 	result, capacity := s.createVMIsUntilFailure(context.Background(), o, "ns", "run", "kube-system")
-	if !strings.Contains(capacity.Err, "Insufficient memory") || capacity.Max != 0 || result.State != pkgsuites.CaseResultStatePassed {
+	if !strings.Contains(capacity.Err, "Insufficient memory") || capacity.Max != 0 || result.State != suites.CaseResultStatePassed {
 		t.Fatalf("capacity = %+v, state = %s", capacity, result.State)
 	}
 }
@@ -157,7 +158,7 @@ func TestBatchCapacityOnlyAdvancesAfterFullHealthyBatch(t *testing.T) {
 				_ = unstructured.SetNestedField(obj.Object, "Running", "status", "phase")
 				return false, nil, nil
 			})
-			s := &DensitySuite{Clients: &pkgsuites.Clients{DynClientSet: dyn, K8sClientSet: k8s}}
+			s := &DensitySuite{Clients: &suites.Clients{DynClientSet: dyn, K8sClientSet: k8s}}
 			o := Options{BatchSize: 2, MaxVMs: 7, BatchWaitTimeout: time.Second, VMI: resource.VMI{ContainerDisk: "img", Memory: "64Mi", CPU: "100m"}}
 			result, capacity := s.createVMIsUntilFailure(context.Background(), o, "ns", "run", "kube-system")
 			want := 4
@@ -175,9 +176,9 @@ func TestBatchCapacityOnlyAdvancesAfterFullHealthyBatch(t *testing.T) {
 			if capacity.Max != want || (capacity.Err != "") != capacityStop {
 				t.Fatalf("capacity = %+v, want Max=%d", capacity, want)
 			}
-			wantState := pkgsuites.CaseResultStatePassed
+			wantState := suites.CaseResultStatePassed
 			if runFailure {
-				wantState = pkgsuites.CaseResultStateErrored
+				wantState = suites.CaseResultStateErrored
 			}
 			if result.CapacityResults[0] != capacity || result.State != wantState || (result.Err != "") != runFailure {
 				t.Fatalf("capacity result = %+v", result)
@@ -187,7 +188,7 @@ func TestBatchCapacityOnlyAdvancesAfterFullHealthyBatch(t *testing.T) {
 			}
 			capacity.CleanupErr = "cleanup failed"
 			result.FinalizeState()
-			if result.State != pkgsuites.CaseResultStateErrored {
+			if result.State != suites.CaseResultStateErrored {
 				t.Fatal("cleanup error must fail case")
 			}
 		})
@@ -199,7 +200,10 @@ func TestRampExecutionErrorsFailCase(t *testing.T) {
 		t.Run(failure, func(t *testing.T) {
 			client := healthyClient()
 			dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{resource.VMIGVR: "VirtualMachineInstanceList", corev1.SchemeGroupVersion.WithResource("pods"): "PodList"})
-			o := DefaultOptions()
+			o, err := NewOptions(suites.Options{})
+			if err != nil {
+				t.Fatal("unexpected error creating default options:", err)
+			}
 			o.BatchSize, o.MaxVMs, o.BatchWaitTimeout = 1, 1, 100*time.Millisecond
 			ctx := context.Background()
 			wantErr := "API unavailable"
@@ -259,9 +263,9 @@ func TestRampExecutionErrorsFailCase(t *testing.T) {
 				}
 				return false, nil, nil
 			})
-			s := &DensitySuite{Clients: &pkgsuites.Clients{DynClientSet: dyn, K8sClientSet: client}}
+			s := &DensitySuite{Clients: &suites.Clients{DynClientSet: dyn, K8sClientSet: client}}
 			result, capacity := s.createVMIsUntilFailure(ctx, o, "ns", "run", "kube-system")
-			if result.State != pkgsuites.CaseResultStateErrored || !strings.Contains(result.Err, wantErr) || capacity.Max != 0 || capacity.Err != "" {
+			if result.State != suites.CaseResultStateErrored || !strings.Contains(result.Err, wantErr) || capacity.Max != 0 || capacity.Err != "" {
 				t.Fatalf("case = %+v, capacity = %+v, want execution ERROR containing %q", result, capacity, wantErr)
 			}
 		})
@@ -272,7 +276,7 @@ func TestHealthGate(t *testing.T) {
 	for _, failure := range []string{"none", "not-ready", "pressure", "restart", "pending", "completed", "replaced", "added", "handler-restart", "operator-pending", "deleted", "empty-services", "renamed", "list-nodes", "list-pods"} {
 		t.Run(failure, func(t *testing.T) {
 			client := healthyClient()
-			s := &DensitySuite{Clients: &pkgsuites.Clients{K8sClientSet: client}}
+			s := &DensitySuite{Clients: &suites.Clients{K8sClientSet: client}}
 			ctx := context.Background()
 			podName := "virt-api-0"
 			if failure == "handler-restart" {
@@ -378,9 +382,9 @@ func TestCollectDensityMetricsError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &DensitySuite{Clients: &pkgsuites.Clients{PromClient: api}}
+	s := &DensitySuite{Clients: &suites.Clients{PromClient: api}}
 	result, err := s.collectDensityMetrics(context.Background(), time.Now())
-	if err == nil || result.Err != err.Error() || result.State != pkgsuites.CaseResultStateErrored {
+	if err == nil || result.Err != err.Error() || result.State != suites.CaseResultStateErrored {
 		t.Fatalf("metrics result = %+v, err = %v", result, err)
 	}
 }

@@ -5,27 +5,26 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/harvester/hvperf/internal/suites/options"
 	"github.com/harvester/hvperf/pkg/resource"
+	"github.com/harvester/hvperf/pkg/suites"
 )
 
 // Options is the density block of hvperf.yaml.
 type Options struct {
-	BatchSize        int           `yaml:"batchSize"`
-	MaxVMs           int           `yaml:"maxVMs"`
-	BatchWaitTimeout time.Duration `yaml:"batchWaitTimeout"`
-	VMI              resource.VMI  `yaml:"vmi"`
+	BatchSize             int           `yaml:"batchSize"`
+	BatchWaitTimeout      time.Duration `yaml:"batchWaitTimeout"`
+	EtcdNamespace         string        `yaml:"etcdNamespace"`
+	MaxVMs                int           `yaml:"maxVMs"`
+	NamespaceReadyTimeout time.Duration `yaml:"namespaceReadyTimeout"`
+	VMI                   resource.VMI  `yaml:"vmi"`
 }
 
-func DefaultOptions() Options {
-	return Options{
-		BatchSize:        10,
-		BatchWaitTimeout: 5 * time.Minute,
-		VMI: resource.VMI{
-			ContainerDisk: "quay.io/kubevirt/cirros-container-disk-demo:latest",
-			Memory:        "90Mi",
-			CPU:           "100m",
-		},
-	}
+func NewOptions(override suites.Options) (Options, error) {
+	opts := options.DefaultGlobalOptions().
+		Merge(options.DefaultVMDensityOptions()).
+		Merge(override)
+	return options.FromOptions[Options](opts)
 }
 
 func (o Options) Validate() error {

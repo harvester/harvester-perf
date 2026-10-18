@@ -9,23 +9,23 @@ import (
 	"github.com/harvester/hvperf/internal/suites/options"
 	"github.com/harvester/hvperf/pkg/k8s"
 	prom "github.com/harvester/hvperf/pkg/prometheus"
-	pkgsuites "github.com/harvester/hvperf/pkg/suites"
+	"github.com/harvester/hvperf/pkg/suites"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 )
 
 func init() {
-	pkgsuites.Register(NewBenchmarkSuite())
+	suites.Register(NewBenchmarkSuite())
 }
 
-var _ pkgsuites.Suite = &BenchmarkSuite{}
+var _ suites.Suite = &BenchmarkSuite{}
 
 // BenchmarkSuite implements test suite to assess etcd performance.
 type BenchmarkSuite struct {
-	pkgsuites.SuiteMarshaler
-	*pkgsuites.ProgressReporter
-	*pkgsuites.Clients
+	suites.SuiteMarshaler
+	*suites.ProgressReporter
+	*suites.Clients
 }
 
 // NewBenchmarkSuite creates a new instance of EtcdBenchmarkSuite with the
@@ -52,33 +52,27 @@ func (s *BenchmarkSuite) RunE(
 	ctx context.Context,
 	runID string,
 	namespace string,
-	opts pkgsuites.Options,
-) pkgsuites.SuiteResult {
-	o, err := BenchmarkOptionsDefaults(opts)
+	opts suites.Options,
+) suites.SuiteResult {
+	o, err := NewBenchmarkOptions(opts)
 	if err != nil {
-		return pkgsuites.SuiteResult{
+		return suites.SuiteResult{
 			Name:  s.Name(),
 			RunID: runID,
 			Err:   err.Error(),
 		}
 	}
 
-	// TODO: merge custom options
-	// custom, err := FromOptions(opts)
-	// if err != nil {
-	//      return pkgsuites.SuiteResult{}, err
-	// }
-
 	etcd, etcdReady, err := k8s.EnsureEtcdReady(ctx, s.Clients, o.EtcdNamespace, o.EtcdReadyTimeout)
 	if err != nil {
-		return pkgsuites.SuiteResult{
+		return suites.SuiteResult{
 			Name:  s.Name(),
 			RunID: runID,
 			Err:   fmt.Sprintf("etcd not ready: %v", err.Error()),
 		}
 	}
 	if !etcdReady {
-		return pkgsuites.SuiteResult{
+		return suites.SuiteResult{
 			Name:  s.Name(),
 			RunID: runID,
 			Err:   "etcd not ready",
@@ -87,7 +81,7 @@ func (s *BenchmarkSuite) RunE(
 	klog.V(3).InfoS("etcd pods are ready", "namespace", o.EtcdNamespace, "count", len(etcd.Items))
 
 	if _, err := k8s.EnsureNamespace(ctx, s.Clients, namespace, o.NamespaceReadyTimeout); err != nil {
-		return pkgsuites.SuiteResult{
+		return suites.SuiteResult{
 			Name:  s.Name(),
 			RunID: runID,
 			Err:   fmt.Sprintf("namespace %s not ready: %v", namespace, err.Error()),
@@ -107,7 +101,7 @@ func (s *BenchmarkSuite) RunE(
 		o.JobPodTTLAfterFinished,
 		o.JobSuspend)
 	if err != nil {
-		return pkgsuites.SuiteResult{
+		return suites.SuiteResult{
 			Name:  s.Name(),
 			RunID: runID,
 			Err:   fmt.Sprintf("job not ready: %v", err.Error()),
@@ -127,19 +121,18 @@ func (s *BenchmarkSuite) RunE(
 		o.EtcdRemoteCopyTargetDir,
 		o.EtcdctlLocalPath,
 		o.EtcdBenchmarkLocalPath,
-		o.PromtoolLocalPath,
 	); err != nil {
-		return pkgsuites.SuiteResult{
+		return suites.SuiteResult{
 			Name:  s.Name(),
 			RunID: runID,
 			Err:   fmt.Sprintf("failed to copy tools to pod job %s/%s: %v", pod.GetNamespace(), pod.GetName(), err.Error()),
 		}
 	}
 
-	var caseResults []*pkgsuites.CaseResult
+	var caseResults []*suites.CaseResult
 	cases := []struct {
 		caseName     string
-		caseFn       func(context.Context, string, *corev1.Pod, *BenchmarkOptions, ...string) *pkgsuites.CaseResult
+		caseFn       func(context.Context, string, *corev1.Pod, *BenchmarkOptions, ...string) *suites.CaseResult
 		optsOverride func() *BenchmarkOptions
 	}{
 		{
@@ -184,13 +177,13 @@ func (s *BenchmarkSuite) RunE(
 	caseResults = append(caseResults, caseResult)
 	s.CaseDone(s.Name(), caseName, caseResult.State, time.Since(caseResult.DateTimeStart))
 
-	suiteParams, err := pkgsuites.ToSuiteParams(o)
+	suiteParams, err := suites.ToSuiteParams(o)
 	if err != nil {
 		// just log the params conversion error, don't fail the suite. the only effect
 		// is that the suite params won't be reported in the results.
 		klog.V(3).ErrorS(err, "failed to convert suite options to suite params\n")
 	}
-	return pkgsuites.SuiteResult{
+	return suites.SuiteResult{
 		Name:    s.Name(),
 		Params:  suiteParams,
 		RunID:   runID,
@@ -216,7 +209,7 @@ func (s *BenchmarkSuite) execHealthcheck(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) *pkgsuites.CaseResult {
+) *suites.CaseResult {
 	outArgs := []string{
 		"-w", opts.EtcdctlOutputFormat,
 	}
@@ -226,13 +219,13 @@ func (s *BenchmarkSuite) execHealthcheck(
 		{"etcdctl", "member", "list"},
 	}
 
-	var cmdResults []*pkgsuites.CmdResult
+	var cmdResults []*suites.CmdResult
 	start := time.Now()
 	args = append(args, outArgs...)
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
 		out, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
-		cmdResult := &pkgsuites.CmdResult{
+		cmdResult := &suites.CmdResult{
 			Cmd:    strings.Join(cmd, " "),
 			Stdout: out.Stdout,
 			Stderr: out.Stderr,
@@ -242,7 +235,7 @@ func (s *BenchmarkSuite) execHealthcheck(
 		}
 		cmdResults = append(cmdResults, cmdResult)
 	}
-	return pkgsuites.NewCaseResult(name, start, time.Now(), cmdResults, nil, pod)
+	return suites.NewCaseResult(name, start, time.Now(), cmdResults, nil, pod)
 }
 
 func (s *BenchmarkSuite) execCheckPerf(
@@ -251,7 +244,7 @@ func (s *BenchmarkSuite) execCheckPerf(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) *pkgsuites.CaseResult {
+) *suites.CaseResult {
 	outArgs := []string{
 		"-w", opts.EtcdctlOutputFormat,
 		"--load", opts.CheckPerfLoadSize,
@@ -260,13 +253,13 @@ func (s *BenchmarkSuite) execCheckPerf(
 		{"etcdctl", "check", "perf"},
 	}
 
-	var cmdResults []*pkgsuites.CmdResult
+	var cmdResults []*suites.CmdResult
 	start := time.Now()
 	args = append(args, outArgs...)
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
 		out, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
-		cmdResult := &pkgsuites.CmdResult{
+		cmdResult := &suites.CmdResult{
 			Cmd:    strings.Join(cmd, " "),
 			Stdout: out.Stdout,
 			Stderr: out.Stderr,
@@ -277,7 +270,7 @@ func (s *BenchmarkSuite) execCheckPerf(
 		cmdResults = append(cmdResults, cmdResult)
 	}
 
-	return pkgsuites.NewCaseResult(name, start, time.Now(), cmdResults, nil, pod)
+	return suites.NewCaseResult(name, start, time.Now(), cmdResults, nil, pod)
 }
 
 func (s *BenchmarkSuite) execBenchmark(
@@ -286,7 +279,7 @@ func (s *BenchmarkSuite) execBenchmark(
 	pod *corev1.Pod,
 	opts *BenchmarkOptions,
 	args ...string,
-) *pkgsuites.CaseResult {
+) *suites.CaseResult {
 	cmds := [][]string{
 		{
 			// write serial
@@ -321,12 +314,12 @@ func (s *BenchmarkSuite) execBenchmark(
 		},
 	}
 
-	var cmdResults []*pkgsuites.CmdResult
+	var cmdResults []*suites.CmdResult
 	start := time.Now()
 	for _, cmd := range cmds {
 		cmd = append(cmd, args...)
 		out, err := k8s.ExecPod(ctx, s.Clients, pod, cmd)
-		cmdResult := &pkgsuites.CmdResult{
+		cmdResult := &suites.CmdResult{
 			Cmd:    strings.Join(cmd, " "),
 			Stdout: out.Stdout,
 			Stderr: out.Stderr,
@@ -337,7 +330,7 @@ func (s *BenchmarkSuite) execBenchmark(
 		cmdResults = append(cmdResults, cmdResult)
 	}
 
-	return pkgsuites.NewCaseResult(name, start, time.Now(), cmdResults, nil, pod)
+	return suites.NewCaseResult(name, start, time.Now(), cmdResults, nil, pod)
 }
 
 func (s *BenchmarkSuite) monitoring(
@@ -346,20 +339,20 @@ func (s *BenchmarkSuite) monitoring(
 	pod *corev1.Pod,
 	etcdCount int,
 	opts *BenchmarkOptions,
-) *pkgsuites.CaseResult {
+) *suites.CaseResult {
 	// check if monitoring addon is enabled and ready. if not, skip the promql
 	// execution.
 	start := time.Now()
 	ready, err := k8s.MonitoringEnabled(ctx, s.Clients, opts.MonitoringNamespace, opts.MonitoringAddonName)
 	if err != nil {
 		err = fmt.Errorf("failed to check if monitoring addon is enabled, skipping promql execution: %w", err)
-		return pkgsuites.NewCaseResultSkipped(name, start, time.Now(), err)
+		return suites.NewCaseResultSkipped(name, start, time.Now(), err)
 	}
 
 	// skip if not ready
 	if !ready {
 		err = fmt.Errorf("monitoring add-on is not ready, skipping promql execution")
-		return pkgsuites.NewCaseResultSkipped(name, start, time.Now(), err)
+		return suites.NewCaseResultSkipped(name, start, time.Now(), err)
 	}
 
 	// etcd metrics are not exposed by default, so we need to ensure that the pod
@@ -390,18 +383,18 @@ func (s *BenchmarkSuite) monitoring(
 	}()
 	if err != nil {
 		err = fmt.Errorf("failed to ensure pod monitor: %w", err)
-		return pkgsuites.NewCaseResultSkipped(name, start, time.Now(), err)
+		return suites.NewCaseResultSkipped(name, start, time.Now(), err)
 	}
 	klog.V(3).InfoS("pod monitor is ready", "name", podMonOpts.Name, "namespace", podMonOpts.Namespace)
 
 	metricResults := s.execPromQL(ctx, opts)
-	return pkgsuites.NewCaseResult(name, start, time.Now(), nil, metricResults, pod)
+	return suites.NewCaseResult(name, start, time.Now(), nil, metricResults, pod)
 }
 
 func (s *BenchmarkSuite) execPromQL(
 	ctx context.Context,
 	opts *BenchmarkOptions,
-) []*pkgsuites.MetricResult {
+) []*suites.MetricResult {
 	queries := []string{
 		// p99 WAL fsync
 		fmt.Sprintf(`histogram_quantile(0.99,sum by (le, pod) (rate(etcd_disk_wal_fsync_duration_seconds_bucket{namespace='%s'}[%s])))`, opts.EtcdNamespace, opts.MonitoringRangeDuration),
@@ -428,10 +421,10 @@ func (s *BenchmarkSuite) execPromQL(
 		fmt.Sprintf(`sum by (pod, From) (rate(etcd_network_peer_received_failures_total{namespace="%s"}[%s]))`, opts.EtcdNamespace, opts.MonitoringRangeDuration),
 	}
 
-	var metricResults []*pkgsuites.MetricResult
+	var metricResults []*suites.MetricResult
 	for _, query := range queries {
 		v, _, err := prom.RunInstant(ctx, s.PromClient, query)
-		result := &pkgsuites.MetricResult{
+		result := &suites.MetricResult{
 			Query:   query,
 			Samples: v,
 		}
@@ -443,18 +436,17 @@ func (s *BenchmarkSuite) execPromQL(
 	return metricResults
 }
 
-func (s *BenchmarkSuite) SetClients(clients *pkgsuites.Clients) {
+func (s *BenchmarkSuite) SetClients(clients *suites.Clients) {
 	s.Clients = clients
 }
 
-func (s *BenchmarkSuite) SetProgressReporter(progressReporter *pkgsuites.ProgressReporter) {
+func (s *BenchmarkSuite) SetProgressReporter(progressReporter *suites.ProgressReporter) {
 	s.ProgressReporter = progressReporter
 }
 
 type BenchmarkOptions struct {
 	EtcdBenchmarkLocalPath string
 	EtcdctlLocalPath       string
-	PromtoolLocalPath      string
 
 	EtcdctlOutputFormat     string
 	EtcdEndpoints           string
@@ -468,7 +460,6 @@ type BenchmarkOptions struct {
 	EtcdRemoteCopyTargetDir string
 
 	JobActiveDeadline      time.Duration
-	JobPodContainerName    string
 	JobPodImageName        string
 	JobPodImageTag         string
 	JobPodNode             string
@@ -491,56 +482,13 @@ type BenchmarkOptions struct {
 	GRPCClientCount   uint64
 }
 
-// BenchmarkOptionsDefaults returns the default options for the etcd benchmark
-// suite. It merges suite-specific options with the default global options for
-// the all test suites.
-func BenchmarkOptionsDefaults(opts pkgsuites.Options) (*BenchmarkOptions, error) {
-	sysOpts, err := options.FromOptions[*BenchmarkOptions](&opts)
-	if err != nil {
-		return nil, err
-	}
-
-	benchmarkOptions := &BenchmarkOptions{
-		EtcdBenchmarkLocalPath: "/usr/local/bin/benchmark",
-		EtcdctlLocalPath:       "/usr/local/bin/etcdctl",
-		PromtoolLocalPath:      "/usr/local/bin/promtool",
-
-		EtcdctlOutputFormat:     "simple",
-		EtcdEndpoints:           "https://127.0.0.1:2379",
-		EtcdMetricsPath:         "/metrics",
-		EtcdMetricsPortName:     "metrics",
-		EtcdMetricsScheme:       "http",
-		EtcdNamespace:           sysOpts.EtcdNamespace,
-		EtcdReadyTimeout:        sysOpts.EtcdReadyTimeout,
-		EtcdRemoteCopyTargetDir: "/usr/local/bin/",
-		EtcdRemoteTLSCertDir:    "/host/rancher/rke2/server/tls/etcd",
-
-		JobActiveDeadline:      sysOpts.JobActiveDeadline,
-		JobPodContainerName:    sysOpts.JobPodContainerName,
-		JobPodImageName:        sysOpts.JobPodImageName,
-		JobPodImageTag:         sysOpts.JobPodImageTag,
-		JobPodNode:             sysOpts.JobPodNode,
-		JobPodTTLAfterFinished: sysOpts.JobPodTTLAfterFinished,
-		JobPodReadyTimeout:     sysOpts.JobPodReadyTimeout,
-		JobSuspend:             sysOpts.JobSuspend,
-
-		MonitoringAddonName:             sysOpts.MonitoringAddonName,
-		MonitoringNamespace:             sysOpts.MonitoringNamespace,
-		MonitoringRangeDuration:         sysOpts.MonitoringRangeDuration,
-		MonitoringOutputFormat:          "promql",
-		MonitoringWaitPodMonitorTimeout: sysOpts.MonitoringWaitPodMonitorTimeout,
-
-		NamespaceReadyTimeout: sysOpts.NamespaceReadyTimeout,
-
-		CheckPerfLoadSize: DefaultCheckPerfLoadSize,
-		PutLoadSize:       DefaultLoadSize,
-		PutKeySize:        DefaultKeySize,
-		PutValSize:        DefaultPutValSize,
-		GRPCClientCount:   DefaultClientCount,
-		GRPCConnCount:     DefaultConnCount,
-	}
-
-	return benchmarkOptions, nil
+// NewBenchmarkOptions returns the options for the etcd benchmark suite. It
+// merges suite-specific options with the default global options.
+func NewBenchmarkOptions(override suites.Options) (*BenchmarkOptions, error) {
+	merged := options.DefaultGlobalOptions().
+		Merge(options.DefaultEtcdBenchmarkOptions()).
+		Merge(override)
+	return options.FromOptions[*BenchmarkOptions](merged)
 }
 
 const (
@@ -548,12 +496,5 @@ const (
 	DefaultConcurrentConnCount          = 100
 	DefaultConcurrentLoadSize           = 50000
 	DefaultRangeConsistencySerializable = "s"
-
-	DefaultCheckPerfLoadSize            = "s"
-	DefaultClientCount                  = 1
-	DefaultConnCount                    = 1
-	DefaultLoadSize                     = 10000
-	DefaultKeySize                      = 8
-	DefaultPutValSize                   = 256
 	DefaultRangeConsistencyLinearizable = "l"
 )

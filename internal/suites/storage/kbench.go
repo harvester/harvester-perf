@@ -55,7 +55,7 @@ func (s *KBenchSuite) RunE(
 	namespace string,
 	opts suites.Options,
 ) suites.SuiteResult {
-	o, err := KBenchOptionsDefaults()
+	o, err := NewKBenchOptions(opts)
 	if err != nil {
 		return suites.SuiteResult{
 			Name:  s.Name(),
@@ -420,12 +420,14 @@ type KBenchOptions struct {
 	PVCStorageSize      resource.Quantity
 }
 
-// KBenchOptionsDefaults returns the default options for the kbench test suite.
-// It merges the default global options with the default kbench options, giving
-// precedence to the global options for job-related settings.
-func KBenchOptionsDefaults() (*KBenchOptions, error) {
-	opts := (*options.DefaultKBenchOptions()).Merge(*options.DefaultGlobalOptions())
-	o, err := options.FromOptions[*KBenchOptions](opts)
+// NewKBenchOptions returns the options for the kbench test suite. It merges the
+// default global options with the default kbench options, giving precedence to
+// any override options.
+func NewKBenchOptions(override suites.Options) (*KBenchOptions, error) {
+	merged := options.DefaultGlobalOptions().
+		Merge(options.DefaultKBenchOptions()).
+		Merge(override)
+	o, err := options.FromOptions[*KBenchOptions](merged)
 	if err != nil {
 		return nil, err
 	}

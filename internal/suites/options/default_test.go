@@ -1,22 +1,22 @@
 package options
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/harvester/hvperf/pkg/suites"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 func TestDefaultGlobalOptions(t *testing.T) {
-	want := &suites.Options{
+	want := suites.Options{
 		"EtcdNamespace":                   "kube-system",
 		"EtcdReadyTimeout":                300 * time.Second,
 		"JobActiveDeadline":               3600 * time.Second,
-		"JobPodContainerName":             "benchmark",
 		"JobPodImageName":                 "registry.suse.com/bci/bci-base",
 		"JobPodImageTag":                  "latest",
+		"JobPodNode":                      "",
 		"JobPodTTLAfterFinished":          300 * time.Second,
 		"JobPodReadyTimeout":              3600 * time.Second,
 		"JobSuspend":                      false,
@@ -28,26 +28,26 @@ func TestDefaultGlobalOptions(t *testing.T) {
 		"NamespaceReadyTimeout":           300 * time.Second,
 	}
 
-	if got := DefaultGlobalOptions(); !reflect.DeepEqual(got, want) {
-		t.Errorf("DefaultGlobalOptions() = %+v, want %+v", got, want)
+	if diff := cmp.Diff(DefaultGlobalOptions(), want); diff != "" {
+		t.Errorf("DefaultGlobalOptions() mismatch (-want +got):\n%s", diff)
 	}
 }
 
 func TestDefaultNodeCapacityOptions(t *testing.T) {
-	want := &suites.Options{
+	want := suites.Options{
 		"PodActiveDeadline": 3600 * time.Second,
 		"PodImageName":      "registry.suse.com/bci/bci-base",
 		"PodImageTag":       "latest",
 		"PodReadyTimeout":   3600 * time.Second,
 	}
 
-	if got := DefaultNodeCapacityOptions(); !reflect.DeepEqual(got, want) {
-		t.Errorf("DefaultNodeCapacityOptions() = %+v, want %+v", got, want)
+	if diff := cmp.Diff(DefaultNodeCapacityOptions(), want); diff != "" {
+		t.Errorf("DefaultNodeCapacityOptions() mismatch (-want +got):\n%s", diff)
 	}
 }
 
 func TestDefaultKBenchOptions(t *testing.T) {
-	want := &suites.Options{
+	want := suites.Options{
 		"CPUIdleProf":         "disabled",
 		"BandwidthBlockSize":  "128K",
 		"BandwidthIoDepth":    16,
@@ -72,8 +72,8 @@ func TestDefaultKBenchOptions(t *testing.T) {
 		"PVCStorageSize":      "33Gi",
 	}
 
-	if got := DefaultKBenchOptions(); !reflect.DeepEqual(got, want) {
-		t.Errorf("DefaultKBenchOptions() = %+v, want %+v", got, want)
+	if diff := cmp.Diff(DefaultKBenchOptions(), want); diff != "" {
+		t.Errorf("DefaultKBenchOptions() mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -99,8 +99,9 @@ func TestDefaultOptionsFromOptions(t *testing.T) {
 			PodImageTag:       "latest",
 			PodReadyTimeout:   3600 * time.Second,
 		}
-		if got != want {
-			t.Errorf("FromOptions() = %+v, want %+v", got, want)
+
+		if diff := cmp.Diff(got, want); diff != "" {
+			t.Errorf("FromOptions() mismatch (-want +got):\n%s", diff)
 		}
 	})
 
@@ -158,8 +159,9 @@ func TestDefaultOptionsFromOptions(t *testing.T) {
 			PVCStorageClassName: "",
 			PVCStorageSize:      "33Gi",
 		}
-		if got != want {
-			t.Errorf("FromOptions() = %+v, want %+v", got, want)
+
+		if diff := cmp.Diff(got, want); diff != "" {
+			t.Errorf("FromOptions() mismatch (-want +got):\n%s", diff)
 		}
 	})
 }

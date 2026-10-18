@@ -1,17 +1,18 @@
 package storage
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/harvester/hvperf/pkg/suites"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-func TestKBenchOptionsDefaults(t *testing.T) {
-	got, err := KBenchOptionsDefaults()
+func TestNewKBenchOptions(t *testing.T) {
+	got, err := NewKBenchOptions(suites.Options{})
 	if err != nil {
-		t.Fatalf("KBenchOptionsDefaults() error = %v, want nil", err)
+		t.Fatalf("NewKBenchOptions() error = %v, want nil", err)
 	}
 
 	want := &KBenchOptions{
@@ -50,7 +51,46 @@ func TestKBenchOptionsDefaults(t *testing.T) {
 		PVCStorageClassName: "",
 		PVCStorageSize:      resource.MustParse("33Gi"),
 	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("KBenchOptionsDefaults() = %+v, want %+v", got, want)
+
+	if diff := cmp.Diff(got, want); diff != "" {
+		t.Errorf("NewKBenchOptions() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestNewKBenchOptionsOverride(t *testing.T) {
+	want, err := NewKBenchOptions(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want.IOPSNumJobs = 8 // suite default overridden
+	want.TestSize = "10G"
+	want.PVCStorageSize = resource.MustParse("20Gi")
+	want.JobPodReadyTimeout = 10 * time.Second // global default overridden
+
+	got, err := NewKBenchOptions(suites.Options{
+		"IOPSNumJobs":        8,
+		"TestSize":           "10G",
+		"PVCStorageSize":     "20Gi",
+		"JobPodReadyTimeout": 10 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("NewKBenchOptions() error = %v, want nil", err)
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("NewKBenchOptions() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestNewKBenchOptionsOverrideInvalid(t *testing.T) {
+	tests := map[string]suites.Options{
+		"test size not smaller than PVC size": {"TestSize": "40G"},
+		"unparsable test size":                {"TestSize": "bogus"},
+	}
+	for name, override := range tests {
+		t.Run(name, func(t *testing.T) {
+			if _, err := NewKBenchOptions(override); err == nil {
+				t.Error("NewKBenchOptions() error = nil, want error")
+			}
+		})
 	}
 }
