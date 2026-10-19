@@ -57,7 +57,7 @@ Use 'all' to run every registered test suite, both "read-only" and "read-write".
 		argSuites := strings.Split(args[0], ",")
 		testSuites := suites.Find(argSuites)
 		outputFormat := *k8sPrintFlags.OutputFormat
-		results := runSuites(testSuites, outputFormat, runOptions)
+		results := runSuites(cmd.Context(), testSuites, outputFormat, runOptions)
 		return outRun(results, outputFormat)
 	},
 }
@@ -72,7 +72,7 @@ Every registered test suite is run, both "read-only" and "read-write".
 	RunE: func(cmd *cobra.Command, args []string) error {
 		testSuites := suites.All()
 		outputFormat := *k8sPrintFlags.OutputFormat
-		results := runSuites(testSuites, outputFormat, runOptions)
+		results := runSuites(cmd.Context(), testSuites, outputFormat, runOptions)
 		return outRun(results, outputFormat)
 	},
 }
@@ -98,10 +98,9 @@ func init() {
 	}
 }
 
-func runSuites(testSuites []suites.Suite, format string, opts map[string]suites.Options) []*suites.SuiteResult {
+func runSuites(ctx context.Context, testSuites []suites.Suite, format string, opts map[string]suites.Options) []*suites.SuiteResult {
 	var (
 		results []*suites.SuiteResult
-		ctx     = context.Background()
 		runID   = time.Now().Format("20060102150405")
 	)
 
