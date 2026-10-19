@@ -220,7 +220,7 @@ func TestCaseResultString(t *testing.T) {
 			expected: "--- ERROR list-nodes (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
-				"    Exec:\n" +
+				"    Results:\n" +
 				"        Cmd: ping host.example.com\n" +
 				"        Error:  connection refused\n",
 		},
@@ -245,7 +245,7 @@ func TestCaseResultString(t *testing.T) {
 			expected: "--- PASS etcd healthcheck (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
-				"    Exec:\n" +
+				"    Results:\n" +
 				"        Cmd: etcdctl endpoint status\n" +
 				"        Stdout: ok\n" +
 				"        Cmd: etcdctl endpoint health\n" +
@@ -268,7 +268,7 @@ func TestCaseResultString(t *testing.T) {
 			expected: "--- PASS etcd healthcheck (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
-				"    Exec:\n" +
+				"    Results:\n" +
 				"        Cmd: etcdctl endpoint status\n",
 		},
 		{
@@ -288,7 +288,7 @@ func TestCaseResultString(t *testing.T) {
 			expected: "--- PASS etcd benchmark (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
-				"    Exec:\n" +
+				"    Results:\n" +
 				"        Cmd: benchmark put\n" +
 				"        Stdout: Summary:\n" +
 				"  Total:    1.234s\n" +
@@ -308,7 +308,7 @@ func TestCaseResultString(t *testing.T) {
 			expected: "--- PASS etcd monitoring (promql) (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
-				"    Metrics:\n" +
+				"    Results:\n" +
 				"        Query: histogram_quantile(0.99, wal_fsync_duration_seconds_bucket)\n",
 		},
 		{
@@ -331,7 +331,7 @@ func TestCaseResultString(t *testing.T) {
 			expected: "--- PASS etcd monitoring (promql) (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
-				"    Metrics:\n" +
+				"    Results:\n" +
 				"        Query: up\n" +
 				"        Value: {} => 1.23456 @[0]\n" +
 				"        Query: etcd_server_has_leader\n",
@@ -372,7 +372,7 @@ func TestCaseResultString(t *testing.T) {
 			expected: "--- PASS node os info (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
-				"    Resources:\n" +
+				"    Results:\n" +
 				"        Name: node/harvester-node-0\n" +
 				"        Data:\n" +
 				"          cpu.capacity: 4\n" +
@@ -392,7 +392,7 @@ func TestCaseResultString(t *testing.T) {
 			expected: "--- ERROR node os info (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
-				"    Resources:\n" +
+				"    Results:\n" +
 				"        Name: node/harvester-node-0\n" +
 				"        Error:  pod list failed\n",
 		},
@@ -413,7 +413,7 @@ func TestCaseResultString(t *testing.T) {
 			expected: "--- PASS pod logs (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
-				"    Logs:\n" +
+				"    Results:\n" +
 				"        Name: daemonset-pod-0\n" +
 				"        Logs:\n" +
 				"hello\n",
@@ -432,7 +432,7 @@ func TestCaseResultString(t *testing.T) {
 			expected: "--- ERROR pod logs (1.5s)\n" +
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
-				"    Logs:\n" +
+				"    Results:\n" +
 				"        Name: daemonset-pod-1\n" +
 				"        Error:  failed to get log stream\n",
 		},

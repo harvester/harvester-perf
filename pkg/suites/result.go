@@ -36,12 +36,6 @@ func (s *SuiteResult) String() string {
 	if SuiteErr := s.Err; SuiteErr != "" {
 		fmt.Fprintf(&stringBuilder, "--- ERROR: %v\n", SuiteErr)
 	}
-	for i, param := range s.Params {
-		if i == 0 {
-			fmt.Fprintf(&stringBuilder, "%sParams:\n", indent)
-		}
-		fmt.Fprintf(&stringBuilder, "%s\t%s\n", indent, param)
-	}
 
 	for _, result := range s.Results {
 		results = append(results, result.String())
@@ -50,6 +44,13 @@ func (s *SuiteResult) String() string {
 		fmt.Fprint(&stringBuilder, strings.Join(results, "\n"))
 	} else {
 		fmt.Fprintf(&stringBuilder, "--- No test cases were executed.")
+	}
+
+	for i, param := range s.Params {
+		if i == 0 {
+			fmt.Fprintf(&stringBuilder, "%sParams:\n", indent)
+		}
+		fmt.Fprintf(&stringBuilder, "%s\t%s\n", indent, param)
 	}
 
 	passed, errored, skipped, total := s.summary()
@@ -287,7 +288,7 @@ func (c *CaseResult) String() string {
 
 	for i, cap := range c.CapacityResults {
 		if i == 0 {
-			fmt.Fprintf(tab, "%sCapacity:\n", indent)
+			fmt.Fprintf(tab, "%sResult:\n", indent)
 		}
 		fmt.Fprintf(tab, "%s\tResource:\t%s\n", indent, cap.Resource)
 		fmt.Fprintf(tab, "%s\tMax:\t%d\n", indent, cap.Max)
@@ -301,7 +302,7 @@ func (c *CaseResult) String() string {
 
 	for i, r := range c.CmdResults {
 		if i == 0 {
-			fmt.Fprintf(tab, "%sExec:\n", indent)
+			fmt.Fprintf(tab, "%sResults:\n", indent)
 		}
 		r.indent = strings.Repeat(indent, 2)
 		fmt.Fprintf(tab, "%s", r)
@@ -317,7 +318,7 @@ func (c *CaseResult) String() string {
 
 	for i, m := range c.MetricResults {
 		if i == 0 {
-			fmt.Fprintf(tab, "%sMetrics:\n", indent)
+			fmt.Fprintf(tab, "%sResults:\n", indent)
 		}
 		m.indent = strings.Repeat(indent, 2)
 		fmt.Fprintf(tab, "%s", m)
@@ -325,7 +326,7 @@ func (c *CaseResult) String() string {
 
 	for i, m := range c.K8sResourceResults {
 		if i == 0 {
-			fmt.Fprintf(tab, "%sResources:\n", indent)
+			fmt.Fprintf(tab, "%sResults:\n", indent)
 		}
 		m.indent = strings.Repeat(indent, 2)
 		fmt.Fprintf(tab, "%s", m)
@@ -333,7 +334,7 @@ func (c *CaseResult) String() string {
 
 	for i, l := range c.PodLogResults {
 		if i == 0 {
-			fmt.Fprintf(tab, "%sLogs:\n", indent)
+			fmt.Fprintf(tab, "%sResults:\n", indent)
 		}
 		l.indent = strings.Repeat(indent, 2)
 		fmt.Fprintf(tab, "%s", l)
