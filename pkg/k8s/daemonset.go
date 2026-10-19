@@ -90,7 +90,9 @@ func EnsureDaemonSetReady(
 		return nil, nil, nil, err
 	}
 	cleanup := func() error {
-		return c.K8sClientSet.AppsV1().DaemonSets(namespace).Delete(ctx, created.Name, metav1.DeleteOptions{})
+		return c.K8sClientSet.AppsV1().DaemonSets(namespace).Delete(ctx, created.Name, metav1.DeleteOptions{
+			PropagationPolicy: new(metav1.DeletePropagationForeground),
+		})
 	}
 
 	var (
