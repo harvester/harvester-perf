@@ -57,7 +57,7 @@ func (s *ResourceFootprintSuite) Name() string {
 func (s *ResourceFootprintSuite) Description() string {
 	return "measure the resource footprint of the cluster"
 }
-func (s *ResourceFootprintSuite) IsReadWrite() bool                  { return false }
+func (s *ResourceFootprintSuite) IsExclusive() bool                  { return false }
 func (s *ResourceFootprintSuite) SetClients(clients *suites.Clients) { s.Clients = clients }
 
 func (s *ResourceFootprintSuite) measure(ctx context.Context, queries ...string) *suites.CaseResult {

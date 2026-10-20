@@ -14,7 +14,8 @@ var (
 	r    Registry
 	once sync.Once
 
-	ErrSuiteNotFound = errors.New("test suite not found")
+	ErrSuiteExclusiveConflict = errors.New("multiple exclusive test suites found - only one exclusive test suite per run")
+	ErrSuiteNotFound          = errors.New("test suite not found")
 )
 
 // Registry is a thread-safe registry for managing test suites. Every test suite
@@ -45,19 +46,31 @@ func All() []Suite {
 // match any registered test suite, it is returned as an error.
 func Find(names []string) ([]Suite, error) {
 	var (
-		suites = []Suite{}
-		err    error
+		suites         = []Suite{}
+		exclusiveCount int
+		err            error
 	)
+
 	for _, name := range names {
-		if _, exists := r.suites[name]; exists {
-			if !slices.Contains(suites, r.suites[name]) {
-				suites = append(suites, r.suites[name])
+		if s, exists := r.suites[name]; exists {
+			if !slices.Contains(suites, s) {
+				suites = append(suites, s)
+				if s.IsExclusive() {
+					exclusiveCount++
+				}
 			}
 			continue
 		}
 		err = errors.Join(err, fmt.Errorf("%w: %q", ErrSuiteNotFound, name))
 	}
-	return suites, err
+	if err != nil {
+		return nil, err
+	}
+
+	if len(suites) > 1 && exclusiveCount > 0 {
+		return nil, ErrSuiteExclusiveConflict
+	}
+	return suites, nil
 }
 
 func Register(suite Suite) {

@@ -19,16 +19,12 @@ func (t *SuiteMarshaler) String() string {
 	if t.Marshal.Name() == "" {
 		return ""
 	}
-	rw := "read-only"
-	if t.Marshal.IsReadWrite() {
-		rw = "read-write"
-	}
-	return fmt.Sprintf("%s\t%s\t%s", t.Marshal.Name(), rw, t.Marshal.Description())
+	return fmt.Sprintf("%s\t%t\t%s", t.Marshal.Name(), t.Marshal.IsExclusive(), t.Marshal.Description())
 }
 
 type SuiteMarshal struct {
 	Name        string `json:"name"`
-	IsReadWrite bool   `json:"readWrite"`
+	IsExclusive bool   `json:"exclusive"`
 	Description string `json:"description"`
 }
 
@@ -37,7 +33,7 @@ func (t *SuiteMarshaler) MarshalJSON() ([]byte, error) {
 	return json.Marshal(SuiteMarshal{
 		Name:        t.Marshal.Name(),
 		Description: t.Marshal.Description(),
-		IsReadWrite: t.Marshal.IsReadWrite(),
+		IsExclusive: t.Marshal.IsExclusive(),
 	})
 }
 
@@ -46,6 +42,6 @@ func (t *SuiteMarshaler) MarshalYAML() (any, error) {
 	return SuiteMarshal{
 		Name:        t.Marshal.Name(),
 		Description: t.Marshal.Description(),
-		IsReadWrite: t.Marshal.IsReadWrite(),
+		IsExclusive: t.Marshal.IsExclusive(),
 	}, nil
 }

@@ -44,7 +44,7 @@ func (s *BenchmarkSuite) Description() string {
 	return "run the etcd-benchmark tool to against the cluster's etcd"
 }
 
-func (s *BenchmarkSuite) IsReadWrite() bool {
+func (s *BenchmarkSuite) IsExclusive() bool {
 	return true
 }
 

@@ -43,7 +43,7 @@ func (s *SuiteResult) String() string {
 	if len(results) > 0 {
 		fmt.Fprint(&stringBuilder, strings.Join(results, "\n"))
 	} else {
-		fmt.Fprintf(&stringBuilder, "--- No test cases were executed.")
+		fmt.Fprintf(&stringBuilder, "--- No test cases were executed.\n")
 	}
 
 	for i, param := range s.Params {
@@ -288,7 +288,7 @@ func (c *CaseResult) String() string {
 
 	for i, cap := range c.CapacityResults {
 		if i == 0 {
-			fmt.Fprintf(tab, "%sResult:\n", indent)
+			fmt.Fprintf(tab, "%sResults:\n", indent)
 		}
 		fmt.Fprintf(tab, "%s\tResource:\t%s\n", indent, cap.Resource)
 		fmt.Fprintf(tab, "%s\tMax:\t%d\n", indent, cap.Max)

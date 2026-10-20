@@ -44,8 +44,8 @@ func (s *NodeCapacitySuite) Description() string {
 	return "assess the node resource capacity of the cluster"
 }
 
-func (s *NodeCapacitySuite) IsReadWrite() bool {
-	return true
+func (s *NodeCapacitySuite) IsExclusive() bool {
+	return false
 }
 
 func (s *NodeCapacitySuite) RunE(ctx context.Context, runID, namespace string, opts suites.Options) suites.SuiteResult {

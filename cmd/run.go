@@ -31,10 +31,7 @@ var runCmd = &cobra.Command{
 	Long: `Run the performance test suites.
 
 Works with a single test suite or multiple test suites. The test suites can be
-specified as a list of comma-separated arguments.
-
-Use 'all' to run every registered test suite, both "read-only" and "read-write".
-"read-write" test suites create or modify resources in the cluster.`,
+specified as a list of comma-separated arguments.`,
 	Args: cobra.MinimumNArgs(1),
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		clientSets, err := configureClients()
@@ -66,27 +63,9 @@ Use 'all' to run every registered test suite, both "read-only" and "read-write".
 	},
 }
 
-var runAllCmd = &cobra.Command{
-	Use:   "all",
-	Short: "Run all the performance test suites",
-	Long: `Run all the performance test suites.
-
-Every registered test suite is run, both "read-only" and "read-write".
-"read-write" test suites create or modify resources in the cluster.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		testSuites := suites.All()
-		outputFormat := *k8sPrintFlags.OutputFormat
-		results := runSuites(cmd.Context(), testSuites, outputFormat, runOptions)
-		return outRun(results, outputFormat)
-	},
-}
-
 func init() {
 	rootCmd.AddCommand(runCmd)
-	runCmd.AddCommand(runAllCmd)
-
 	runCmd.SilenceUsage = true
-	runAllCmd.SilenceUsage = true
 
 	runCmd.PersistentFlags().BoolVar(&keepAlive, "keep-alive", true,
 		fmt.Sprintf("Keep the test namespace and all its resources after test suite execution. Only works if the namespace is %s", suites.DefaultNamespace))

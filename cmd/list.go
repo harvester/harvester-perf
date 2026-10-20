@@ -19,7 +19,7 @@ var listCmd = &cobra.Command{
 	Short: "List the performance test suites",
 	Long: `List the performance test suites.
 
-All "read-only" and "read-write" test suites are listed. Use the -o/--output flag
+All "exclusive" and "non-exclusive" test suites are listed. Use the -o/--output flag
 to specify the output format. Supported formats are "table", "name", "json", and
 "yaml". The default format is "table".`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -57,14 +57,14 @@ func outList(format string) error {
 		for _, s := range suites {
 			raw = append(raw, s.Name())
 		}
-		out := []byte(strings.Join(raw, "\n"))
-		_, err := fmt.Fprintf(os.Stdout, "%s\n", strings.TrimSpace(string(out)))
+		out := strings.Join(raw, "\n")
+		_, err := fmt.Fprintf(os.Stdout, "%s\n", strings.TrimSpace(out))
 		return err
 
 	case "table":
 		fallthrough
 	default:
-		rows := []string{"NAME\tREAD/WRITE\tDESCRIPTION"}
+		rows := []string{"NAME\tIS EXCLUSIVE\tDESCRIPTION"}
 		for _, s := range suites {
 			rows = append(rows, fmt.Sprintf("%s", s))
 		}

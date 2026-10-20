@@ -686,7 +686,7 @@ func TestSuiteResultString(t *testing.T) {
 			result: &SuiteResult{Name: "node-capacity", RunID: "abc123"},
 			expected: "=== SUITE node-capacity (run abc123)\n" +
 				"--- No test cases were executed.\n" +
-				"=== SUMMARY: 0 errored, 0 passed, 0 skipped (0 total)\n",
+				"\n=== SUMMARY: 0 errored, 0 passed, 0 skipped (0 total)\n",
 		},
 		{
 			name:   "single passing case",
@@ -707,7 +707,7 @@ func TestSuiteResultString(t *testing.T) {
 			result: &SuiteResult{},
 			expected: "=== SUITE  (run )\n" +
 				"--- No test cases were executed.\n" +
-				"=== SUMMARY: 0 errored, 0 passed, 0 skipped (0 total)\n",
+				"\n=== SUMMARY: 0 errored, 0 passed, 0 skipped (0 total)\n",
 		},
 	}
 

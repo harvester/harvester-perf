@@ -38,9 +38,6 @@ make go/build
 # run several suites (one comma-separated argument, not a space-separated list)
 ./bin/hvperf run node-capacity,etcd-benchmark
 
-# run every registered suite
-./bin/hvperf run all
-
 # run with a custom config file (default: ./hvperf.yaml)
 ./bin/hvperf run density --config /path/to/hvperf.yaml
 ```
@@ -68,7 +65,7 @@ flags (`--kubeconfig`, `--context`, `--namespace`, `--server`, `--as`, …), so
 targeting a specific cluster works the same way it does with `kubectl`:
 
 ```bash
-./bin/hvperf run all --kubeconfig ~/.kube/harvester.yaml --context prod
+./bin/hvperf run node-capacity --kubeconfig ~/.kube/harvester.yaml --context prod
 ```
 
 Suites that create resources put them in the `harvester-perf-system` namespace,
@@ -86,8 +83,7 @@ built binary rather than the image will fail unless `etcdctl`, `benchmark` and
 | Command | Description |
 | --- | --- |
 | `hvperf list` | List registered suites. `-o` accepts `table` (default), `name`, `json`, `yaml`. |
-| `hvperf run <suite>[,<suite>...]` | Run the named suites, given as a single comma-separated argument. Unknown names are ignored. `-o` accepts `text` (default), `json`, `yaml`. |
-| `hvperf run all` | Run every registered suite, read-only and read-write alike. |
+| `hvperf run <suite>[,<suite>...]` | Run the named suites, given as a single comma-separated argument. An unknown name fails the run. An exclusive suite cannot be run together with other suites. `-o` accepts `text` (default), `json`, `yaml`. |
 | `hvperf version [--client-only]` | Print the client version and, unless `--client-only` is set, the cluster's server version. |
 | `hvperf report` | Placeholder — not implemented yet. |
 
@@ -106,18 +102,20 @@ Results are printed even when a suite fails, so partial output is not lost.
 
 ## Test suites
 
-Suites are either **read-only** — they only query the API server — or
-**read-write**, meaning they create or modify cluster resources. The mode is
-reported by `hvperf list`; it does not filter what `hvperf run all` runs, which
-is every registered suite.
+Suites are either **exclusive** or non-exclusive. Exclusive suites impose stress
+on the cluster through stress loaders such as `fio`, which may temporarily
+degrade the cluster's overall performance and stability. They are therefore not
+suitable to run alongside other suites, to avoid worsening the cluster's
+condition; `hvperf run` rejects an exclusive suite combined with any other
+suite. The flag is reported by `hvperf list`.
 
-| Suite | Mode | What it does |
+| Suite | Exclusive | What it does |
 | --- | --- | --- |
-| `node-capacity` | read-write | Assess node resource capacity: per-node OS info and disk info via a privileged `hostPID` daemonset. |
-| `etcd-benchmark` | read-write | Exercises the cluster's etcd from a privileged `hostNetwork` job pod. |
-| `resource-footprint` | read-only | Measures the cluster's resource footprint: per-namespace CPU/memory usage and requests, host memory, and node allocatable, via Prometheus queries. |
-| `density` | read-write | Import a VM image, ramp up VMs concurrently until failure, and record VMI boot-latency percentiles (p50/p95/p99). |
-| `storage-kbench` | read-write | Run Longhorn's `kbench` job against a fresh PVC to benchmark bandwidth, IOPS and latency, then read the matching Longhorn metrics from Prometheus. |
+| `node-capacity` | no | Assess node resource capacity: per-node OS info and disk info via a privileged `hostPID` daemonset. |
+| `etcd-benchmark` | yes | Exercises the cluster's etcd from a privileged `hostNetwork` job pod. |
+| `resource-footprint` | no | Measures the cluster's resource footprint: per-namespace CPU/memory usage and requests, host memory, and node allocatable, via Prometheus queries. |
+| `density` | yes | Import a VM image, ramp up VMs concurrently until failure, and record VMI boot-latency percentiles (p50/p95/p99). |
+| `storage-kbench` | yes | Run Longhorn's `kbench` job against a fresh PVC to benchmark bandwidth, IOPS and latency, then read the matching Longhorn metrics from Prometheus. |
 
 ## Result types
 
@@ -192,7 +190,6 @@ make image/build                                    # -> hvperf:<version>-<sha>
 make image/cmd                                      # mounts ~/.kube read-only
 make image/cmd IMAGE_CMD_ARGS="list"
 make image/cmd IMAGE_CMD_ARGS="run etcd-benchmark"
-make image/run_all                                  # shorthand for "run all"
 ```
 
 The image defaults to `hvperf version`, and expects a kubeconfig at
@@ -235,7 +232,7 @@ Overrides: `IMAGE_NAME`, `IMAGE_TAG`, `IMAGE_PLATFORMS` (default
 
    func (s *MySuite) Name() string        { return "my-suite" }
    func (s *MySuite) Description() string { return "what it measures" }
-   func (s *MySuite) IsReadWrite() bool   { return false }
+   func (s *MySuite) IsExclusive() bool   { return false }
    func (s *MySuite) RunE(ctx context.Context, runID, namespace string, opts pkgsuites.Options) pkgsuites.SuiteResult
    func (s *MySuite) SetClients(c *pkgsuites.Clients)
    ```

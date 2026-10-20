@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	readOnlySuite0 = newFakeSuite("test-fake-ro-0", "fake test suite", false)
-	readOnlySuite1 = newFakeSuite("test-fake-ro-1", "fake test suite", false)
-	readWriteSuite = newFakeSuite("test-fake-rw", "fake test suite", true)
+	nonExclusiveSuite0 = newFakeSuite("test-fake-ro-0", "fake test suite", false)
+	nonExclusiveSuite1 = newFakeSuite("test-fake-ro-1", "fake test suite", false)
+	exclusiveSuite     = newFakeSuite("test-fake-rw", "fake test suite", true)
 )
 
 func TestMain(m *testing.M) {
@@ -21,9 +21,9 @@ func TestMain(m *testing.M) {
 	r.suites = map[string]Suite{}
 	r.mu.Unlock()
 
-	Register(readOnlySuite0)
-	Register(readOnlySuite1)
-	Register(readWriteSuite)
+	Register(nonExclusiveSuite0)
+	Register(nonExclusiveSuite1)
+	Register(exclusiveSuite)
 
 	code := m.Run()
 	os.Exit(code)
@@ -36,8 +36,8 @@ func TestAll(t *testing.T) {
 	sort.Slice(every, func(i, j int) bool {
 		return every[i].Name() < every[j].Name()
 	})
-	if !reflect.DeepEqual(every, []Suite{readOnlySuite0, readOnlySuite1, readWriteSuite}) {
-		t.Errorf("All(true) = %v, want [%v, %v, %v]", every, readOnlySuite0.Name(), readOnlySuite1.Name(), readWriteSuite.Name())
+	if !reflect.DeepEqual(every, []Suite{nonExclusiveSuite0, nonExclusiveSuite1, exclusiveSuite}) {
+		t.Errorf("All(true) = %v, want [%v, %v, %v]", every, nonExclusiveSuite0.Name(), nonExclusiveSuite1.Name(), exclusiveSuite.Name())
 	}
 }
 
@@ -45,7 +45,7 @@ func TestAll(t *testing.T) {
 // registration order or map iteration order.
 func TestAllSorted(t *testing.T) {
 	got := All()
-	want := []string{readOnlySuite0.Name(), readOnlySuite1.Name(), readWriteSuite.Name()}
+	want := []string{nonExclusiveSuite0.Name(), nonExclusiveSuite1.Name(), exclusiveSuite.Name()}
 	sort.Strings(want)
 
 	var names []string
@@ -74,19 +74,24 @@ func TestFind(t *testing.T) {
 			expected: []Suite{},
 		},
 		{
-			name:     "single match",
-			names:    []string{readOnlySuite0.Name()},
-			expected: []Suite{readOnlySuite0},
+			name:     "one non-exclusive suite",
+			names:    []string{nonExclusiveSuite0.Name()},
+			expected: []Suite{nonExclusiveSuite0},
 		},
 		{
-			name:     "multiple matches",
-			names:    []string{readOnlySuite0.Name(), readOnlySuite1.Name(), readWriteSuite.Name()},
-			expected: []Suite{readOnlySuite0, readOnlySuite1, readWriteSuite},
+			name:     "multiple non-exclusive suites",
+			names:    []string{nonExclusiveSuite0.Name(), nonExclusiveSuite1.Name()},
+			expected: []Suite{nonExclusiveSuite0, nonExclusiveSuite1},
+		},
+		{
+			name:     "one exclusive suite",
+			names:    []string{exclusiveSuite.Name()},
+			expected: []Suite{exclusiveSuite},
 		},
 		{
 			name:     "repeated name yields repeated results",
-			names:    []string{readOnlySuite0.Name(), readOnlySuite0.Name(), readOnlySuite1.Name()},
-			expected: []Suite{readOnlySuite0, readOnlySuite1},
+			names:    []string{nonExclusiveSuite0.Name(), nonExclusiveSuite0.Name(), nonExclusiveSuite1.Name()},
+			expected: []Suite{nonExclusiveSuite0, nonExclusiveSuite1},
 		},
 	}
 
@@ -107,6 +112,15 @@ func TestFind(t *testing.T) {
 				t.Errorf("Find(%v) = %v, want %v", tc.names, got, tc.expected)
 			}
 		})
+	}
+
+	// test non-exclusive and exclusive suites together, which should return an error
+	if _, err := Find([]string{nonExclusiveSuite0.Name(), exclusiveSuite.Name()}); !errors.Is(err, ErrSuiteExclusiveConflict) {
+		t.Errorf("Find() returned mismatched error, want %q error for multiple exclusive suites", ErrSuiteExclusiveConflict)
+	}
+
+	if _, err := Find([]string{nonExclusiveSuite0.Name(), nonExclusiveSuite1.Name(), exclusiveSuite.Name()}); !errors.Is(err, ErrSuiteExclusiveConflict) {
+		t.Errorf("Find() returned mismatched error, want %q error for multiple exclusive suites", ErrSuiteExclusiveConflict)
 	}
 }
 

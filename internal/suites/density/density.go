@@ -73,7 +73,7 @@ func (s *DensitySuite) Name() string                                      { retu
 func (s *DensitySuite) Description() string {
 	return "create containerdisk VMIs until the compute-density limit"
 }
-func (s *DensitySuite) IsReadWrite() bool                     { return true }
+func (s *DensitySuite) IsExclusive() bool                     { return true }
 func (s *DensitySuite) SetClients(clients *pkgsuites.Clients) { s.Clients = clients }
 
 func (s *DensitySuite) RunE(ctx context.Context, runID, namespace string, opts pkgsuites.Options) (result pkgsuites.SuiteResult) {

@@ -15,7 +15,7 @@ import (
 type Suite interface {
 	Name() string
 	Description() string
-	IsReadWrite() bool
+	IsExclusive() bool
 	RunE(ctx context.Context, runID, namespace string, opt Options) SuiteResult
 	SetClients(clients *Clients)
 	SetProgressReporter(reporter *ProgressReporter)

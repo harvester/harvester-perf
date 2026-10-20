@@ -45,7 +45,7 @@ func (s *KBenchSuite) Description() string {
 	return "run kbench to benchmark the storage performance of the cluster"
 }
 
-func (s *KBenchSuite) IsReadWrite() bool {
+func (s *KBenchSuite) IsExclusive() bool {
 	return true
 }
 

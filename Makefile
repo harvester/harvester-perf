@@ -69,12 +69,6 @@ image/cmd:
 		--network=host \
 		$(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_CMD_ARGS)
 
-image/run_all:
-	@$(DOCKER) run --rm \
-		--mount type=bind,src=$(HOME)/.kube,dst=/root/.kube,ro=true \
-		--network=host \
-		$(IMAGE_NAME):$(IMAGE_TAG) run all $(IMAGE_CMD_ARGS)
-
 image/build:
 	$(DOCKER) build --rm --pull \
 		--platform $(IMAGE_PLATFORMS) \
@@ -82,4 +76,4 @@ image/build:
 		--output=type=$(IMAGE_OUTPUT_TYPE) \
 		-t $(IMAGE_NAME):$(IMAGE_TAG) .
 
-.PHONY: go/build go/test clean image/run_all image/build image/cmd
+.PHONY: go/build go/test clean image/build image/cmd

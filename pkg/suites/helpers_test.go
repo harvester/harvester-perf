@@ -33,7 +33,7 @@ func newFakeSuite(name, description string, readWrite bool) *fakeSuite {
 
 func (s *fakeSuite) Name() string        { return s.name }
 func (s *fakeSuite) Description() string { return s.description }
-func (s *fakeSuite) IsReadWrite() bool   { return s.readWrite }
+func (s *fakeSuite) IsExclusive() bool   { return s.readWrite }
 func (s *fakeSuite) RunE(_ context.Context, _, _ string, _ Options) SuiteResult {
 	return SuiteResult{}
 }

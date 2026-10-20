@@ -12,35 +12,35 @@ func TestMarshalerString(t *testing.T) {
 		name        string
 		description string
 		suiteName   string
-		readWrite   bool
+		exclusive   bool
 		expected    string
 	}{
 		{
-			name:        "read-only suite",
+			name:        "non-exclusive suite",
 			description: "fake test suite",
 			suiteName:   "node-capacity",
-			readWrite:   false,
-			expected:    "node-capacity\tread-only\tfake test suite",
+			exclusive:   false,
+			expected:    "node-capacity\tfalse\tfake test suite",
 		},
 		{
-			name:        "read-write suite",
+			name:        "exclusive suite",
 			description: "fake test suite",
 			suiteName:   "etcd-benchmark",
-			readWrite:   true,
-			expected:    "etcd-benchmark\tread-write\tfake test suite",
+			exclusive:   true,
+			expected:    "etcd-benchmark\ttrue\tfake test suite",
 		},
 		{
 			name:        "empty suite name",
 			description: "",
 			suiteName:   "",
-			readWrite:   false,
+			exclusive:   false,
 			expected:    "",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := &SuiteMarshaler{Marshal: newFakeSuite(tc.suiteName, tc.description, tc.readWrite)}
+			m := &SuiteMarshaler{Marshal: newFakeSuite(tc.suiteName, tc.description, tc.exclusive)}
 			if got := m.String(); got != tc.expected {
 				t.Errorf("String() = %q, want %q", got, tc.expected)
 			}
@@ -53,28 +53,28 @@ func TestMarshalerMarshalJSON(t *testing.T) {
 		name        string
 		description string
 		suiteName   string
-		readWrite   bool
+		exclusive   bool
 		expected    string
 	}{
 		{
-			name:        "read-only suite",
+			name:        "non-exclusive suite",
 			description: "fake test suite",
 			suiteName:   "node-capacity",
-			readWrite:   false,
-			expected:    `{"name":"node-capacity","readWrite":false,"description":"fake test suite"}`,
+			exclusive:   false,
+			expected:    `{"name":"node-capacity","exclusive":false,"description":"fake test suite"}`,
 		},
 		{
-			name:        "read-write suite",
+			name:        "exclusive suite",
 			description: "fake test suite",
 			suiteName:   "etcd-benchmark",
-			readWrite:   true,
-			expected:    `{"name":"etcd-benchmark","readWrite":true,"description":"fake test suite"}`,
+			exclusive:   true,
+			expected:    `{"name":"etcd-benchmark","exclusive":true,"description":"fake test suite"}`,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := &SuiteMarshaler{Marshal: newFakeSuite(tc.suiteName, tc.description, tc.readWrite)}
+			m := &SuiteMarshaler{Marshal: newFakeSuite(tc.suiteName, tc.description, tc.exclusive)}
 
 			// MarshalJSON returns an SuiteOutput struct, so assert on the encoded
 			// form rather than on the concrete type.
@@ -97,8 +97,8 @@ func TestMarshalerMarshalJSON(t *testing.T) {
 			if decoded.Description != tc.description {
 				t.Errorf("decoded name = %q, want %q", decoded.Description, tc.description)
 			}
-			if decoded.IsReadWrite != tc.readWrite {
-				t.Errorf("decoded readWrite = %t, want %t", decoded.IsReadWrite, tc.readWrite)
+			if decoded.IsExclusive != tc.exclusive {
+				t.Errorf("decoded readWrite = %t, want %t", decoded.IsExclusive, tc.exclusive)
 			}
 		})
 	}
@@ -109,25 +109,25 @@ func TestMarshalerMarshalYAML(t *testing.T) {
 		name        string
 		description string
 		suiteName   string
-		readWrite   bool
+		exclusive   bool
 	}{
 		{
-			name:        "read-only suite",
+			name:        "exclusive suite",
 			description: "fake test suite",
 			suiteName:   "node-capacity",
-			readWrite:   false,
+			exclusive:   false,
 		},
 		{
-			name:        "read-write suite",
+			name:        "exclusive suite",
 			description: "fake test suite",
 			suiteName:   "etcd-benchmark",
-			readWrite:   true,
+			exclusive:   true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := &SuiteMarshaler{Marshal: newFakeSuite(tc.suiteName, tc.description, tc.readWrite)}
+			m := &SuiteMarshaler{Marshal: newFakeSuite(tc.suiteName, tc.description, tc.exclusive)}
 			v, err := m.MarshalYAML()
 			if err != nil {
 				t.Fatalf("MarshalYAML() returned unexpected error: %v", err)
@@ -148,8 +148,8 @@ func TestMarshalerMarshalYAML(t *testing.T) {
 			if decoded.Description != tc.description {
 				t.Errorf("decoded name = %q, want %q", decoded.Description, tc.description)
 			}
-			if decoded.IsReadWrite != tc.readWrite {
-				t.Errorf("decoded readWrite = %t, want %t", decoded.IsReadWrite, tc.readWrite)
+			if decoded.IsExclusive != tc.exclusive {
+				t.Errorf("decoded readWrite = %t, want %t", decoded.IsExclusive, tc.exclusive)
 			}
 		})
 	}
