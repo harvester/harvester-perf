@@ -1,6 +1,7 @@
 package suites
 
 import (
+	"errors"
 	"os"
 	"reflect"
 	"sort"
@@ -91,7 +92,10 @@ func TestFind(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := Find(tc.names)
+			got, err := Find(tc.names)
+			if err != nil {
+				t.Fatalf("Find() returned error: %v", err)
+			}
 			if got == nil {
 				t.Fatal("Find() returned nil, want non-nil slice")
 			}
@@ -103,5 +107,12 @@ func TestFind(t *testing.T) {
 				t.Errorf("Find(%v) = %v, want %v", tc.names, got, tc.expected)
 			}
 		})
+	}
+}
+
+func TestFindMissingSuite(t *testing.T) {
+	suites := []string{"non-existent-suite"}
+	if _, err := Find(suites); !errors.Is(err, ErrSuiteNotFound) {
+		t.Fatalf("Find() returned mismatched error, want %q error for missing suite", ErrSuiteNotFound)
 	}
 }

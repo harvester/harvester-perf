@@ -55,7 +55,11 @@ Use 'all' to run every registered test suite, both "read-only" and "read-write".
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		argSuites := strings.Split(args[0], ",")
-		testSuites := suites.Find(argSuites)
+		testSuites, err := suites.Find(argSuites)
+		if err != nil {
+			return err
+		}
+
 		outputFormat := *k8sPrintFlags.OutputFormat
 		results := runSuites(cmd.Context(), testSuites, outputFormat, runOptions)
 		return outRun(results, outputFormat)

@@ -1,6 +1,8 @@
 package suites
 
 import (
+	"errors"
+	"fmt"
 	"slices"
 	"sort"
 	"sync"
@@ -11,6 +13,8 @@ var (
 	// suites.
 	r    Registry
 	once sync.Once
+
+	ErrSuiteNotFound = errors.New("test suite not found")
 )
 
 // Registry is a thread-safe registry for managing test suites. Every test suite
@@ -38,17 +42,22 @@ func All() []Suite {
 }
 
 // Find returns the test suites that match the provided names. If a name does not
-// match any registered test suite, it is ignored.
-func Find(names []string) []Suite {
-	suites := []Suite{}
+// match any registered test suite, it is returned as an error.
+func Find(names []string) ([]Suite, error) {
+	var (
+		suites = []Suite{}
+		err    error
+	)
 	for _, name := range names {
 		if _, exists := r.suites[name]; exists {
 			if !slices.Contains(suites, r.suites[name]) {
 				suites = append(suites, r.suites[name])
 			}
+			continue
 		}
+		err = errors.Join(err, fmt.Errorf("%w: %q", ErrSuiteNotFound, name))
 	}
-	return suites
+	return suites, err
 }
 
 func Register(suite Suite) {
