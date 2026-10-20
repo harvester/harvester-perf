@@ -9,6 +9,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog/v2"
 
 	"github.com/harvester/hvperf/pkg/suites"
 	"github.com/spf13/cobra"
@@ -67,8 +68,8 @@ func init() {
 	rootCmd.AddCommand(runCmd)
 	runCmd.SilenceUsage = true
 
-	runCmd.PersistentFlags().BoolVar(&keepAlive, "keep-alive", true,
-		fmt.Sprintf("Keep the test namespace and all its resources after test suite execution. Only works if the namespace is %s", suites.DefaultNamespace))
+	runCmd.PersistentFlags().BoolVar(&keepAlive, "keep-alive", false,
+		fmt.Sprintf("Keep the test namespace and all its resources after test suite execution. Only works if the namespace is %s. Cleanup is skipped for custom namespace", suites.DefaultNamespace))
 	runCmd.PersistentFlags().StringVar(&monitoringServiceURL, "monitoring-url", "",
 		"Prometheus HTTP API base URL. Defaults to the in-cluster Prometheus service proxy.")
 	runCmd.PersistentFlags().StringVar(&configFile, "config", "",
@@ -93,9 +94,12 @@ func runSuites(ctx context.Context, testSuites []suites.Suite, format string, op
 	}
 	defer func() {
 		if !keepAlive && namespace == suites.DefaultNamespace {
-			//nolint:errcheck
-			runCmdClients.K8sClientSet.CoreV1().Namespaces().Delete(context.Background(), namespace, metav1.DeleteOptions{})
+			if err := runCmdClients.K8sClientSet.CoreV1().Namespaces().Delete(context.Background(), namespace, metav1.DeleteOptions{}); err != nil {
+				klog.ErrorS(err, "failed to delete test namespace", "namespace", namespace)
+			}
+			return
 		}
+		klog.InfoS("skipping test namespace cleanup", "namespace", namespace, "keepAlive", keepAlive)
 	}()
 	progress = suites.NewProgressReporter(os.Stderr, runID, len(testSuites))
 

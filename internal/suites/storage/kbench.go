@@ -135,7 +135,7 @@ func (s *KBenchSuite) kbenchPodPVC(
 	opts *KBenchOptions,
 ) *suites.CaseResult {
 	start := time.Now()
-	pvc, pvcCleanup, err := k8s.CreatePVC(
+	pvc, err := k8s.CreatePVC(
 		ctx,
 		s.Clients,
 		s.Name(),
@@ -144,13 +144,6 @@ func (s *KBenchSuite) kbenchPodPVC(
 		opts.PVCStorageClassName,
 		opts.PVCStorageSize,
 	)
-	defer func() {
-		if pvcCleanup != nil {
-			if err := pvcCleanup(); err != nil {
-				klog.V(3).ErrorS(err, "failed to clean up pvc", "suite", s.Name(), "case", caseName)
-			}
-		}
-	}()
 	if err != nil {
 		return suites.NewCaseResultErrored(s.Name(), start, time.Now(), fmt.Errorf("failed to create pvc: %v", err))
 	}
@@ -163,7 +156,7 @@ func (s *KBenchSuite) kbenchPodPVC(
 		return nil
 	}
 
-	job, pod, cleanup, err := k8s.EnsureJobCompleted(
+	job, pod, err := k8s.EnsureJobCompleted(
 		ctx,
 		s.Clients,
 		s.Name(),
@@ -177,13 +170,6 @@ func (s *KBenchSuite) kbenchPodPVC(
 		opts.JobSuspend,
 		overrides,
 	)
-	defer func() {
-		if cleanup != nil {
-			if err := cleanup(); err != nil {
-				klog.V(3).ErrorS(err, "failed to clean up job", "suite", s.Name(), "case", caseName)
-			}
-		}
-	}()
 	if err != nil {
 		return suites.NewCaseResultErrored(s.Name(), start, time.Now(), fmt.Errorf("job not completed: %v", err))
 	}

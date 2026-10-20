@@ -173,7 +173,7 @@ func (s *BenchmarkSuite) RunE(
 	klog.V(3).Infof("running etcd monitoring (promql) in pod '%s'\n", pod.GetName())
 	caseName := "etcd monitoring (promql)"
 	s.CaseStart(s.Name(), caseName)
-	caseResult := s.monitoring(ctx, caseName, pod, len(etcd.Items), o)
+	caseResult := s.monitoring(ctx, caseName, runID, pod, len(etcd.Items), o)
 	caseResults = append(caseResults, caseResult)
 	s.CaseDone(s.Name(), caseName, caseResult.State, time.Since(caseResult.DateTimeStart))
 
@@ -336,6 +336,7 @@ func (s *BenchmarkSuite) execBenchmark(
 func (s *BenchmarkSuite) monitoring(
 	ctx context.Context,
 	name string,
+	runID string,
 	pod *corev1.Pod,
 	etcdCount int,
 	opts *BenchmarkOptions,
@@ -369,19 +370,14 @@ func (s *BenchmarkSuite) monitoring(
 		TargetNamespace: opts.EtcdNamespace,
 		WaitTimeout:     opts.MonitoringWaitPodMonitorTimeout,
 	}
-	cleanup, err := k8s.EnsurePodMonitor(
+	if err := k8s.EnsurePodMonitor(
 		ctx,
 		s.Clients,
+		s.Name(),
+		runID,
 		podMonOpts,
 		pod,
-	)
-	defer func() {
-		klog.V(3).InfoS("cleaning up pod monitor", "name", podMonOpts.Name, "namespace", podMonOpts.Namespace)
-		if err := cleanup(); err != nil {
-			klog.V(3).ErrorS(err, "failed to cleanup pod monitor", "name", podMonOpts.Name, "namespace", podMonOpts.Namespace)
-		}
-	}()
-	if err != nil {
+	); err != nil {
 		err = fmt.Errorf("failed to ensure pod monitor: %w", err)
 		return suites.NewCaseResultSkipped(name, start, time.Now(), err)
 	}

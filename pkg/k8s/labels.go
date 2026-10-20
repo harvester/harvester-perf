@@ -11,6 +11,9 @@ const (
 	LabelHarvesterRunID     = "harvesterhci.io/run-id"
 )
 
+// defaultLabelSelector returns a LabelSelector that matches the labels for the
+// given suite name and run ID. The CLI uses these labels to identify the
+// resources it creates, so that it can clean them up later.
 func defaultLabelSelector(suiteName, runID string) *metav1.LabelSelector {
 	return &metav1.LabelSelector{
 		MatchLabels: map[string]string{

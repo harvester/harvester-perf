@@ -32,7 +32,7 @@ func EnsureDaemonSetReady(
 	activeDeadline time.Duration,
 	waitTimeout time.Duration,
 	overrides ...func(*appsv1.DaemonSet) error,
-) (*appsv1.DaemonSet, []*corev1.Pod, func() error, error) {
+) (*appsv1.DaemonSet, []*corev1.Pod, error) {
 	namePrefix := fmt.Sprintf("%s-%s-", suiteName, runID)
 	labelSelector := defaultLabelSelector(suiteName, runID)
 	ds := &appsv1.DaemonSet{
@@ -81,18 +81,13 @@ func EnsureDaemonSetReady(
 	// if any overrides are provided, apply them to the ds spec
 	for _, mod := range overrides {
 		if err := mod(ds); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 	}
 
 	created, err := c.K8sClientSet.AppsV1().DaemonSets(namespace).Create(ctx, ds, metav1.CreateOptions{})
 	if err != nil {
-		return nil, nil, nil, err
-	}
-	cleanup := func() error {
-		return c.K8sClientSet.AppsV1().DaemonSets(namespace).Delete(ctx, created.Name, metav1.DeleteOptions{
-			PropagationPolicy: new(metav1.DeletePropagationForeground),
-		})
+		return nil, nil, err
 	}
 
 	var (
@@ -114,7 +109,7 @@ func EnsureDaemonSetReady(
 		updated = ds
 		return updated.Status.ObservedGeneration >= updated.Generation && updated.Status.DesiredNumberScheduled == updated.Status.NumberReady, nil
 	}); err != nil {
-		return nil, nil, cleanup, errors.Join(fmt.Errorf("failed to wait for DaemonSet pods to be ready: %w", err), waitErr)
+		return nil, nil, errors.Join(fmt.Errorf("failed to wait for DaemonSet pods to be ready: %w", err), waitErr)
 	}
 
 	var podsWithGVK []*corev1.Pod
@@ -122,7 +117,7 @@ func EnsureDaemonSetReady(
 		LabelSelector: metav1.FormatLabelSelector(labelSelector),
 	})
 	if err != nil {
-		return nil, nil, cleanup, fmt.Errorf("failed to list DaemonSet pods: %w", err)
+		return nil, nil, fmt.Errorf("failed to list DaemonSet pods: %w", err)
 	}
 	for _, pod := range pods.Items {
 		pod.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Pod"))
@@ -130,5 +125,5 @@ func EnsureDaemonSetReady(
 	}
 	updated.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("DaemonSet"))
 
-	return updated, podsWithGVK, cleanup, nil
+	return updated, podsWithGVK, nil
 }

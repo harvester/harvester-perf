@@ -157,7 +157,7 @@ func (s *NodeCapacitySuite) execNodeDiskInfo(
 	klog.V(3).InfoS("namespace is ready", "name", namespace, "suite", s.Name(), "case", caseName)
 
 	start := time.Now()
-	ds, pods, cleanup, err := k8s.EnsureDaemonSetReady(
+	ds, pods, err := k8s.EnsureDaemonSetReady(
 		ctx,
 		s.Clients,
 		s.Name(),
@@ -167,13 +167,6 @@ func (s *NodeCapacitySuite) execNodeDiskInfo(
 		opts.PodActiveDeadline,
 		opts.PodReadyTimeout,
 	)
-	defer func() {
-		if cleanup != nil {
-			if err := cleanup(); err != nil {
-				klog.ErrorS(err, "failed to clean up daemonset", "suite", s.Name(), "case", caseName)
-			}
-		}
-	}()
 	if err != nil {
 		return suites.NewCaseResultErrored(caseName, time.Now(), time.Now(), err)
 	}

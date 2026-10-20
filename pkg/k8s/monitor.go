@@ -52,34 +52,23 @@ func MonitoringEnabled(ctx context.Context, c *suites.Clients, namespace, name s
 
 // EnsurePodMonitor ensures that the specified PodMonitor exists. It returns a
 // cleanup function to delete the PodMonitor and an error if any occurred during
-// the process. Caller is responsible for calling the cleanup function to prevent
-// continuous polling of the etcd pods.
-//
-// The function waits until Prometheus has successfully scraped
-// metrics from all etcd pods before returning.
+// the process.
+// The function waits until Prometheus has successfully scraped metrics from all
+// etcd pods before returning.
 func EnsurePodMonitor(
 	ctx context.Context,
 	clients *suites.Clients,
+	suiteName string,
+	runID string,
 	opts *PodMonitorOption,
 	jobPod *corev1.Pod,
-) (func() error, error) {
+) error {
 	if opts.EtcdCount <= 0 {
-		return func() error {
-			return nil
-		}, fmt.Errorf("etcd count must be greater than 0, got %d", opts.EtcdCount)
-	}
-
-	// cleanup is the cleanup function to be returned to caller to delete
-	// the PodMonitor created by EnsurePodMonitor. If left behind, Prometheus would
-	// continue to poll the etcd pods.
-	cleanup := func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-		defer cancel()
-		return clients.MonClientSet.MonitoringV1().PodMonitors(opts.Namespace).Delete(ctx, opts.Name, metav1.DeleteOptions{})
+		return fmt.Errorf("etcd count must be greater than 0, got %d", opts.EtcdCount)
 	}
 
 	var (
-		applyConfig       = monv1apply.PodMonitor(opts.Name, opts.Namespace)
+		applyConfig       = monv1apply.PodMonitor(opts.Name, opts.Namespace).WithLabels(defaultLabelSelector(suiteName, runID).MatchLabels)
 		namespaceSelector = monv1apply.NamespaceSelector().WithMatchNames(opts.TargetNamespace)
 		selector          = metav1apply.LabelSelector().WithMatchLabels(opts.LabelSelector)
 		metricsEndpoints  = monv1apply.PodMetricsEndpoint().
@@ -97,7 +86,7 @@ func EnsurePodMonitor(
 	if _, err := clients.MonClientSet.MonitoringV1().PodMonitors(opts.Namespace).Apply(ctx, applyConfig, metav1.ApplyOptions{
 		FieldManager: DefaultSSAFieldManager,
 	}); err != nil {
-		return cleanup, err
+		return err
 	}
 	applyTime := time.Now()
 
@@ -131,10 +120,10 @@ func EnsurePodMonitor(
 
 		return readyCount == opts.EtcdCount, nil
 	}); err != nil {
-		return cleanup, errors.Join(waitErr, err)
+		return errors.Join(waitErr, err)
 	}
 
-	return cleanup, nil
+	return nil
 }
 
 type PodMonitorOption struct {

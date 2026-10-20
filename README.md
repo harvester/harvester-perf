@@ -8,8 +8,8 @@ against [SUSE Harvester](https://harvesterhci.io) clusters.
 
 Suites are driven from your workstation using an ordinary kubeconfig. Nothing is
 installed on the Harvester nodes; suites that need on-node access (such as the
-etcd benchmark) schedule a short-lived helper job in a namespace of their own,
-which `--keep-alive=false` tears down once the run is over.
+etcd benchmark) schedule a short-lived helper job in the test namespace, which
+is deleted once the run is over unless `--keep-alive` is set.
 
 These helper pods run **privileged**, since the on-node access they need can't
 be had otherwise: e.g., the etcd benchmark's job pod mounts `/var/lib/rancher` to
@@ -90,10 +90,12 @@ built binary rather than the image will fail unless `etcdctl`, `benchmark` and
 `run` also takes `--config` (default `./hvperf.yaml`) to point at a config file
 for suites that read it (currently `density`).
 
-`run` also takes `--keep-alive` (default `true`), which decides what happens to
-the test namespace once the run finishes. With `--keep-alive=false` the
-namespace and everything in it is deleted afterwards — but only when it is the
-default `harvester-perf-system`.
+`run` also takes `--keep-alive` (default `false`), which decides what happens to
+the test namespace once the run finishes. By default the namespace and
+everything in it is deleted afterwards — but only when it is the default
+`harvester-perf-system`. Pass `--keep-alive=true` to keep the namespace and its
+resources around for inspection. A custom `--namespace` is never deleted and its
+resources are not cleaned up; a warning is logged when cleanup is skipped.
 
 Results are written to stdout; suite progress is logged to stderr, so
 `hvperf run ... -o json > results.json` keeps the two streams separate. Pass

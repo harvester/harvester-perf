@@ -18,9 +18,7 @@ import (
 // CreatePVC creates a Kubernetes PersistentVolumeClaim with the specified
 // attributes. The spec of the PVC can be modified by providing one or more
 // override functions that take a pointer to the PVC and modify it in place.
-// It returns the created PVC, a cleanup function to delete the PVC, and an error
-// if any occurred during the process. The call site is responsible for calling
-// the cleanup function to delete the PVC when it is no longer needed.
+// It returns the created PVC, and an error if any occurred during the process.
 func CreatePVC(
 	ctx context.Context,
 	c *suites.Clients,
@@ -30,7 +28,7 @@ func CreatePVC(
 	storageClassName string,
 	storageSize resource.Quantity,
 	overrides ...func(*corev1.PersistentVolumeClaim) error,
-) (*corev1.PersistentVolumeClaim, func() error, error) {
+) (*corev1.PersistentVolumeClaim, error) {
 	namePrefix := fmt.Sprintf("%s-%s-", suiteName, runID)
 	labelSelector := defaultLabelSelector(suiteName, runID)
 	pvc := &corev1.PersistentVolumeClaim{
@@ -57,23 +55,17 @@ func CreatePVC(
 
 	for _, mod := range overrides {
 		if err := mod(pvc); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
 	created, err := c.K8sClientSet.CoreV1().PersistentVolumeClaims(namespace).Create(ctx, pvc, metav1.CreateOptions{})
 	if err != nil {
-		return nil, nil, err
-	}
-
-	cleanup := func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		return c.K8sClientSet.CoreV1().PersistentVolumeClaims(namespace).Delete(ctx, created.GetName(), metav1.DeleteOptions{})
+		return nil, err
 	}
 
 	created.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("PersistentVolumeClaim"))
-	return created, cleanup, nil
+	return created, nil
 }
 
 // WaitPVCBound waits for the specified PersistentVolumeClaim to reach the "Bound" phase.
