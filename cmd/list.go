@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/harvester/hvperf/pkg/suites"
 	"go.yaml.in/yaml/v4"
@@ -34,35 +35,45 @@ func init() {
 
 func outList(format string) error {
 	suites := suites.All()
-
-	var (
-		data []byte
-		err  error
-	)
 	switch format {
 	case "json":
-		data, err = json.Marshal(suites)
+		out, err := json.Marshal(suites)
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(os.Stdout, "%s\n", strings.TrimSpace(string(out)))
+		return err
+
 	case "yaml":
-		data, err = yaml.Marshal(suites)
+		out, err := yaml.Marshal(suites)
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(os.Stdout, "%s\n", strings.TrimSpace(string(out)))
+		return err
+
 	case "name":
 		var raw []string
 		for _, s := range suites {
 			raw = append(raw, s.Name())
 		}
-		data = []byte(strings.Join(raw, "\n"))
+		out := []byte(strings.Join(raw, "\n"))
+		_, err := fmt.Fprintf(os.Stdout, "%s\n", strings.TrimSpace(string(out)))
+		return err
+
 	case "table":
 		fallthrough
 	default:
-		var raw []string
+		rows := []string{"NAME\tREAD/WRITE\tDESCRIPTION"}
 		for _, s := range suites {
-			raw = append(raw, fmt.Sprintf("%s", s))
+			rows = append(rows, fmt.Sprintf("%s", s))
 		}
-		data = []byte(strings.Join(raw, "\n"))
-	}
-	if err != nil {
-		return err
-	}
 
-	_, err = fmt.Fprintf(os.Stdout, "%s\n", strings.TrimSpace(string(data)))
-	return err
+		out := []byte(strings.Join(rows, "\n"))
+		tab := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', 0)
+		if _, err := fmt.Fprintf(tab, "%s\n", strings.TrimSpace(string(out))); err != nil {
+			return err
+		}
+		return tab.Flush()
+	}
 }
