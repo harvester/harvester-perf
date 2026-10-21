@@ -29,3 +29,29 @@ Metrics | Why | Watch For
 `kube_pod_container_resource_requests` | CPU and memory reserved by Harvester control-plane pods, per namespace and node | An increase across releases is the primary footprint regression signal — requests are what the scheduler locks away from users, regardless of actual usage
 `kube_node_status_allocatable` | CPU and memory available for user workloads after node-level reservations | A decrease across releases means users have less schedulable capacity — the direct user-visible impact of footprint growth
 `node_memory_MemTotal_bytes` / `node_memory_MemAvailable_bytes` | Host memory capacity and available memory | A sustained drop in `MemAvailable` across releases without a change in `MemTotal` indicates the control plane is consuming more host memory
+
+## Storage
+
+Metrics | Why | Watch For
+------- | --- | ---------
+`longhorn_volume_robustness{state="healthy"}` | Confirm every replica was present and in sync for the whole run | `1` for the whole run. Any sample below `1` during the run means the volume was unhealthy due to either missing replica, replicas rebuild, unhealthy volume etc.
+`longhorn_volume_state{state="attached"}` | Confirm whether the volume stayed attached to the same node throughout | Any sample below `1`. More than one `node` label value in the window means a detach and reattach happened, which implies the engine restarted, so `kbench` might see I/O errors or stalls.
+`longhorn_instance_manager_cpu_usage_millicpu` | CPU used by the Longhorn datapath (engine and replica) processes on each node. This is the cost invisible to `kbench` and is spread across nodes holding a replica | Look for spikes in CPU usage that correlate with `kbench` I/O latency spikes.
+`longhorn_instance_manager_memory_usage_bytes` | Memory footprint of Longhorn datapath on each node. It reports how Longhorn's memory cost scales with the increase in number of volumes | Memory that keeps growing during the run, doesn't return to baseline afterwards, large spikes above the baseline, uneven usage across nodes.
+
+### Understanding Kbench Results
+
+IOPS: IO operations per second. Higher is better. It's a measurement of how many
+IO operations can the device handle in a second, mainly concerning the smaller IO
+chunks, e.g. 4k.
+
+Bandwidth: Also called Throughput. Higher is better. It's a measurement of how
+many data can the device read/write in a second. It's mainly concering the bigger
+IO chunks, e.g. 128k.
+
+Latency: The total time each request spent in the IO path. Lower is better. It's
+a measurement of how efficient is the storage system to handle each request. The
+data path overhead of a storage system can be expressed as the latency it added
+on top of the native storage system (SSD/NVMe).
+
+Ref: <https://github.com/longhorn/kbench#understanding-the-result>

@@ -129,6 +129,7 @@ type CaseResult struct {
 	CmdResults         []*CmdResult
 	K8sResourceResults []*K8sResourceResult
 	MetricResults      []*MetricResult
+	PodLogResults      []*PodLogResult
 
 	CaseName      string
 	DateTimeStart time.Time
@@ -241,11 +242,24 @@ func (c *CaseResult) FinalizeState() {
 		}
 	}
 
+	for _, log := range c.PodLogResults {
+		if log.Err != "" {
+			c.State = CaseResultStateErrored
+			return
+		}
+	}
+
 	c.State = CaseResultStatePassed
 }
 
 func (c *CaseResult) WithK8sResourceResults(results []*K8sResourceResult) *CaseResult {
 	c.K8sResourceResults = results
+	c.FinalizeState()
+	return c
+}
+
+func (c *CaseResult) WithPodLogResults(results []*PodLogResult) *CaseResult {
+	c.PodLogResults = results
 	c.FinalizeState()
 	return c
 }
@@ -315,6 +329,14 @@ func (c *CaseResult) String() string {
 		}
 		m.indent = strings.Repeat(indent, 2)
 		fmt.Fprintf(tab, "%s", m)
+	}
+
+	for i, l := range c.PodLogResults {
+		if i == 0 {
+			fmt.Fprintf(tab, "%sLogs:\n", indent)
+		}
+		l.indent = strings.Repeat(indent, 2)
+		fmt.Fprintf(tab, "%s", l)
 	}
 
 	for i, obj := range c.Objects {
@@ -431,6 +453,30 @@ func (k *K8sResourceResult) String() string {
 
 	if k.Err != "" {
 		fmt.Fprintf(&sb, "%sError:\t%v\n", k.indent, k.Err)
+	}
+
+	return sb.String()
+}
+
+// PodLogResult represents the result of querying logs from a Kubernetes pod.
+type PodLogResult struct {
+	Err     string
+	Logs    string
+	Subject string
+	indent  string
+}
+
+func (p *PodLogResult) String() string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%sName: %s\n", p.indent, p.Subject)
+
+	if out := p.Logs; out != "" {
+		fmt.Fprintf(&sb, "%sLogs:\n", p.indent)
+		fmt.Fprint(&sb, out)
+	}
+
+	if p.Err != "" {
+		fmt.Fprintf(&sb, "%sError:\t%v\n", p.indent, p.Err)
 	}
 
 	return sb.String()

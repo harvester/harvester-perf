@@ -92,7 +92,6 @@ func EnsureDaemonSetReady(
 	cleanup := func() error {
 		return c.K8sClientSet.AppsV1().DaemonSets(namespace).Delete(ctx, created.Name, metav1.DeleteOptions{})
 	}
-	created.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("DaemonSet"))
 
 	var (
 		waitErr error
@@ -127,6 +126,7 @@ func EnsureDaemonSetReady(
 		pod.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Pod"))
 		podsWithGVK = append(podsWithGVK, &pod)
 	}
+	updated.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("DaemonSet"))
 
 	return updated, podsWithGVK, cleanup, nil
 }
