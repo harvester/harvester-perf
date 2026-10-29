@@ -1,42 +1,34 @@
 # syntax=docker/dockerfile:1
 
-ARG BCI_TAG=16.0
 ARG BCI_GO_TAG=1.26
-ARG ETCD_VERSION=v3.6.14
-ARG PROMETHEUS_VERSION=3.14.0
+
+FROM --platform=$BUILDPLATFORM registry.suse.com/bci/golang:${BCI_GO_TAG} AS base
+ARG TARGETOS TARGETARCH
+ENV GOOS=${TARGETOS} \
+  GOARCH=${TARGETARCH} \
+  CGO_ENABLED=0 \
+  GOFLAGS=-trimpath
 
 # -------------------------------------------------------------------------------
 # etcd benchmark tool is not shipped in the release tarball, so build it from src
 # -------------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM registry.suse.com/bci/golang:${BCI_GO_TAG} AS etcd-builder
-ARG ETCD_VERSION \
-  TARGETOS \
-  TARGETARCH
-ENV GOOS=${TARGETOS} \
-  GOARCH=${TARGETARCH} \
-  CGO_ENABLED=0 \
-  GOFLAGS=-trimpath
-RUN git clone --depth 1 --branch "${ETCD_VERSION}" https://github.com/etcd-io/etcd.git /src \
-  && go build -C /src/tools/benchmark -o /out/benchmark \
-  && go build -C /src/etcdctl -o /out/etcdctl
+FROM base AS etcd-build
+ARG ETCD_VERSION CLI_VERSION
+ADD https://github.com/etcd-io/etcd.git#${ETCD_VERSION} /etcd
+RUN --mount=type=cache,target=/go/pkg/mod \
+  --mount=type=cache,target=/root/.cache/go-build \
+  go build -C /etcd/tools/benchmark -o /out/benchmark \
+  && go build -C /etcd/etcdctl -o /out/etcdctl \
+  && tar -C /out -cvzf /out/hvperf-tools-"${CLI_VERSION}".tar.gz etcdctl benchmark
 
-FROM --platform=$BUILDPLATFORM registry.suse.com/bci/golang:${BCI_GO_TAG} AS promtool-builder
-ARG PROMETHEUS_VERSION \
-  TARGETOS \
-  TARGETARCH
-ADD --unpack https://github.com/prometheus/prometheus/releases/download/v"${PROMETHEUS_VERSION}"/prometheus-"${PROMETHEUS_VERSION}".${TARGETOS}-${TARGETARCH}.tar.gz /src
-RUN mkdir -p /out && cp /src/prometheus-"${PROMETHEUS_VERSION}"."${TARGETOS}"-"${TARGETARCH}"/promtool /out/
+FROM scratch AS tools-dist
+ARG CLI_VERSION
+COPY --from=etcd-build /out/hvperf-tools-"${CLI_VERSION}".tar.gz /
 
-# -------------------------------------------------------------------------------
-# build the harvester-perf binary
-# -------------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM registry.suse.com/bci/golang:${BCI_GO_TAG} AS hvperf-builder
-ARG TARGETOS \
-  TARGETARCH
-ENV GOOS=${TARGETOS} \
-  GOARCH=${TARGETARCH} \
-  CGO_ENABLED=0 \
-  GOFLAGS=-trimpath
+# --------------------
+# hvperf target - base
+# --------------------
+FROM base AS hvperf-base
 WORKDIR /go/src
 
 # separate dependencies download to leverage docker layer caching
@@ -45,38 +37,28 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
 # build the source code. use cache mounts to speed up builds by caching go build artifacts and module downloads
 COPY . .
+
+# ---------------------
+# hvperf target - build
+# ---------------------
+FROM hvperf-base AS hvperf-build
 ARG CLI_VERSION
 RUN --mount=type=cache,target=/go/pkg/mod \
   --mount=type=cache,target=/root/.cache/go-build \
   go build -ldflags "-X github.com/harvester/hvperf/cmd.Version=${CLI_VERSION}" -o /out/hvperf .
 
-# ---------------------------------------------------------------------------
-# build the harvester-perf image. this image includes all the performance and
-# benchmarking tools needed to run the tests
-# ---------------------------------------------------------------------------
-FROM registry.suse.com/bci/bci-base:${BCI_TAG}
-ARG CLI_VERSION
-ARG ETCD_VERSION
-ARG PROMETHEUS_VERSION
-LABEL org.opencontainers.image.title="harvester-perf" \
-  org.opencontainers.image.description="Performance and capacity benchmarks for SUSE Harvester" \
-  org.opencontainers.image.source="https://github.com/harvester/harvester-perf" \
-  io.harvesterhci.image.tools="benchmark:${ETCD_VERSION},etcdctl:${ETCD_VERSION},promtool:${PROMETHEUS_VERSION},hvperf:${CLI_VERSION}" 
+# -----------------------------------------
+# hvperf target - test
+# CGO_ENABLED=1 needed for Go race detector
+# -----------------------------------------
+FROM hvperf-base AS hvperf-test
+ENV CGO_ENABLED=1
+RUN --mount=type=cache,target=/go/pkg/mod \
+  --mount=type=cache,target=/root/.cache/go-build \
+  go test -cover -race -shuffle=on ./...
 
-RUN zypper --non-interactive --gpg-auto-import-keys refresh \
-  && zypper --non-interactive install --no-recommends \
-  bash coreutils curl tar gzip gawk sed grep diffutils util-linux procps ca-certificates \
-  && zypper clean --all
-
-COPY --from=etcd-builder /out/benchmark /usr/local/bin/benchmark
-COPY --from=etcd-builder /out/etcdctl /usr/local/bin/etcdctl
-COPY --from=promtool-builder /out/promtool /usr/local/bin/promtool
-COPY --from=hvperf-builder /out/hvperf /usr/local/bin/hvperf
-
-RUN set -eux ;\
-  etcdctl version; \
-  benchmark --help
-ENV KUBECONFIG=/root/.kube/config \
-  ETCDCTL_API=3
-ENTRYPOINT ["/usr/local/bin/hvperf"]
-CMD ["version"]
+# --------------------
+# hvperf target - dist
+# --------------------
+FROM scratch AS hvperf-dist
+COPY --from=hvperf-build /out/hvperf /

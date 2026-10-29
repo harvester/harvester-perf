@@ -9,9 +9,10 @@ import (
 )
 
 func TestNewBenchmarkOptions(t *testing.T) {
+	toolsDir := "/tmp"
 	expected := &BenchmarkOptions{
-		EtcdBenchmarkLocalPath:          "/usr/local/bin/benchmark",
-		EtcdctlLocalPath:                "/usr/local/bin/etcdctl",
+		EtcdBenchmarkLocalPath:          "/tmp/benchmark",
+		EtcdctlLocalPath:                "/tmp/etcdctl",
 		EtcdNamespace:                   "kube-system",
 		EtcdctlOutputFormat:             "simple",
 		EtcdEndpoints:                   "https://127.0.0.1:2379",
@@ -41,7 +42,9 @@ func TestNewBenchmarkOptions(t *testing.T) {
 		GRPCClientCount:                 1,
 		GRPCConnCount:                   1,
 	}
-	actual, err := NewBenchmarkOptions(suites.Options{})
+	actual, err := NewBenchmarkOptions(suites.Options{
+		"toolsDir": toolsDir,
+	})
 	if err != nil {
 		t.Fatalf("NewBenchmarkOptions() returned an error: %v", err)
 	}
@@ -52,7 +55,13 @@ func TestNewBenchmarkOptions(t *testing.T) {
 }
 
 func TestNewBenchmarkOptionsOverride(t *testing.T) {
-	want, err := NewBenchmarkOptions(nil)
+	if _, err := NewBenchmarkOptions(nil); err == nil {
+		t.Fatalf("NewBenchmarkOptions() expected error for nil options, got nil")
+	}
+
+	want, err := NewBenchmarkOptions(suites.Options{
+		"toolsDir": "/tmp",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,12 +69,15 @@ func TestNewBenchmarkOptionsOverride(t *testing.T) {
 	want.EtcdEndpoints = "https://10.0.0.1:2379"
 	want.JobPodImageTag = "v1" // global default overridden
 	want.MonitoringRangeDuration = 60 * time.Second
+	want.EtcdBenchmarkLocalPath = "/tmp/benchmark"
+	want.EtcdctlLocalPath = "/tmp/etcdctl"
 
 	got, err := NewBenchmarkOptions(suites.Options{
-		"PutLoadSize":             500,
-		"EtcdEndpoints":           "https://10.0.0.1:2379",
-		"JobPodImageTag":          "v1",
-		"MonitoringRangeDuration": 60 * time.Second,
+		"toolsDir":                "/tmp",
+		"putLoadSize":             500,
+		"etcdEndpoints":           "https://10.0.0.1:2379",
+		"jobPodImageTag":          "v1",
+		"monitoringRangeDuration": 60 * time.Second,
 	})
 	if err != nil {
 		t.Fatalf("NewBenchmarkOptions() error = %v, want nil", err)

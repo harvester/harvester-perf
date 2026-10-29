@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 	"time"
 
+	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 
@@ -41,13 +43,11 @@ specified as a list of comma-separated arguments.`,
 		}
 		runCmdClients = clientSets
 
-		if configFile != "" {
-			ro, err := loadRunOptions(configFile)
-			if err != nil {
-				return err
-			}
-			runOptions = ro
+		ro, err := loadRunOptions(configFile)
+		if err != nil {
+			return err
 		}
+		runOptions = ro
 
 		return nil
 	},
@@ -58,8 +58,13 @@ specified as a list of comma-separated arguments.`,
 			return err
 		}
 
+		toolsDir, err := toolsDirPath()
+		if err != nil {
+			return err
+		}
+
 		outputFormat := *k8sPrintFlags.OutputFormat
-		results := runSuites(cmd.Context(), testSuites, outputFormat, runOptions)
+		results := runSuites(cmd.Context(), testSuites, toolsDir, outputFormat, runOptions)
 		return outRun(results, outputFormat)
 	},
 }
@@ -82,7 +87,7 @@ func init() {
 	}
 }
 
-func runSuites(ctx context.Context, testSuites []suites.Suite, format string, opts map[string]suites.Options) []*suites.SuiteResult {
+func runSuites(ctx context.Context, testSuites []suites.Suite, toolsDir string, format string, opts map[string]suites.Options) []*suites.SuiteResult {
 	var (
 		results []*suites.SuiteResult
 		runID   = time.Now().Format("20060102150405")
@@ -95,7 +100,9 @@ func runSuites(ctx context.Context, testSuites []suites.Suite, format string, op
 	defer func() {
 		if !keepAlive && namespace == suites.DefaultNamespace {
 			if err := runCmdClients.K8sClientSet.CoreV1().Namespaces().Delete(context.Background(), namespace, metav1.DeleteOptions{}); err != nil {
-				klog.ErrorS(err, "failed to delete test namespace", "namespace", namespace)
+				if !apierrs.IsNotFound(err) {
+					klog.ErrorS(err, "failed to delete test namespace", "namespace", namespace)
+				}
 			}
 			return
 		}
@@ -106,8 +113,11 @@ func runSuites(ctx context.Context, testSuites []suites.Suite, format string, op
 	for i, suite := range testSuites {
 		suiteOptions := suites.Options{}
 		if o, exists := opts[suite.Name()]; exists {
-			suiteOptions = o
+			maps.Copy(suiteOptions, o)
 		}
+
+		// every suite gets the toolsDir option, its value is not overridable
+		suiteOptions["toolsDir"] = toolsDir
 
 		suite = suites.WithClients(suite, runCmdClients)
 		suite = suites.WithProgressReporter(suite, progress)

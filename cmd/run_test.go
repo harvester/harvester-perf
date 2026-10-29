@@ -14,7 +14,7 @@ func TestLoadRunOptionsOverridesGlobalsAndPreservesSections(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hvperf.yaml")
 	config := `
 density:
-  EtcdNamespace: custom-etcd
+  etcdNamespace: custom-etcd
   densityDuration: "5s"
   example-suite:
     enabled: true
@@ -32,7 +32,7 @@ density:
 
 	want := map[string]suites.Options{
 		"density": {
-			"EtcdNamespace":   "custom-etcd",
+			"etcdNamespace":   "custom-etcd",
 			"densityDuration": "5s",
 			"example-suite": suites.Options{
 				"enabled":       true,

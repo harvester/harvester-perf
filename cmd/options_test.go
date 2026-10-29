@@ -25,30 +25,40 @@ func TestLoadRunOptions(t *testing.T) {
 			name: "single suite",
 			config: `
 kbench:
-  Mode: iops
+  mode: iops
 `,
-			want: map[string]suites.Options{"kbench": {"Mode": "iops"}},
+			want: map[string]suites.Options{
+				"kbench": {
+					"mode": "iops",
+				},
+			},
 		},
 		{
 			name: "multiple suites",
 			config: `
 kbench:
-  Mode: iops
-  TestSize: 10G
+  mode: iops
+  testSize: 10G
 etcd:
-  PutLoadSize: 500
-  EtcdEndpoints: https://10.0.0.1:2379
+  putLoadSize: 500
+  etcdEndpoints: https://10.0.0.1:2379
 density:
-  MaxVMs: 5
-  VMI:
-    CPU: 200m
+  maxVMs: 5
+  vmi:
+    cpu: 200m
 `,
 			want: map[string]suites.Options{
-				"kbench": {"Mode": "iops", "TestSize": "10G"},
-				"etcd":   {"PutLoadSize": 500, "EtcdEndpoints": "https://10.0.0.1:2379"},
+				"kbench": {
+					"mode":     "iops",
+					"testSize": "10G",
+				},
+				"etcd": {
+					"putLoadSize":   500,
+					"etcdEndpoints": "https://10.0.0.1:2379",
+				},
 				"density": {
-					"MaxVMs": 5,
-					"VMI":    suites.Options{"CPU": "200m"},
+					"maxVMs": 5,
+					"vmi":    suites.Options{"cpu": "200m"},
 				},
 			},
 		},
@@ -57,11 +67,13 @@ density:
 			config: `
 kbench:
 etcd:
-  PutLoadSize: 500
+  putLoadSize: 500
 `,
 			want: map[string]suites.Options{
 				"kbench": nil,
-				"etcd":   {"PutLoadSize": 500},
+				"etcd": {
+					"putLoadSize": 500,
+				},
 			},
 		},
 		{

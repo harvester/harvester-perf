@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -484,6 +485,28 @@ func NewBenchmarkOptions(override suites.Options) (*BenchmarkOptions, error) {
 	merged := options.DefaultGlobalOptions().
 		Merge(options.DefaultEtcdBenchmarkOptions()).
 		Merge(override)
+
+	// if user hasn't provided the paths for etcdctl and benchmark binaries, set
+	// them to the default values
+	if merged["etcdctlLocalPath"] == nil || merged["etcdBenchmarkLocalPath"] == nil {
+		toolsDir, exists := merged["toolsDir"]
+		if !exists {
+			return nil, fmt.Errorf("toolsDir option is required but not provided")
+		}
+
+		cast, ok := toolsDir.(string)
+		if !ok {
+			return nil, fmt.Errorf("toolsDir option must be a string, but got %T", toolsDir)
+		}
+
+		if merged["etcdBenchmarkLocalPath"] == nil {
+			merged["etcdBenchmarkLocalPath"] = filepath.Join(cast, "benchmark")
+		}
+		if merged["etcdctlLocalPath"] == nil {
+			merged["etcdctlLocalPath"] = filepath.Join(cast, "etcdctl")
+		}
+	}
+
 	return options.FromOptions[*BenchmarkOptions](merged)
 }
 

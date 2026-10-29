@@ -31,8 +31,6 @@ func DefaultGlobalOptions() suites.Options {
 // test suite.
 func DefaultEtcdBenchmarkOptions() suites.Options {
 	return suites.Options{
-		"EtcdBenchmarkLocalPath":  "/usr/local/bin/benchmark",
-		"EtcdctlLocalPath":        "/usr/local/bin/etcdctl",
 		"EtcdctlOutputFormat":     "simple",
 		"EtcdEndpoints":           "https://127.0.0.1:2379",
 		"EtcdMetricsPath":         "/metrics",

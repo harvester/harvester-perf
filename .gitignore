@@ -1,4 +1,5 @@
 results/
 *.swp
 bin
-hperf
+dist
+hvperf
