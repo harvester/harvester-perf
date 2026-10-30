@@ -42,6 +42,7 @@ func init() {
 type ResourceFootprintSuite struct {
 	suites.SuiteMarshaler
 	*suites.Clients
+	*suites.ProgressReporter
 }
 
 type resourceFootprintOptions struct {
@@ -49,9 +50,12 @@ type resourceFootprintOptions struct {
 	MonitoringNamespace string
 }
 
-func (s *ResourceFootprintSuite) SetProgressReporter(_ *suites.ProgressReporter) {}
+func (s *ResourceFootprintSuite) SetProgressReporter(progressReporter *suites.ProgressReporter) {
+	s.ProgressReporter = progressReporter
+}
+
 func (s *ResourceFootprintSuite) Name() string {
-	return "resource-footprint"
+	return "control-plane-footprint"
 }
 
 func (s *ResourceFootprintSuite) Description() string {
@@ -145,9 +149,11 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, opts
 
 	results := make([]*suites.CaseResult, 0, len(cases))
 	for _, c := range cases {
+		s.CaseStart(s.Name(), c.name)
 		caseResult := c.measure()
 		caseResult.CaseName = c.name
 		results = append(results, caseResult)
+		s.CaseDone(s.Name(), c.name, caseResult.State, time.Since(caseResult.DateTimeStart))
 	}
 
 	return suites.SuiteResult{

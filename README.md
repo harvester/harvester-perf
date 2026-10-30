@@ -159,7 +159,7 @@ suite. The flag is reported by `hvperf list`.
 | --- | --- | --- |
 | `node-capacity` | no | Assess node resource capacity: per-node OS info and disk info via a privileged `hostPID` daemonset. |
 | `etcd-benchmark` | yes | Exercises the cluster's etcd from a privileged `hostNetwork` job pod. |
-| `resource-footprint` | no | Measures the cluster's resource footprint: per-namespace CPU/memory usage and requests, host memory, and node allocatable, via Prometheus queries. |
+| `control-plane-footprint` | no | Measures the cluster's resource footprint: per-namespace CPU/memory usage and requests, host memory, and node allocatable, via Prometheus queries. |
 | `density` | yes | Import a VM image, ramp up VMs concurrently until failure, and record VMI boot-latency percentiles (p50/p95/p99). |
 | `storage-kbench` | yes | Run Longhorn's `kbench` job against a fresh PVC to benchmark bandwidth, IOPS and latency, then read the matching Longhorn metrics from Prometheus. |
 
@@ -232,7 +232,7 @@ To build natively instead, Go 1.26+ works directly: `go build -o hvperf .`
 │   ├── density/           # density suite
 │   ├── etcd/              # etcd-benchmark suite
 │   ├── nodes/             # node-capacity suite
-│   ├── resourcefootprint/ # resource-footprint suite
+│   ├── resourcefootprint/ # control-plane-footprint suite
 │   ├── storage/           # storage-kbench suite
 │   └── options/           # decodes the generic pkg/suites.Options into a suite's own options struct
 ├── METRICS.md             # the metrics the suites collect and how to read them
