@@ -48,7 +48,7 @@ func (s *SuiteResult) String() string {
 
 	for i, param := range s.Params {
 		if i == 0 {
-			fmt.Fprintf(&stringBuilder, "%sParams:\n", indent)
+			fmt.Fprintf(&stringBuilder, "\n%sParams:\n", indent)
 		}
 		fmt.Fprintf(&stringBuilder, "%s\t%s\n", indent, param)
 	}
