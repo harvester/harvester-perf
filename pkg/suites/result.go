@@ -48,7 +48,7 @@ func (s *SuiteResult) String() string {
 
 	for i, param := range s.Params {
 		if i == 0 {
-			fmt.Fprintf(&stringBuilder, "\n%sParams:\n", indent)
+			fmt.Fprintf(&stringBuilder, "%sParams:\n", indent)
 		}
 		fmt.Fprintf(&stringBuilder, "%s\t%s\n", indent, param)
 	}
@@ -121,6 +121,21 @@ type CapacityResult struct {
 	Max        int    // last batch count confirmed healthy before failure
 	Err        string // why the ramp stopped; alone does NOT cause ERROR state
 	CleanupErr string // cleanup failed; causes ERROR state
+}
+
+func (c *CapacityResult) String() string {
+	var str strings.Builder
+
+	fmt.Fprintf(&str, "Resource: %s\n", c.Resource)
+	fmt.Fprintf(&str, "Max: %d\n", c.Max)
+	if c.Err != "" {
+		fmt.Fprintf(&str, "Stopped: %s\n", c.Err)
+	}
+	if c.CleanupErr != "" {
+		fmt.Fprintf(&str, "CleanupError: %s\n", c.CleanupErr)
+	}
+
+	return str.String()
 }
 
 // CaseResult represents the result of a single test case execution. Err captures
@@ -286,26 +301,13 @@ func (c *CaseResult) String() string {
 		return strings.TrimSpace(stringBuilder.String())
 	}
 
-	for i, cap := range c.CapacityResults {
-		if i == 0 {
-			fmt.Fprintf(tab, "%sResults:\n", indent)
-		}
-		fmt.Fprintf(tab, "%s\tResource:\t%s\n", indent, cap.Resource)
-		fmt.Fprintf(tab, "%s\tMax:\t%d\n", indent, cap.Max)
-		if cap.Err != "" {
-			fmt.Fprintf(tab, "%s\tStopped:\t%s\n", indent, cap.Err)
-		}
-		if cap.CleanupErr != "" {
-			fmt.Fprintf(tab, "%s\tCleanupError:\t%s\n", indent, cap.CleanupErr)
-		}
+	resultBlocks := []string{}
+	for _, r := range c.CapacityResults {
+		resultBlocks = append(resultBlocks, r.String())
 	}
 
-	for i, r := range c.CmdResults {
-		if i == 0 {
-			fmt.Fprintf(tab, "%sResults:\n", indent)
-		}
-		r.indent = strings.Repeat(indent, 2)
-		fmt.Fprintf(tab, "%s", r)
+	for _, r := range c.CmdResults {
+		resultBlocks = append(resultBlocks, r.String())
 
 		// stderr from remote command is often noisy - by default, we don't stringify
 		// it, but stream it to klog at V(3) for debugging purposes
@@ -316,28 +318,25 @@ func (c *CaseResult) String() string {
 		}
 	}
 
-	for i, m := range c.MetricResults {
-		if i == 0 {
-			fmt.Fprintf(tab, "%sResults:\n", indent)
-		}
-		m.indent = strings.Repeat(indent, 2)
-		fmt.Fprintf(tab, "%s", m)
+	for _, r := range c.MetricResults {
+		resultBlocks = append(resultBlocks, r.String())
 	}
 
-	for i, m := range c.K8sResourceResults {
-		if i == 0 {
-			fmt.Fprintf(tab, "%sResults:\n", indent)
-		}
-		m.indent = strings.Repeat(indent, 2)
-		fmt.Fprintf(tab, "%s", m)
+	for _, r := range c.K8sResourceResults {
+		resultBlocks = append(resultBlocks, r.String())
 	}
 
-	for i, l := range c.PodLogResults {
-		if i == 0 {
-			fmt.Fprintf(tab, "%sResults:\n", indent)
-		}
-		l.indent = strings.Repeat(indent, 2)
-		fmt.Fprintf(tab, "%s", l)
+	for _, r := range c.PodLogResults {
+		resultBlocks = append(resultBlocks, r.String())
+	}
+
+	if len(resultBlocks) > 0 {
+		fmt.Fprintf(tab, "%sResults:\n", indent)
+		fmt.Fprint(tab, strings.Join(resultBlocks, "\n"))
+	}
+
+	if len(resultBlocks) > 0 && len(c.Objects) > 0 {
+		fmt.Fprint(tab, "\n")
 	}
 
 	for i, obj := range c.Objects {
@@ -362,31 +361,30 @@ type CmdResult struct {
 	Node   string
 	Stdout string
 	Stderr string
-	indent string
 }
 
 func (c *CmdResult) String() string {
 	var sb strings.Builder
 
-	fmt.Fprintf(&sb, "%sCmd: %s\n", c.indent, c.Cmd)
+	fmt.Fprintf(&sb, "Cmd: %s\n", c.Cmd)
 
 	// for cases where the command is executed on a specific node, include the node
 	// name in the output
 	if c.Node != "" {
-		fmt.Fprintf(&sb, "%sNode: %s\n", c.indent, c.Node)
+		fmt.Fprintf(&sb, "Node: %s\n", c.Node)
 	}
 
 	// tabs in stdout and stderr are replaced with 4 spaces to avoid conflicts with
 	// the tabwriter output
 	if stdout := c.Stdout; stdout != "" {
 		if trimmed := strings.TrimSpace(string(stdout)); trimmed != "" {
-			fmt.Fprintf(&sb, "%sStdout: ", c.indent)
+			fmt.Fprintln(&sb, "Out:")
 			fmt.Fprintf(&sb, "%s\n", strings.ReplaceAll(trimmed, "\t", "    "))
 		}
 	}
 
 	if err := c.Err; err != "" {
-		fmt.Fprintf(&sb, "%sError:\t%v\n", c.indent, err)
+		fmt.Fprintf(&sb, "Error: %v\n", err)
 	}
 
 	return sb.String()
@@ -399,25 +397,24 @@ type MetricResult struct {
 	Query    string
 	Samples  model.Vector
 	Warnings []string
-	indent   string
 }
 
 func (m *MetricResult) String() string {
 	var sb strings.Builder
 
-	fmt.Fprintf(&sb, "%sQuery: %s\n", m.indent, m.Query)
+	fmt.Fprintf(&sb, "Query: %s\n", m.Query)
 	for _, s := range m.Samples {
-		fmt.Fprintf(&sb, "%sValue: %v\n", m.indent, s)
+		fmt.Fprintf(&sb, "Value: %v\n", s)
 	}
 
 	if m.Err != "" {
-		fmt.Fprintf(&sb, "%sError:\t%v\n", m.indent, m.Err)
+		fmt.Fprintf(&sb, "Error: %v\n", m.Err)
 	}
 
 	if len(m.Warnings) > 0 {
-		fmt.Fprintf(&sb, "%sWarnings:\n", m.indent)
+		fmt.Fprintln(&sb, "Warnings:")
 		for _, w := range m.Warnings {
-			fmt.Fprintf(&sb, "%s- %s\n", m.indent, w)
+			fmt.Fprintf(&sb, "- %s\n", w)
 		}
 	}
 
@@ -433,27 +430,26 @@ type K8sResourceResult struct {
 	Subject  string
 	Data     map[string]string
 	Err      string
-	indent   string
 }
 
 func (k *K8sResourceResult) String() string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "%sName: %s/%s\n", k.indent, k.Resource, k.Subject)
+	fmt.Fprintf(&sb, "Name: %s/%s\n", k.Resource, k.Subject)
 
 	if len(k.Data) > 0 {
-		fmt.Fprintf(&sb, "%sData:\n", k.indent)
+		fmt.Fprintln(&sb, "Data:")
 		var sortedByKeys []string
 		for key, value := range k.Data {
 			sortedByKeys = append(sortedByKeys, fmt.Sprintf("%s: %s", key, value))
 		}
 		sort.Strings(sortedByKeys)
 		for _, s := range sortedByKeys {
-			fmt.Fprintf(&sb, "%s\t%s\n", k.indent, s)
+			fmt.Fprintf(&sb, "%s\n", s)
 		}
 	}
 
 	if k.Err != "" {
-		fmt.Fprintf(&sb, "%sError:\t%v\n", k.indent, k.Err)
+		fmt.Fprintf(&sb, "Error: %v\n", k.Err)
 	}
 
 	return sb.String()
@@ -464,20 +460,19 @@ type PodLogResult struct {
 	Err     string
 	Logs    string
 	Subject string
-	indent  string
 }
 
 func (p *PodLogResult) String() string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "%sName: %s\n", p.indent, p.Subject)
+	fmt.Fprintf(&sb, "Name: %s\n", p.Subject)
 
 	if out := p.Logs; out != "" {
-		fmt.Fprintf(&sb, "%sLogs:\n", p.indent)
+		fmt.Fprintln(&sb, "Logs:")
 		fmt.Fprint(&sb, out)
 	}
 
 	if p.Err != "" {
-		fmt.Fprintf(&sb, "%sError:\t%v\n", p.indent, p.Err)
+		fmt.Fprintf(&sb, "Error: %v\n", p.Err)
 	}
 
 	return sb.String()

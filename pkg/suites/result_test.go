@@ -221,8 +221,8 @@ func TestCaseResultString(t *testing.T) {
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
 				"    Results:\n" +
-				"        Cmd: ping host.example.com\n" +
-				"        Error:  connection refused\n",
+				"Cmd: ping host.example.com\n" +
+				"Error: connection refused\n",
 		},
 		{
 			name: "multiple cmd results are grouped under a single Exec label",
@@ -246,10 +246,10 @@ func TestCaseResultString(t *testing.T) {
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
 				"    Results:\n" +
-				"        Cmd: etcdctl endpoint status\n" +
-				"        Stdout: ok\n" +
-				"        Cmd: etcdctl endpoint health\n" +
-				"        Stdout: healthy\n",
+				"Cmd: etcdctl endpoint status\n" +
+				"Out:\nok\n\n" +
+				"Cmd: etcdctl endpoint health\n" +
+				"Out:\nhealthy\n",
 		},
 		{
 			name: "stderr is not rendered in the output",
@@ -269,7 +269,7 @@ func TestCaseResultString(t *testing.T) {
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
 				"    Results:\n" +
-				"        Cmd: etcdctl endpoint status\n",
+				"Cmd: etcdctl endpoint status\n",
 		},
 		{
 			name: "tabs in stdout are replaced with spaces so the tabwriter doesn't reinterpret them",
@@ -289,8 +289,8 @@ func TestCaseResultString(t *testing.T) {
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
 				"    Results:\n" +
-				"        Cmd: benchmark put\n" +
-				"        Stdout: Summary:\n" +
+				"Cmd: benchmark put\n" +
+				"Out:\nSummary:\n" +
 				"  Total:    1.234s\n" +
 				"  Slowest:    0.5s    Fastest:    0.01s\n",
 		},
@@ -309,7 +309,7 @@ func TestCaseResultString(t *testing.T) {
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
 				"    Results:\n" +
-				"        Query: histogram_quantile(0.99, wal_fsync_duration_seconds_bucket)\n",
+				"Query: histogram_quantile(0.99, wal_fsync_duration_seconds_bucket)\n",
 		},
 		{
 			name: "multiple metric results are grouped under a single Metrics label and render their samples",
@@ -332,9 +332,71 @@ func TestCaseResultString(t *testing.T) {
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
 				"    Results:\n" +
-				"        Query: up\n" +
-				"        Value: {} => 1.23456 @[0]\n" +
-				"        Query: etcd_server_has_leader\n",
+				"Query: up\n" +
+				"Value: {} => 1.23456 @[0]\n\n" +
+				"Query: etcd_server_has_leader\n",
+		},
+		{
+			name: "capacity results render stopped and cleanup errors",
+			result: &CaseResult{
+				CaseName:      "max-vms",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				State:         CaseResultStateErrored,
+				CapacityResults: []*CapacityResult{
+					{Resource: "vm", Max: 12, Err: "insufficient memory", CleanupErr: "delete timed out"},
+					{Resource: "pvc", Max: 40},
+				},
+			},
+			expected: "--- ERROR max-vms (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Results:\n" +
+				"Resource: vm\n" +
+				"Max: 12\n" +
+				"Stopped: insufficient memory\n" +
+				"CleanupError: delete timed out\n\n" +
+				"Resource: pvc\n" +
+				"Max: 40\n",
+		},
+		{
+			name: "results of different kinds share one Results label and are separated by a blank line",
+			result: &CaseResult{
+				CaseName:      "etcd-benchmark",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				State:         CaseResultStatePassed,
+				CmdResults:    []*CmdResult{{Cmd: "etcdctl endpoint health", Stdout: "healthy"}},
+				MetricResults: []*MetricResult{{Query: "up"}},
+				PodLogResults: []*PodLogResult{{Subject: "etcd-benchmark-0", Logs: "done\n"}},
+			},
+			expected: "--- PASS etcd-benchmark (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Results:\n" +
+				"Cmd: etcdctl endpoint health\n" +
+				"Out:\nhealthy\n\n" +
+				"Query: up\n\n" +
+				"Name: etcd-benchmark-0\n" +
+				"Logs:\ndone\n",
+		},
+		{
+			name: "objects follow results after a blank line",
+			result: &CaseResult{
+				CaseName:      "etcd-benchmark",
+				DateTimeStart: testStart,
+				DateTimeEnd:   testEnd,
+				State:         CaseResultStatePassed,
+				MetricResults: []*MetricResult{{Query: "up"}},
+				Objects:       []runtime.Object{newPod("harvester-system-perf", "etcd-benchmark-0")},
+			},
+			expected: "--- PASS etcd-benchmark (1.5s)\n" +
+				"    Started on:  2026-08-26T10:30:00Z\n" +
+				"    Ended at:    2026-08-26T10:30:01Z\n" +
+				"    Results:\n" +
+				"Query: up\n" +
+				"\n" +
+				"    Objects:  (Pod) harvester-system-perf/etcd-benchmark-0\n",
 		},
 		{
 			name: "objects are labelled once and aligned",
@@ -373,10 +435,10 @@ func TestCaseResultString(t *testing.T) {
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
 				"    Results:\n" +
-				"        Name: node/harvester-node-0\n" +
-				"        Data:\n" +
-				"          cpu.capacity: 4\n" +
-				"          memory.capacity: 16Gi\n",
+				"Name: node/harvester-node-0\n" +
+				"Data:\n" +
+				"cpu.capacity: 4\n" +
+				"memory.capacity: 16Gi\n",
 		},
 		{
 			name: "k8s resource result error omits the empty data section",
@@ -393,8 +455,8 @@ func TestCaseResultString(t *testing.T) {
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
 				"    Results:\n" +
-				"        Name: node/harvester-node-0\n" +
-				"        Error:  pod list failed\n",
+				"Name: node/harvester-node-0\n" +
+				"Error: pod list failed\n",
 		},
 		{
 			name: "pod log result renders the log output",
@@ -414,8 +476,8 @@ func TestCaseResultString(t *testing.T) {
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
 				"    Results:\n" +
-				"        Name: daemonset-pod-0\n" +
-				"        Logs:\n" +
+				"Name: daemonset-pod-0\n" +
+				"Logs:\n" +
 				"hello\n",
 		},
 		{
@@ -433,8 +495,8 @@ func TestCaseResultString(t *testing.T) {
 				"    Started on:  2026-08-26T10:30:00Z\n" +
 				"    Ended at:    2026-08-26T10:30:01Z\n" +
 				"    Results:\n" +
-				"        Name: daemonset-pod-1\n" +
-				"        Error:  failed to get log stream\n",
+				"Name: daemonset-pod-1\n" +
+				"Error: failed to get log stream\n",
 		},
 		{
 			name: "duration is rounded to the millisecond",
