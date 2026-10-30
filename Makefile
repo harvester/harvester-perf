@@ -7,8 +7,6 @@ BCI_GO_TAG ?= 1.26
 # use BCL golang image to compile the CLI and run unit test
 DOCKER ?= docker
 
-IMAGE_NAME ?= hvperf
-IMAGE_TAG ?= $(HARVESTER_VERSION)-$(COMMIT_SHA)
 IMAGE_PLATFORMS ?= linux/amd64
 DIST_DIR := dist
 
@@ -26,7 +24,6 @@ go/test:
 		--platform $(IMAGE_PLATFORMS) \
 		--build-arg BCI_GO_TAG=$(BCI_GO_TAG) \
 		--target=hvperf-test \
-		-t $(IMAGE_NAME):$(IMAGE_TAG) \
 		.
 
 tools:
@@ -37,6 +34,6 @@ tools:
 		--build-arg ETCD_VERSION=$(ETCD_VERSION) \
 		--output=type=local,dest=$(DIST_DIR) \
 		--target=tools-dist \
-		-t $(IMAGE_NAME):$(IMAGE_TAG) .
+		.
 
 .PHONY: go/build go/test tools

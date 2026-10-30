@@ -6,6 +6,19 @@ assessing Harvester performance and benchmark results.
 `hvperf` is a CLI for running performance, capacity and benchmark test suites
 against [SUSE Harvester](https://harvesterhci.io) clusters.
 
+## Requirements
+
+* A kubeconfig with cluster-admin on the target Harvester cluster.
+* Docker (or a compatible runtime) for running build and test targets.
+* Go 1.26+ only if you build outside the container.
+* The `rancher-monitoring` addon, only for the metrics cases; suites skip those
+  cases when it is not enabled.
+* For `etcd-benchmark`'s metrics cases, the RKE2 server config
+  [`etcd-expose-metrics`](https://docs.rke2.io/reference/server_config#database)
+  must be set to `true`; etcd does not expose metrics otherwise.
+
+## Concept
+
 Suites are driven from your workstation using an ordinary kubeconfig. Nothing is
 installed on the Harvester nodes; suites that need on-node access (such as the
 etcd benchmark) schedule a short-lived helper job in the test namespace, which
@@ -16,31 +29,102 @@ be had otherwise: e.g., the etcd benchmark's job pod mounts `/var/lib/rancher` t
 reach the RKE2 etcd TLS certs, and `node-capacity`'s daemonset pod uses `hostPID`
 to run `nsenter`/`lsblk` against the node's disks.
 
-> **Status:** early development. The suite registry, CLI and etcd job plumbing
-> are in place; individual suites are still being filled in. See
-> [Test suites](#test-suites) for what each one currently does.
+Every command that talks to a cluster accepts the standard kubectl connection
+flags (`--kubeconfig`, `--context`, `--namespace`, `--server`, `--as`, …), so
+targeting a specific cluster works the same way it does with `kubectl`:
+
+```bash
+hvperf run node-capacity --kubeconfig ~/.kube/harvester.yaml --context prod
+```
+
+Suites that create resources put them in the `harvester-perf-system` namespace,
+creating the namespace if it does not exist. Pass `--namespace` to use a
+different one.
 
 ## Quick start
 
 ```bash
-# build ./bin/hvperf (runs the compiler inside a container, see Building)
+# build ./dist/hvperf (runs the compiler inside a container, see Building)
 make go/build
+sudo ln -s `pwd`/dist/hvperf /usr/local/bin/hvperf  # optional, for convenience
+
+# install the benchmark tools (etcdctl, benchmark) into ~/.hvperf/tools
+make tools   # dev only: builds ./dist/hvperf-tools-<version>.tar.gz
+
+hvperf tool install --tool-source ./dist/hvperf-tools-<version>.tar.gz
 
 # what can be run
-./bin/hvperf list
+hvperf list
 
 # client and cluster versions
-./bin/hvperf version
+hvperf version
 
 # run a single suite
-./bin/hvperf run node-capacity
+hvperf run node-capacity
 
 # run several suites (one comma-separated argument, not a space-separated list)
-./bin/hvperf run node-capacity,etcd-benchmark
+hvperf run node-capacity,etcd-benchmark
 
-# run with a custom config file (default: ./hvperf.yaml)
-./bin/hvperf run density --config /path/to/hvperf.yaml
+# run exclusive suites one at a time because they stress the cluster and may
+# temporarily degrade its performance
+hvperf run storage-kbench
+hvperf run etcd-benchmark
 ```
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| `hvperf list` | List registered suites. `-o` accepts `table` (default), `name`, `json`, `yaml`. |
+| `hvperf run <suite>[,<suite>...]` | Run the named suites, given as a single comma-separated argument. An unknown name fails the run. An exclusive suite cannot be run together with other suites. `-o` accepts `text` (default), `json`, `yaml`. |
+| `hvperf tool install -t <tar.gz>` / `list` / `uninstall [-y]` | Install, list or remove the benchmark tools in `~/.hvperf/tools`. See [Setting up the tools](#setting-up-the-tools). |
+| `hvperf version [--client-only]` | Print the client version and, unless `--client-only` is set, the cluster's server version. |
+
+`run` also takes `--keep-alive` (default `false`), which decides what happens to
+the test namespace once the run finishes. By default the namespace and
+everything in it is deleted afterwards — but only when it is the default
+`harvester-perf-system`. Pass `--keep-alive=true` to keep the namespace and its
+resources around for inspection. A custom `--namespace` is never deleted and its
+resources are not cleaned up; a warning is logged when cleanup is skipped.
+
+Results are written to stdout; suite progress is logged to stderr, so
+`hvperf run ... -o json > results.json` keeps the two streams separate. Pass
+`-q`/`--quiet` to silence the progress logging, or `-v <level>` to raise it.
+Results are printed even when a suite fails, so partial output is not lost.
+
+### Setting up the tools
+
+Some suites (e.g. `etcd-benchmark`) need extra binaries such as `etcdctl`,
+and `benchmark`. `hvperf run` reads them from `~/.hvperf/tools`. Set
+that directory up with `hvperf tool`:
+
+```bash
+# install from a local .tar.gz or an http(s) URL, e.g. the tarball attached to
+# a release on the hvperf releases page
+hvperf tool install -t https://github.com/<org>/harvester-perf/releases/download/<tag>/hvperf-tools-<version>.tar.gz
+hvperf tool install --tool-source ./dist/hvperf-tools-<version>.tar.gz
+
+# show what is installed
+hvperf tool list
+
+# remove ~/.hvperf/tools (prompts for confirmation; -y/--skip-confirm to skip)
+hvperf tool uninstall
+```
+
+The tools tarball is published as a release asset on the `hvperf` releases
+page. For development, `make tools` builds it locally into `./dist/` (inside a
+container; honours `ETCD_VERSION`).
+
+The archive must be a `.tar.gz` of regular files (the tool binaries); other
+entry types are skipped. Files are extracted flat into the tools directory,
+overwriting existing ones.
+
+`make tools` uses the Dockerfile to build `hvperf` and the tools that the suites
+need. The etcd tools are built from the etcd source at the version pinned in the
+Dockerfile (`ETCD_VERSION`, currently `v3.6.14`). The runtime base is
+`registry.suse.com/bci/bci-base` at `BCI_TAG` (`16.0`).
+
+### Configuration File For Parameters Overrides
 
 `hvperf run` reads `./hvperf.yaml` by default. Copy and edit the file at the
 repo root to tune suite parameters before running:
@@ -57,52 +141,12 @@ density:
 Pass `--config` to point at a different file:
 
 ```bash
-./bin/hvperf run density --config ~/my-cluster.yaml
+hvperf run density --config ~/my-cluster.yaml
 ```
 
-Every command that talks to a cluster accepts the standard kubectl connection
-flags (`--kubeconfig`, `--context`, `--namespace`, `--server`, `--as`, …), so
-targeting a specific cluster works the same way it does with `kubectl`:
+## Development
 
-```bash
-./bin/hvperf run node-capacity --kubeconfig ~/.kube/harvester.yaml --context prod
-```
-
-Suites that create resources put them in the `harvester-perf-system` namespace,
-creating the namespace if it does not exist. Pass `--namespace` to use a
-different one.
-
-The Dockerfile builds a container image with `hvperf` and the tools the suites
-need to run in the cluster. For example, running the etcd suite from a locally
-built binary rather than the image will fail unless `etcdctl`, `benchmark` and
-`promtool` are present at `/usr/local/bin`. See
-[Container image](#container-image) for how to build and run the image.
-
-## Commands
-
-| Command | Description |
-| --- | --- |
-| `hvperf list` | List registered suites. `-o` accepts `table` (default), `name`, `json`, `yaml`. |
-| `hvperf run <suite>[,<suite>...]` | Run the named suites, given as a single comma-separated argument. An unknown name fails the run. An exclusive suite cannot be run together with other suites. `-o` accepts `text` (default), `json`, `yaml`. |
-| `hvperf version [--client-only]` | Print the client version and, unless `--client-only` is set, the cluster's server version. |
-| `hvperf report` | Placeholder — not implemented yet. |
-
-`run` also takes `--config` (default `./hvperf.yaml`) to point at a config file
-for suites that read it (currently `density`).
-
-`run` also takes `--keep-alive` (default `false`), which decides what happens to
-the test namespace once the run finishes. By default the namespace and
-everything in it is deleted afterwards — but only when it is the default
-`harvester-perf-system`. Pass `--keep-alive=true` to keep the namespace and its
-resources around for inspection. A custom `--namespace` is never deleted and its
-resources are not cleaned up; a warning is logged when cleanup is skipped.
-
-Results are written to stdout; suite progress is logged to stderr, so
-`hvperf run ... -o json > results.json` keeps the two streams separate. Pass
-`-q`/`--quiet` to silence the progress logging, or `-v <level>` to raise it.
-Results are printed even when a suite fails, so partial output is not lost.
-
-## Test suites
+### Test suites
 
 Suites are either **exclusive** or non-exclusive. Exclusive suites impose stress
 on the cluster through stress loaders such as `fio`, which may temporarily
@@ -119,7 +163,7 @@ suite. The flag is reported by `hvperf list`.
 | `density` | yes | Import a VM image, ramp up VMs concurrently until failure, and record VMI boot-latency percentiles (p50/p95/p99). |
 | `storage-kbench` | yes | Run Longhorn's `kbench` job against a fresh PVC to benchmark bandwidth, IOPS and latency, then read the matching Longhorn metrics from Prometheus. |
 
-## Result types
+### Result types
 
 A `SuiteResult` holds one `CaseResult` per check the suite ran. Each
 `CaseResult` records what it did in whichever of these it produced —
@@ -150,62 +194,38 @@ Every result type carries its own `Err`, at a different scope:
 `PodLogResults`, or `K8sResourceResults`, marks the case `CaseResultStateErrored`.
 `NewCaseResult` and the `With*` builders call it for you.
 
-## Building
+### Building
 
 The Makefile runs the Go toolchain inside the SUSE BCI golang image, so Docker
-is the only hard prerequisite. Host `GOCACHE`/`GOMODCACHE` are bind-mounted into
-the build container and output is written back as your own user, so no `sudo
-chown` dance afterwards.
+is the only hard prerequisite.
 
 ```bash
-make go/build     # compile ./bin/hvperf
+make go/build     # compile ./dist/hvperf
 make go/test      # go test -cover -race -shuffle=on ./...
-make go/tidy      # go mod tidy
-make clean        # remove ./bin
 ```
 
 Useful overrides:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `GOOS` / `GOARCH` | `linux` / `amd64` | Cross-compilation target for `go/build` |
+| `IMAGE_PLATFORMS` | `linux/amd64` | Target platform for `go/build` and `tools` |
 | `HARVESTER_VERSION` | `1.9` | Version prefix; `CLI_VERSION` becomes `<version>+<short-sha>` |
-| `BUILD_IMAGE_TAG` | `1.26` | Tag of `registry.suse.com/bci/golang` used to build and test |
+| `BCI_GO_TAG` | `1.26` | Tag of `registry.suse.com/bci/golang` used to build and test |
+| `ETCD_VERSION` | `v3.6.14` | etcd version the `tools` target builds `etcdctl` and `benchmark` from |
 | `DOCKER` | `docker` | Container runtime (e.g. `DOCKER=podman`) |
 
 ```bash
-GOOS=darwin GOARCH=arm64 make go/build
+IMAGE_PLATFORMS=linux/arm64 make go/build
 ```
 
-To build natively instead, Go 1.26+ works directly: `go build -o bin/hvperf .`
-
-## Container image
-
-The image bundles `hvperf` with the tools the suites ship into the cluster:
-upstream `etcdctl` and `benchmark`, built from the etcd source at the version
-pinned in the Dockerfile (`ETCD_VERSION`, currently `v3.6.14`), and `promtool`
-from the Prometheus release tarball (`PROMETHEUS_VERSION`, currently `3.14.0`).
-The runtime base is `registry.suse.com/bci/bci-base` at `BCI_TAG` (`16.0`).
-
-```bash
-make image/build                                    # -> hvperf:<version>-<sha>
-make image/cmd                                      # mounts ~/.kube read-only
-make image/cmd IMAGE_CMD_ARGS="list"
-make image/cmd IMAGE_CMD_ARGS="run etcd-benchmark"
-```
-
-The image defaults to `hvperf version`, and expects a kubeconfig at
-`/root/.kube/config` — which is where the `image/*` targets bind-mount `~/.kube`.
-
-Overrides: `IMAGE_NAME`, `IMAGE_TAG`, `IMAGE_PLATFORMS` (default
-`linux/amd64`), `IMAGE_OUTPUT_TYPE`.
+To build natively instead, Go 1.26+ works directly: `go build -o hvperf .`
 
 ## Repository layout
 
 ```
 .
 ├── main.go                # entry point; blank-imports internal/suites to register built-ins
-├── cmd/                   # cobra command tree (root, list, run, report, version) and k8s client setup
+├── cmd/                   # cobra command tree (root, list, run, version) and k8s client setup
 ├── pkg/suites/            # public API: Suite interface, registry, options, results, marshalling
 ├── pkg/k8s/               # cluster helpers the suites share: namespaces, jobs, exec, logs, pod monitors
 ├── internal/suites/
@@ -215,10 +235,9 @@ Overrides: `IMAGE_NAME`, `IMAGE_TAG`, `IMAGE_PLATFORMS` (default
 │   ├── resourcefootprint/ # resource-footprint suite
 │   ├── storage/           # storage-kbench suite
 │   └── options/           # decodes the generic pkg/suites.Options into a suite's own options struct
-├── poc/                   # shell-based prototype this CLI is being ported from
 ├── METRICS.md             # the metrics the suites collect and how to read them
-├── Dockerfile             # multi-stage: etcd tools + promtool + hvperf -> BCI base runtime
-└── Makefile               # containerised build, test and image targets
+├── Dockerfile             # multi-stage: etcd tools + hvperf -> BCI base runtime
+└── Makefile               # containerised build, test and tools targets
 ```
 
 ## Adding a suite
@@ -271,30 +290,6 @@ Overrides: `IMAGE_NAME`, `IMAGE_TAG`, `IMAGE_PLATFORMS` (default
 Names are the registry key — two suites with the same `Name()` silently
 overwrite each other. Suites should honour `ctx` cancellation and clean up
 anything they create in the cluster.
-
-## Proof of concept
-
-`poc/` holds the shell implementation that preceded this CLI: a container that
-runs `cluster-info`, `node-capacity`, `etcd-benchmark`, `controlplane-resources`
-and `vm-density` suites and renders a markdown report. It covers more ground
-than the Go CLI does today and is kept as a reference for the suites still to be
-ported. See [`poc/README.md`](poc/README.md).
-
-### reference
-
-* kubevirt-benchmark
-* kubevirt-observability-controller
-
-## Requirements
-
-* A kubeconfig with cluster-admin on the target Harvester cluster.
-* Docker (or a compatible runtime) for the build and image targets.
-* Go 1.26+ only if you build outside the container.
-* The `rancher-monitoring` addon, only for the metrics cases; suites skip those
-  cases when it is not enabled.
-* For `etcd-benchmark`'s metrics cases, the RKE2 server config
-  [`etcd-expose-metrics`](https://docs.rke2.io/reference/server_config#database)
-  must be set to `true`; etcd does not expose metrics otherwise.
 
 ## License
 
