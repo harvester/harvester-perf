@@ -12,10 +12,12 @@ against [SUSE Harvester](https://harvesterhci.io) clusters.
 * Docker (or a compatible runtime) for running build and test targets.
 * Go 1.26+ only if you build outside the container.
 * The `rancher-monitoring` addon, only for the metrics cases; suites skip those
-  cases when it is not enabled.
+cases when it is not enabled.
 * For `etcd-benchmark`'s metrics cases, the RKE2 server config
   [`etcd-expose-metrics`](https://docs.rke2.io/reference/server_config#database)
   must be set to `true`; etcd does not expose metrics otherwise.
+* For the `storage-kbench` suite, the pod requires 4 CPUs to effectively run the
+  benchmark. If the cluster has fewer than 4 CPUs available, the pod will not start.
 
 ## Concept
 
