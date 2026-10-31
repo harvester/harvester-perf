@@ -57,19 +57,12 @@ func (s *KBenchSuite) RunE(
 ) suites.SuiteResult {
 	o, err := NewKBenchOptions(opts)
 	if err != nil {
-		return suites.SuiteResult{
-			Name:  s.Name(),
-			RunID: runID,
-			Err:   err.Error(),
-		}
+		return suites.NewSuiteResult(s.Name(), runID).WithError(err)
 	}
 
 	if _, err := k8s.EnsureNamespace(ctx, s.Clients, namespace, o.NamespaceReadyTimeout); err != nil {
-		return suites.SuiteResult{
-			Name:  s.Name(),
-			RunID: runID,
-			Err:   fmt.Sprintf("namespace %s not ready: %v", namespace, err.Error()),
-		}
+		return suites.NewSuiteResult(s.Name(), runID).
+			WithError(fmt.Errorf("namespace %s not ready: %w", namespace, err))
 	}
 	klog.V(3).InfoS("namespace is ready\n", "name", namespace)
 
@@ -119,12 +112,7 @@ func (s *KBenchSuite) RunE(
 		klog.V(3).ErrorS(err, "failed to convert suite options to suite params\n")
 	}
 
-	return suites.SuiteResult{
-		Name:    s.Name(),
-		Params:  suiteParams,
-		RunID:   runID,
-		Results: caseResults,
-	}
+	return suites.NewSuiteResult(s.Name(), runID).WithParams(suiteParams).WithResults(caseResults)
 }
 
 func (s *KBenchSuite) kbenchPodPVC(

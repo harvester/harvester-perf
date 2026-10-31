@@ -57,36 +57,20 @@ func (s *BenchmarkSuite) RunE(
 ) suites.SuiteResult {
 	o, err := NewBenchmarkOptions(opts)
 	if err != nil {
-		return suites.SuiteResult{
-			Name:  s.Name(),
-			RunID: runID,
-			Err:   err.Error(),
-		}
+		return suites.NewSuiteResult(s.Name(), runID).WithError(fmt.Errorf("failed to create benchmark options: %w", err))
 	}
 
 	etcd, etcdReady, err := k8s.EnsureEtcdReady(ctx, s.Clients, o.EtcdNamespace, o.EtcdReadyTimeout)
 	if err != nil {
-		return suites.SuiteResult{
-			Name:  s.Name(),
-			RunID: runID,
-			Err:   fmt.Sprintf("etcd not ready: %v", err.Error()),
-		}
+		return suites.NewSuiteResult(s.Name(), runID).WithError(fmt.Errorf("failed to ensure etcd is ready: %w", err))
 	}
 	if !etcdReady {
-		return suites.SuiteResult{
-			Name:  s.Name(),
-			RunID: runID,
-			Err:   "etcd not ready",
-		}
+		return suites.NewSuiteResult(s.Name(), runID).WithError(fmt.Errorf("etcd is not ready after %v", o.EtcdReadyTimeout))
 	}
 	klog.V(3).InfoS("etcd pods are ready", "namespace", o.EtcdNamespace, "count", len(etcd.Items))
 
 	if _, err := k8s.EnsureNamespace(ctx, s.Clients, namespace, o.NamespaceReadyTimeout); err != nil {
-		return suites.SuiteResult{
-			Name:  s.Name(),
-			RunID: runID,
-			Err:   fmt.Sprintf("namespace %s not ready: %v", namespace, err.Error()),
-		}
+		return suites.NewSuiteResult(s.Name(), runID).WithError(fmt.Errorf("failed to ensure namespace is ready: %w", err))
 	}
 	klog.V(3).Infof("namespace:'%s' is now ready\n", namespace)
 
@@ -102,11 +86,7 @@ func (s *BenchmarkSuite) RunE(
 		o.JobPodTTLAfterFinished,
 		o.JobSuspend)
 	if err != nil {
-		return suites.SuiteResult{
-			Name:  s.Name(),
-			RunID: runID,
-			Err:   fmt.Sprintf("job not ready: %v", err.Error()),
-		}
+		return suites.NewSuiteResult(s.Name(), runID).WithError(fmt.Errorf("failed to ensure etcd benchmark job is ready: %w", err))
 	}
 	klog.V(3).Infof("pod:'%s' is now ready, phase:'%s'\n", pod.GetName(), pod.Status.Phase)
 
@@ -123,11 +103,7 @@ func (s *BenchmarkSuite) RunE(
 		o.EtcdctlLocalPath,
 		o.EtcdBenchmarkLocalPath,
 	); err != nil {
-		return suites.SuiteResult{
-			Name:  s.Name(),
-			RunID: runID,
-			Err:   fmt.Sprintf("failed to copy tools to pod job %s/%s: %v", pod.GetNamespace(), pod.GetName(), err.Error()),
-		}
+		return suites.NewSuiteResult(s.Name(), runID).WithError(fmt.Errorf("failed to copy tools to pod job %s/%s: %w", pod.GetNamespace(), pod.GetName(), err))
 	}
 
 	var caseResults []*suites.CaseResult
@@ -184,12 +160,8 @@ func (s *BenchmarkSuite) RunE(
 		// is that the suite params won't be reported in the results.
 		klog.V(3).ErrorS(err, "failed to convert suite options to suite params\n")
 	}
-	return suites.SuiteResult{
-		Name:    s.Name(),
-		Params:  suiteParams,
-		RunID:   runID,
-		Results: caseResults,
-	}
+
+	return suites.NewSuiteResult(s.Name(), runID).WithParams(suiteParams).WithResults(caseResults)
 }
 
 func (s *BenchmarkSuite) args(opts *BenchmarkOptions) []string {

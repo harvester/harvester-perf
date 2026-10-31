@@ -11,7 +11,7 @@ import (
 	pkgk8s "github.com/harvester/hvperf/pkg/k8s"
 	pkgprom "github.com/harvester/hvperf/pkg/prometheus"
 	"github.com/harvester/hvperf/pkg/resource"
-	pkgsuites "github.com/harvester/hvperf/pkg/suites"
+	"github.com/harvester/hvperf/pkg/suites"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -55,68 +55,65 @@ func dynamicQueries(w string) []string {
 	}
 }
 
-var _ pkgsuites.Suite = &DensitySuite{}
+var _ suites.Suite = &DensitySuite{}
 
 func init() {
 	suite := &DensitySuite{}
 	suite.Marshal = suite
-	pkgsuites.Register(suite)
+	suites.Register(suite)
 }
 
 type DensitySuite struct {
-	pkgsuites.SuiteMarshaler
-	*pkgsuites.Clients
+	suites.SuiteMarshaler
+	*suites.Clients
 }
 
-func (s *DensitySuite) SetProgressReporter(_ *pkgsuites.ProgressReporter) {}
-func (s *DensitySuite) Name() string                                      { return "density" }
+func (s *DensitySuite) SetProgressReporter(_ *suites.ProgressReporter) {}
+func (s *DensitySuite) Name() string                                   { return "density" }
 func (s *DensitySuite) Description() string {
 	return "create containerdisk VMIs until the compute-density limit"
 }
-func (s *DensitySuite) IsExclusive() bool                     { return true }
-func (s *DensitySuite) SetClients(clients *pkgsuites.Clients) { s.Clients = clients }
+func (s *DensitySuite) IsExclusive() bool                  { return true }
+func (s *DensitySuite) SetClients(clients *suites.Clients) { s.Clients = clients }
 
-func (s *DensitySuite) RunE(ctx context.Context, runID, namespace string, opts pkgsuites.Options) (result pkgsuites.SuiteResult) {
-	result = pkgsuites.SuiteResult{Name: s.Name(), RunID: runID}
+func (s *DensitySuite) RunE(ctx context.Context, runID, namespace string, opts suites.Options) (result suites.SuiteResult) {
+	result = suites.NewSuiteResult(s.Name(), runID)
 	o, err := NewOptions(opts)
 	if err != nil {
-		result.Err = err.Error()
-		return result
+		return result.WithError(err)
 	}
 	if err := o.Validate(); err != nil {
-		result.Err = err.Error()
-		return result
+		return result.WithError(err)
 	}
-	if params, err := pkgsuites.ToSuiteParams(o); err == nil {
-		result.Params = params
+	if params, err := suites.ToSuiteParams(o); err == nil {
+		result = result.WithParams(params)
 	}
 	if _, err := pkgk8s.EnsureNamespace(ctx, s.Clients, namespace, o.NamespaceReadyTimeout); err != nil {
-		return pkgsuites.SuiteResult{
-			Name:  s.Name(),
-			RunID: runID,
-			Err:   fmt.Sprintf("namespace %s not ready: %v", namespace, err),
-		}
+		return result.WithError(fmt.Errorf("namespace %s not ready: %w", namespace, err))
 	}
 	klog.V(3).InfoS("namespace is ready", "name", namespace, "suite", s.Name())
 
 	defer s.cleanupRunResult(namespace, runID, &result)
 	if err := s.warmup(ctx, o.VMI, namespace, runID, o.BatchWaitTimeout); err != nil {
-		result.Results = append(result.Results, pkgsuites.NewCaseResultErrored("vmi-warmup", time.Now(), time.Now(), err))
-		return result
+		caseResults := []*suites.CaseResult{
+			suites.NewCaseResultErrored("vmi-warmup", time.Now(), time.Now(), err),
+		}
+		return result.WithResults(caseResults)
 	}
 
+	var caseResults []*suites.CaseResult
 	runStart := time.Now()
 	caseResult, _ := s.createVMIsUntilFailure(ctx, o, namespace, runID, o.EtcdNamespace)
-	result.Results = append(result.Results, caseResult)
+	caseResults = append(caseResults, caseResult)
 	metricResult, err := s.collectDensityMetrics(ctx, runStart)
-	result.Results = append(result.Results, metricResult)
+	caseResults = append(caseResults, metricResult)
 	if err != nil {
-		result.Err = err.Error()
+		return result.WithResults(caseResults).WithError(fmt.Errorf("failed to collect density metrics: %w", err))
 	}
-	return result
+	return result.WithResults(caseResults)
 }
 
-func (s *DensitySuite) cleanupRunResult(namespace, runID string, result *pkgsuites.SuiteResult) {
+func (s *DensitySuite) cleanupRunResult(namespace, runID string, result *suites.SuiteResult) {
 	err := s.cleanup(namespace, runID)
 	if err == nil {
 		return
@@ -148,18 +145,18 @@ func (s *DensitySuite) warmup(ctx context.Context, spec resource.VMI, namespace,
 	return s.cleanup(namespace, runID)
 }
 
-func (s *DensitySuite) createVMIsUntilFailure(ctx context.Context, o Options, namespace, runID, etcdNS string) (*pkgsuites.CaseResult, *pkgsuites.CapacityResult) {
+func (s *DensitySuite) createVMIsUntilFailure(ctx context.Context, o Options, namespace, runID, etcdNS string) (*suites.CaseResult, *suites.CapacityResult) {
 	start := time.Now()
 	maxReady, capacityStop, runErr := s.createVMIsInBatches(ctx, o, namespace, runID, etcdNS)
-	capResult := &pkgsuites.CapacityResult{Resource: "virtualmachineinstances.kubevirt.io", Max: maxReady}
+	capResult := &suites.CapacityResult{Resource: "virtualmachineinstances.kubevirt.io", Max: maxReady}
 	if capacityStop != nil {
 		capResult.Err = capacityStop.Error()
 	}
-	result := pkgsuites.NewCaseResult("vmi-create", start, time.Now(), nil, nil)
+	result := suites.NewCaseResult("vmi-create", start, time.Now(), nil, nil)
 	if runErr != nil {
 		result.Err = runErr.Error()
 	}
-	result.CapacityResults = []*pkgsuites.CapacityResult{capResult}
+	result.CapacityResults = []*suites.CapacityResult{capResult}
 	result.FinalizeState()
 	return result, capResult
 }
@@ -389,23 +386,23 @@ func (s *DensitySuite) countRunningVMIs(ctx context.Context, namespace, runID st
 	return running, nil
 }
 
-func (s *DensitySuite) collectDensityMetrics(ctx context.Context, runStart time.Time) (*pkgsuites.CaseResult, error) {
+func (s *DensitySuite) collectDensityMetrics(ctx context.Context, runStart time.Time) (*suites.CaseResult, error) {
 	start := time.Now()
 	metrics, err := s.measure(ctx, dynamicQueries(promWindow(time.Since(runStart)))...)
 	if err != nil {
-		return pkgsuites.NewCaseResultErrored("density metrics", start, time.Now(), err), err
+		return suites.NewCaseResultErrored("density metrics", start, time.Now(), err), err
 	}
-	return pkgsuites.NewCaseResult("density metrics", start, time.Now(), nil, metrics), nil
+	return suites.NewCaseResult("density metrics", start, time.Now(), nil, metrics), nil
 }
 
-func (s *DensitySuite) measure(ctx context.Context, queries ...string) ([]*pkgsuites.MetricResult, error) {
-	metrics := make([]*pkgsuites.MetricResult, 0, len(queries))
+func (s *DensitySuite) measure(ctx context.Context, queries ...string) ([]*suites.MetricResult, error) {
+	metrics := make([]*suites.MetricResult, 0, len(queries))
 	for _, query := range queries {
 		samples, _, err := pkgprom.RunInstant(ctx, s.PromClient, query)
 		if err != nil {
 			return metrics, err
 		}
-		metrics = append(metrics, &pkgsuites.MetricResult{Query: query, Samples: samples})
+		metrics = append(metrics, &suites.MetricResult{Query: query, Samples: samples})
 	}
 	return metrics, nil
 }

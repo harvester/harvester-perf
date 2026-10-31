@@ -87,11 +87,7 @@ func (s *NodeCapacitySuite) RunE(ctx context.Context, runID, namespace string, o
 		s.CaseDone(s.Name(), c.caseName, caseResult.State, time.Since(caseResult.DateTimeStart))
 	}
 
-	return suites.SuiteResult{
-		Name:    s.Name(),
-		RunID:   runID,
-		Results: caseResults,
-	}
+	return suites.NewSuiteResult(s.Name(), runID).WithResults(caseResults)
 }
 
 func (s *NodeCapacitySuite) execNodeOSInfo(ctx context.Context, name string) *suites.CaseResult {

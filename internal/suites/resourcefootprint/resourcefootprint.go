@@ -125,26 +125,14 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, opts
 	merged := options.DefaultGlobalOptions().Merge(opts)
 	monitoringOpts, err := options.FromOptions[*resourceFootprintOptions](merged)
 	if err != nil {
-		return suites.SuiteResult{
-			Name:  s.Name(),
-			RunID: runID,
-			Err:   err.Error(),
-		}
+		return suites.NewSuiteResult(s.Name(), runID).WithError(fmt.Errorf("failed to parse options: %w", err))
 	}
 	enabled, err := k8s.MonitoringEnabled(ctx, s.Clients, monitoringOpts.MonitoringNamespace, monitoringOpts.MonitoringAddonName)
 	if err != nil {
-		return suites.SuiteResult{
-			Name:  s.Name(),
-			RunID: runID,
-			Err:   fmt.Sprintf("monitoring add-on not enabled: %s", err.Error()),
-		}
+		return suites.NewSuiteResult(s.Name(), runID).WithError(fmt.Errorf("failed to check if monitoring is enabled: %w", err))
 	}
 	if !enabled {
-		return suites.SuiteResult{
-			Name:  s.Name(),
-			Err:   "monitoring add-on not enabled",
-			RunID: runID,
-		}
+		return suites.NewSuiteResult(s.Name(), runID).WithError(fmt.Errorf("monitoring add-on %s not enabled in namespace %s", monitoringOpts.MonitoringAddonName, monitoringOpts.MonitoringNamespace))
 	}
 
 	results := make([]*suites.CaseResult, 0, len(cases))
@@ -156,9 +144,5 @@ func (s *ResourceFootprintSuite) RunE(ctx context.Context, runID, _ string, opts
 		s.CaseDone(s.Name(), c.name, caseResult.State, time.Since(caseResult.DateTimeStart))
 	}
 
-	return suites.SuiteResult{
-		Name:    s.Name(),
-		RunID:   runID,
-		Results: results,
-	}
+	return suites.NewSuiteResult(s.Name(), runID).WithResults(results)
 }

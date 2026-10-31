@@ -26,6 +26,38 @@ type SuiteResult struct {
 	Err     string
 }
 
+// NewSuiteResult creates a new SuiteResult instance with the provided name and
+// runID.
+func NewSuiteResult(name string, runID string) SuiteResult {
+	return SuiteResult{
+		Name:  name,
+		RunID: runID,
+	}
+}
+
+// WithParams sets the parameters for the SuiteResult and returns the updated
+// test suite result.
+func (s SuiteResult) WithParams(params []*SuiteParam) SuiteResult {
+	s.Params = params
+	return s
+}
+
+// WithResults sets the test case results for the SuiteResult and returns the
+// test suite result.
+func (s SuiteResult) WithResults(results []*CaseResult) SuiteResult {
+	s.Results = results
+	return s
+}
+
+// WithError sets the error for the SuiteResult and returns the updated test
+// suites result.
+func (s SuiteResult) WithError(err error) SuiteResult {
+	if err != nil {
+		s.Err = err.Error()
+	}
+	return s
+}
+
 func (s *SuiteResult) String() string {
 	var (
 		stringBuilder strings.Builder
