@@ -26,6 +26,7 @@ go/test:
 	$(DOCKER) build --rm --pull \
 		--platform $(IMAGE_PLATFORMS) \
 		--build-arg BCI_GO_TAG=$(BCI_GO_TAG) \
+		--output=type=cacheonly \
 		--target=hvperf-test \
 		.
 
