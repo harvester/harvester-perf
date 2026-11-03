@@ -41,6 +41,8 @@ Metrics | Why | Watch For
 
 ### Understanding Kbench Results
 
+Ref: <https://github.com/longhorn/kbench#understanding-the-result>
+
 IOPS: IO operations per second. Higher is better. It's a measurement of how many
 IO operations can the device handle in a second, mainly concerning the smaller IO
 chunks, e.g. 4k.
@@ -54,4 +56,104 @@ a measurement of how efficient is the storage system to handle each request. The
 data path overhead of a storage system can be expressed as the latency it added
 on top of the native storage system (SSD/NVMe).
 
-Ref: <https://github.com/longhorn/kbench#understanding-the-result>
+## Network
+
+### Understanding NetPerf Results
+
+Ref: <https://hewlettpackard.github.io/netperf/doc/netperf.html>
+
+#### Control and Data Connections
+
+When you execute netperf it will establish a “control connection” to the remote
+system. This connection will be used to pass test configuration information and
+results to and from the remote system. Regardless of the type of test to be run,
+the control connection will be a TCP connection using BSD sockets. The control
+connection can use either IPv4 or IPv6.
+
+Once the control connection is up and the configuration information has been
+passed, a separate “data” connection will be opened for the measurement itself
+using the API's and protocols appropriate for the specified test. When the test
+is completed, the data connection will be torn-down and results from the
+netserver will be passed-back via the control connection and combined with
+netperf's result for display to the user.
+
+Netperf places no traffic on the control connection while a test is in progress.
+Certain TCP options, such as `SO_KEEPALIVE`, if set as your systems' default, may
+put packets out on the control connection while a test is in progress. Generally
+speaking this will have no effect on the results.
+
+#### CPU Utilization
+
+CPU utilization in netperf is reported as a value between 0 and 100% regardless
+of the number of CPUs involved. In addition to CPU utilization, netperf will
+report a metric called a service demand. The service demand is the normalization
+of CPU utilization and work performed. For a _STREAM test it is the microseconds
+of CPU time consumed to transfer on KB (K == 1024) of data. For a_RR test it is
+the microseconds of CPU time consumed processing a single transaction. For both
+CPU utilization and service demand, lower is better.
+
+Service demand can be particularly useful when trying to gauge the effect of a
+performance change. It is essentially a measure of efficiency, with smaller value
+s being more efficient and thus “better.”
+
+#### Test Profiles
+
+Tests are named with certain suffixes that indicate the type of test being run.
+
+##### Stream Tests
+
+The `_STREAM` tests are used to assess bulk or unidirectional transfer performance.
+Everyone wants to know how many bits or bytes per second they can push across the
+network.
+
+`TCP_STREAM` - the default test in netperf. It is quite simple, transferring
+some quantity of data from the system running netperf to the system running
+netserver. While time spent establishing the connection is not included in the
+throughput calculation, time spent flushing the last of the data to the remote
+at the end of the test is. This is how netperf knows that all the data it sent
+was received by the remote.
+
+`UDP_STREAM` - similar to a `TCP_STREAM` test except UDP is used as the transport
+rather than TCP. A UDP_STREAM test has no end-to-end flow control - UDP provides
+none and neither does netperf. The biggest of these implications is the data
+which is sent might not be received by the remote. For this reason, the output of
+a UDP_STREAM test shows both the sending and receiving throughput. On some
+platforms, it may be possible for the sending throughput to be reported as a
+value greater than the maximum rate of the link. This is common when the CPU(s)
+are faster than the network and there is no intra-stack flow-control.
+
+##### Request/Response Tests
+
+Tests with the `_RR` suffix are used to assess request/response or transaction
+performance.
+
+A `TCP_RR` test can be thought-of as a user-space to user-space ping with no
+think time - it is by default a synchronous, one transaction at a time,
+request/response test. The transaction rate is the number of complete
+transactions exchanged divided by the length of time it took to perform those
+transactions.
+
+If the two Systems Under Test are otherwise identical, a `TCP_RR` test with the
+same request and response size should be symmetric - it should not matter which
+way the test is run, and the CPU utilization measured should be virtually the
+same on each system. If not, it suggests that the CPU utilization mechanism being
+used may have some, well, issues measuring CPU utilization completely and accurately.
+
+Time to establish the TCP connection is not counted in the result.
+
+The `UDP_RR` is very much the same as a TCP_RR test except UDP is used rather
+than TCP. UDP does not provide for retransmission of lost UDP datagrams, and
+netperf does not add anything for that either. This means that if _any_ request
+or response is lost, the exchange of requests and responses will stop from that
+point until the test timer expires. Netperf will not really “know” this has
+happened - the only symptom will be a low transaction per second rate.
+
+A `TCP_CC` test simply measures how fast the pair of systems can open and close
+connections between one another in a synchronous (one at a time) manner. While
+this is considered an `_RR` test, no request or response is exchanged over the connection.
+
+A `TCP_CRR` test is like a merger of a TCP_RR and TCP_CC test which measures the
+performance of establishing a connection, exchanging a single request/response
+transaction, and tearing-down that connection. This is very much like what happens
+in an HTTP 1.0 or HTTP 1.1 connection when HTTP Keepalives are not used. In fact,
+the TCP_CRR test was added to netperf to simulate just that.

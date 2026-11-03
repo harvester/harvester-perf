@@ -13,6 +13,7 @@ Everything you need to know about developing and contributing to this project.
 ├── internal/suites/
 │   ├── density/           # density suite
 │   ├── etcd/              # etcd-benchmark suite
+│   ├── network/           # network-benchmark suite (netperf)
 │   ├── nodes/             # node-capacity suite
 │   ├── resourcefootprint/ # control-plane-footprint suite
 │   ├── storage/           # storage-kbench suite
@@ -32,15 +33,20 @@ make go/build     # compile ./dist/hvperf
 make go/test      # go test -cover -race -shuffle=on ./...
 ```
 
+`go/test` builds with `--output=type=cacheonly` so no untagged image is left
+behind. This needs BuildKit (docker buildx); it is untested with
+`DOCKER=podman`.
+
 Useful overrides:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `IMAGE_PLATFORMS` | `linux/amd64` | Target platform for `go/build` and `tools` |
+| `IMAGE_PLATFORMS` | `linux/amd64` | Target platform for `go/build`, `go/test` and `tools` |
 | `HARVESTER_VERSION` | `1.9` | Version prefix; `CLI_VERSION` becomes `<version>+<short-sha>` |
 | `BCI_GO_TAG` | `1.26` | Tag of `registry.suse.com/bci/golang` used to build and test |
 | `ETCD_VERSION` | `v3.6.14` | etcd version the `tools` target builds `etcdctl` and `benchmark` from |
-| `DOCKER` | `docker` | Container runtime (e.g. `DOCKER=podman`) |
+| `NETPERF_VERSION` | pinned commit | netperf commit the `tools` target builds `netperf` and `netserver` from |
+| `IPERF3_VERSION` | `3.22` | iperf3 version the `tools` target builds |
 
 ```bash
 IMAGE_PLATFORMS=linux/arm64 make go/build
@@ -116,6 +122,7 @@ suite. The flag is reported by `hvperf list`.
 | `etcd-benchmark` | yes | Exercises the cluster's etcd from a privileged `hostNetwork` job pod. |
 | `control-plane-footprint` | no | Measures the cluster's resource footprint: per-namespace CPU/memory usage and requests, host memory, and node allocatable, via Prometheus queries. |
 | `density` | yes | Import a VM image, ramp up VMs concurrently until failure, and record VMI boot-latency percentiles (p50/p95/p99). |
+| `network-benchmark` | yes | Run netperf `TCP_STREAM`, `TCP_CRR`, `TCP_RR`, `UDP_STREAM` and `UDP_RR` between a server and a client job pod (pod network, same or different nodes), recording throughput and latency. The `netperf`/`netserver` binaries are copied into the pods from the tools directory. |
 | `storage-kbench` | yes | Run Longhorn's `kbench` job against a fresh PVC to benchmark bandwidth, IOPS and latency, then read the matching Longhorn metrics from Prometheus. |
 
 ### Result types

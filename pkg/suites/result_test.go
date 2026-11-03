@@ -1,6 +1,7 @@
 package suites
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -780,4 +781,22 @@ func TestSuiteResultString(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCaseResultWithError(t *testing.T) {
+	t.Run("error marks passed case errored", func(t *testing.T) {
+		c := &CaseResult{State: CaseResultStatePassed}
+		c.WithError(errors.New("boom"))
+		if c.Err != "boom" || c.State != CaseResultStateErrored {
+			t.Errorf("Err=%q State=%q", c.Err, c.State)
+		}
+	})
+
+	t.Run("nil error leaves case untouched", func(t *testing.T) {
+		c := &CaseResult{State: CaseResultStatePassed}
+		c.WithError(nil)
+		if c.Err != "" || c.State != CaseResultStatePassed {
+			t.Errorf("Err=%q State=%q", c.Err, c.State)
+		}
+	})
 }

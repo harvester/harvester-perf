@@ -312,6 +312,14 @@ func (c *CaseResult) WithPodLogResults(results []*PodLogResult) *CaseResult {
 	return c
 }
 
+func (c *CaseResult) WithError(err error) *CaseResult {
+	if err != nil {
+		c.Err = err.Error()
+		c.FinalizeState()
+	}
+	return c
+}
+
 func (c *CaseResult) String() string {
 	var (
 		stringBuilder strings.Builder

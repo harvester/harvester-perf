@@ -104,5 +104,10 @@ func DefaultVMDensityOptions() suites.Options {
 // DefaultNetworkOptions returns the default options for the netperf benchmark
 // test suite.
 func DefaultNetworkOptions() suites.Options {
-	return suites.Options{}
+	return suites.Options{
+		"NetPerfIPFamily":             "-4",
+		"NetPerfRemoteCopyTargetDir":  "/usr/local/bin/",
+		"NetPerfTestStartWaitSeconds": 2,
+		"NetPerfTestLengthSeconds":    10,
+	}
 }

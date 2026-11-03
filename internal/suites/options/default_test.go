@@ -165,3 +165,16 @@ func TestDefaultOptionsFromOptions(t *testing.T) {
 		}
 	})
 }
+
+func TestDefaultNetworkOptions(t *testing.T) {
+	want := suites.Options{
+		"NetPerfIPFamily":             "-4",
+		"NetPerfRemoteCopyTargetDir":  "/usr/local/bin/",
+		"NetPerfTestStartWaitSeconds": 2,
+		"NetPerfTestLengthSeconds":    10,
+	}
+
+	if diff := cmp.Diff(DefaultNetworkOptions(), want); diff != "" {
+		t.Errorf("DefaultNetworkOptions() mismatch (-want +got):\n%s", diff)
+	}
+}

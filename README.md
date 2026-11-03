@@ -71,6 +71,7 @@ hvperf run node-capacity,etcd-benchmark
 # temporarily degrade its performance
 hvperf run storage-kbench
 hvperf run etcd-benchmark
+hvperf run network-benchmark
 ```
 
 ## Commands
@@ -96,8 +97,9 @@ Results are printed even when a suite fails, so partial output is not lost.
 
 ### Setting up the tools
 
-Some suites (e.g. `etcd-benchmark`) need extra binaries such as `etcdctl`,
-and `benchmark`. `hvperf run` reads them from `~/.hvperf/tools`. Set
+Some suites need extra binaries: `etcd-benchmark` uses `etcdctl` and
+`benchmark`, and `network-benchmark` uses `netperf` and `netserver` (`iperf3` is
+bundled too, for a planned iperf3 case). `hvperf run` reads them from `~/.hvperf/tools`. Set
 that directory up with `hvperf tool`:
 
 ```bash
@@ -115,7 +117,7 @@ hvperf tool uninstall
 
 The tools tarball is published as a release asset on the `hvperf` releases
 page. For development, `make tools` builds it locally into `./dist/` (inside a
-container; honours `ETCD_VERSION`).
+container; honours `ETCD_VERSION`, `NETPERF_VERSION` and `IPERF3_VERSION`).
 
 The archive must be a `.tar.gz` of regular files (the tool binaries); other
 entry types are skipped. Files are extracted flat into the tools directory,
