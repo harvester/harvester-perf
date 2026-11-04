@@ -98,9 +98,9 @@ Results are printed even when a suite fails, so partial output is not lost.
 ### Setting up the tools
 
 Some suites need extra binaries: `etcd-benchmark` uses `etcdctl` and
-`benchmark`, and `network-benchmark` uses `netperf` and `netserver` (`iperf3` is
-bundled too, for a planned iperf3 case). `hvperf run` reads them from `~/.hvperf/tools`. Set
-that directory up with `hvperf tool`:
+`benchmark`, and `network-benchmark` uses `netperf`, `netserver` and `iperf3` (a
+statically linked build, without OpenSSL). `hvperf run` reads them from
+`~/.hvperf/tools`. Set that directory up with `hvperf tool`:
 
 ```bash
 # install from a local .tar.gz or an http(s) URL, e.g. the tarball attached to

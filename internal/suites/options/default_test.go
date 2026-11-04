@@ -168,6 +168,12 @@ func TestDefaultOptionsFromOptions(t *testing.T) {
 
 func TestDefaultNetworkOptions(t *testing.T) {
 	want := suites.Options{
+		"IPerfClientMessageSizeBytes": 1024,
+		"IPerfClientParallelStreams":  1,
+		"IPerfIPFamily":               "-4",
+		"IPerfServerPort":             22865,
+		"IPerfTestDurationSeconds":    10,
+		"IPerfRemoteCopyTargetDir":    "/usr/local/bin/",
 		"NetPerfIPFamily":             "-4",
 		"NetPerfRemoteCopyTargetDir":  "/usr/local/bin/",
 		"NetPerfTestStartWaitSeconds": 2,

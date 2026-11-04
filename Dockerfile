@@ -44,10 +44,13 @@ ARG IPERF3_VERSION
 RUN curl -L https://github.com/esnet/iperf/releases/download/${IPERF3_VERSION}/iperf-${IPERF3_VERSION}.tar.gz | tar xz \
   && mv iperf-${IPERF3_VERSION} /iperf
 WORKDIR /iperf
-RUN ./configure; make install \
+RUN zypper install -y glibc-devel-static \
+  && ./configure --disable-shared --without-openssl --enable-static-bin \
+  && make \
+  && make install \
   && mkdir /out \
-  && cp /usr/local/bin/* /out/ \
-  && cp /usr/local/lib/* /out/
+  && cp /usr/local/bin/iperf3 /out/ \
+  && strip /out/iperf3
 
 # ---------------------------------------------------------------------
 # bundle all the benchmark tools into a single tarball for distribution

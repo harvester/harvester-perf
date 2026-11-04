@@ -13,7 +13,7 @@ Everything you need to know about developing and contributing to this project.
 ├── internal/suites/
 │   ├── density/           # density suite
 │   ├── etcd/              # etcd-benchmark suite
-│   ├── network/           # network-benchmark suite (netperf)
+│   ├── network/           # network-benchmark suite (netperf, iperf3)
 │   ├── nodes/             # node-capacity suite
 │   ├── resourcefootprint/ # control-plane-footprint suite
 │   ├── storage/           # storage-kbench suite
@@ -122,7 +122,7 @@ suite. The flag is reported by `hvperf list`.
 | `etcd-benchmark` | yes | Exercises the cluster's etcd from a privileged `hostNetwork` job pod. |
 | `control-plane-footprint` | no | Measures the cluster's resource footprint: per-namespace CPU/memory usage and requests, host memory, and node allocatable, via Prometheus queries. |
 | `density` | yes | Import a VM image, ramp up VMs concurrently until failure, and record VMI boot-latency percentiles (p50/p95/p99). |
-| `network-benchmark` | yes | Run netperf `TCP_STREAM`, `TCP_CRR`, `TCP_RR`, `UDP_STREAM` and `UDP_RR` between a server and a client job pod (pod network, same or different nodes), recording throughput and latency. The `netperf`/`netserver` binaries are copied into the pods from the tools directory. |
+| `network-benchmark` | yes | Run netperf `TCP_STREAM`, `TCP_CRR`, `TCP_RR`, `UDP_STREAM` and `UDP_RR`, then iperf3 `TCP_STREAM` and `UDP_STREAM`, between a server and a client job pod (pod network, same or different nodes), recording throughput and latency. The `netperf`/`netserver`/`iperf3` binaries are copied into the pods from the tools directory. |
 | `storage-kbench` | yes | Run Longhorn's `kbench` job against a fresh PVC to benchmark bandwidth, IOPS and latency, then read the matching Longhorn metrics from Prometheus. |
 
 ### Result types

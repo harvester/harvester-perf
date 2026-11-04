@@ -105,6 +105,12 @@ func DefaultVMDensityOptions() suites.Options {
 // test suite.
 func DefaultNetworkOptions() suites.Options {
 	return suites.Options{
+		"IPerfClientMessageSizeBytes": 1024,
+		"IPerfClientParallelStreams":  1,
+		"IPerfIPFamily":               "-4",
+		"IPerfServerPort":             22865,
+		"IPerfTestDurationSeconds":    10,
+		"IPerfRemoteCopyTargetDir":    "/usr/local/bin/",
 		"NetPerfIPFamily":             "-4",
 		"NetPerfRemoteCopyTargetDir":  "/usr/local/bin/",
 		"NetPerfTestStartWaitSeconds": 2,

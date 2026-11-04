@@ -19,119 +19,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func init() {
-	suites.Register(NewNetworkSuite())
-}
-
-var _ suites.Suite = &NetworkSuite{}
-
-type NetworkSuite struct {
-	suites.SuiteMarshaler
-	*suites.ProgressReporter
-	*suites.Clients
-}
-
-func NewNetworkSuite() *NetworkSuite {
-	n := &NetworkSuite{}
-	n.Marshal = n
-	return n
-}
-
-func (s *NetworkSuite) Name() string {
-	return "network-benchmark"
-}
-
-func (s *NetworkSuite) Description() string {
-	return "run netperf to benchmark the in-cluster network latency and throughput"
-}
-
-func (s *NetworkSuite) IsExclusive() bool {
-	return true
-}
-
-func (s *NetworkSuite) SetClients(clients *suites.Clients) {
-	s.Clients = clients
-}
-
-func (s *NetworkSuite) SetProgressReporter(reporter *suites.ProgressReporter) {
-	s.ProgressReporter = reporter
-}
-
-func (s *NetworkSuite) RunE(
-	ctx context.Context,
-	runID string,
-	namespace string,
-	opts suites.Options,
-) suites.SuiteResult {
-	o, err := NewNetPerfOptions(opts)
-	if err != nil {
-		return suites.NewSuiteResult(s.Name(), runID).WithError(err)
-	}
-
-	if _, err := k8s.EnsureNamespace(ctx, s.Clients, namespace, o.NamespaceReadyTimeout); err != nil {
-		return suites.SuiteResult{
-			Name:  s.Name(),
-			RunID: runID,
-			Err:   fmt.Sprintf("namespace %s not ready: %v", namespace, err.Error()),
-		}
-	}
-	klog.V(3).InfoS("namespace is ready\n", "name", namespace)
-
-	testSuites := []struct {
-		name    string
-		profile ProfileName
-		fn      func(context.Context, string, string, string, ProfileName, *NetworkOptions) *suites.CaseResult
-	}{
-		{
-			name:    fmt.Sprintf("netperf-%s", ProfileTCPStream),
-			profile: ProfileTCPStream,
-			fn:      s.execNetperf,
-		},
-		{
-			name:    fmt.Sprintf("netperf-%s", ProfileTCPCRR),
-			profile: ProfileTCPCRR,
-			fn:      s.execNetperf,
-		},
-		{
-			name:    fmt.Sprintf("netperf-%s", ProfileTCPRR),
-			profile: ProfileTCPRR,
-			fn:      s.execNetperf,
-		},
-		{
-			name:    fmt.Sprintf("netperf-%s", ProfileUDPStream),
-			profile: ProfileUDPStream,
-			fn:      s.execNetperf,
-		},
-		{
-			name:    fmt.Sprintf("netperf-%s", ProfileUDPRR),
-			profile: ProfileUDPRR,
-			fn:      s.execNetperf,
-		},
-		{
-			name: "network-benchmark-iperf3",
-			fn:   s.iperf,
-		},
-	}
-
-	var caseResults []*suites.CaseResult
-	for _, testCase := range testSuites {
-		s.CaseStart(s.Name(), testCase.name)
-		caseResult := testCase.fn(ctx, testCase.name, runID, namespace, testCase.profile, o)
-		caseResults = append(caseResults, caseResult)
-		s.CaseDone(s.Name(), testCase.name, caseResult.State, time.Since(caseResult.DateTimeStart))
-	}
-
-	suiteParams, err := suites.ToSuiteParams(o)
-	if err != nil {
-		// just log the params conversion error, don't fail the suite. the only effect
-		// is that the suite params won't be reported in the results.
-		klog.V(3).ErrorS(err, "failed to convert suite options to suite params\n")
-	}
-
-	return suites.NewSuiteResult(s.Name(), runID).WithParams(suiteParams).WithResults(caseResults)
-}
-
-func (s *NetworkSuite) execNetperf(
+func (s *NetworkSuite) netperf(
 	ctx context.Context,
 	caseName string,
 	runID string,
@@ -145,7 +33,7 @@ func (s *NetworkSuite) execNetperf(
 		objs          []runtime.Object
 	)
 	start := time.Now()
-	serverCmdResults, serverJob, serverPod, err := s.execNetperfServer(
+	serverCmdResults, serverJob, serverPod, err := s.netperfServer(
 		ctx,
 		runID,
 		namespace,
@@ -168,13 +56,13 @@ func (s *NetworkSuite) execNetperf(
 
 	// look for the pod IP address that matches the requested IP family. if we can't
 	// find one, return an error.
-	serverIP, err := podIPByIPFamily(serverPod, o)
+	serverIP, err := podIPByIPFamily(serverPod, o.NetPerfIPFamily)
 	if err != nil {
 		return suites.NewCaseResult(caseName, start, time.Now(), cmdResults, nil, objs...).
 			WithError(err)
 	}
 
-	clientCmdResults, clientJob, clientPod, err := s.execNetperfClient(
+	clientCmdResults, clientJob, clientPod, err := s.netperfClient(
 		ctx,
 		runID,
 		namespace,
@@ -188,17 +76,10 @@ func (s *NetworkSuite) execNetperf(
 	}
 	cmdResults = append(cmdResults, clientCmdResults...)
 	objs = append(objs, clientJob, clientPod)
-
-	serverVersionCmdResult := s.execNetperfVersion(ctx, serverPod, BenchmarkServer)
-	cmdResults = append(cmdResults, serverVersionCmdResult)
-
-	clientVersionCmdResult := s.execNetperfVersion(ctx, clientPod, BenchmarkClient)
-	cmdResults = append(cmdResults, clientVersionCmdResult)
-
 	return suites.NewCaseResult(caseName, start, time.Now(), cmdResults, metricResults, objs...)
 }
 
-func (s *NetworkSuite) execNetperfServer(
+func (s *NetworkSuite) netperfServer(
 	ctx context.Context,
 	runID string,
 	namespace string,
@@ -232,7 +113,7 @@ func (s *NetworkSuite) execNetperfServer(
 	return []*suites.CmdResult{cmdResult}, job, pod, nil
 }
 
-func (s *NetworkSuite) execNetperfClient(
+func (s *NetworkSuite) netperfClient(
 	ctx context.Context,
 	runID string,
 	namespace string,
@@ -273,34 +154,6 @@ func (s *NetworkSuite) execNetperfClient(
 		cmdResult.Err = err.Error()
 	}
 	return []*suites.CmdResult{cmdResult}, job, pod, nil
-}
-
-func (s *NetworkSuite) execNetperfVersion(
-	ctx context.Context,
-	pod *corev1.Pod,
-	workloadType BenchmarkWorkloadType,
-) *suites.CmdResult {
-	var cmd []string
-	switch workloadType {
-	case BenchmarkServer:
-		cmd = []string{"netserver", "-V"}
-	case BenchmarkClient:
-		cmd = []string{"netperf", "-V"}
-	}
-
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	out, err := k8s.ExecPod(ctxWithTimeout, s.Clients, pod, cmd)
-	cmdResult := &suites.CmdResult{
-		Cmd:    strings.Join(cmd, " "),
-		Stdout: out.Stdout,
-		Stderr: out.Stderr,
-	}
-	if err != nil {
-		cmdResult.Err = err.Error()
-	}
-	return cmdResult
 }
 
 func (s *NetworkSuite) netperfSetup(
@@ -367,24 +220,6 @@ func (s *NetworkSuite) netperfSetup(
 	return job, pod, nil
 }
 
-func (s *NetworkSuite) iperf(
-	ctx context.Context,
-	caseName string,
-	runID string,
-	namespace string,
-	testName ProfileName,
-	o *NetworkOptions,
-) *suites.CaseResult {
-	start := time.Now()
-	var (
-		cmdResults    []*suites.CmdResult
-		metricResults []*suites.MetricResult
-		objs          []runtime.Object
-	)
-	end := time.Now()
-	return suites.NewCaseResult(caseName, start, end, cmdResults, metricResults, objs...)
-}
-
 type NetworkOptions struct {
 	JobActiveDeadline      time.Duration
 	JobPodImageName        string
@@ -395,6 +230,14 @@ type NetworkOptions struct {
 	JobSuspend             bool
 	NamespaceReadyTimeout  time.Duration
 
+	IPerfBinLocalPath           string
+	IPerfClientMessageSizeBytes int
+	IPerfClientParallelStreams  int
+	IPerfIPFamily               IPFamilyOption
+	IPerfRemoteCopyTargetDir    string
+	IPerfServerPort             int
+	IPerfTestDurationSeconds    int
+
 	NetPerfIPFamily             IPFamilyOption
 	NetPerfClientLocalPath      string
 	NetPerfServerLocalPath      string
@@ -403,15 +246,17 @@ type NetworkOptions struct {
 	NetPerfTestLengthSeconds    int
 }
 
-func NewNetPerfOptions(override suites.Options) (*NetworkOptions, error) {
+func NewNetworkOptions(override suites.Options) (*NetworkOptions, error) {
 	merged := options.DefaultGlobalOptions().
 		Merge(options.DefaultNetworkOptions()).
 		Merge(override)
 
-	// if user did not provide the netperf client/server local paths,
+	// if user did not provide the netperf or iperf client/server local paths,
 	// use the toolsDir option to construct them. if toolsDir is not provided,
 	// return an error.
-	if merged["netPerfClientLocalPath"] == nil || merged["netPerfServerLocalPath"] == nil {
+	if merged["netPerfClientLocalPath"] == nil ||
+		merged["netPerfServerLocalPath"] == nil ||
+		merged["iperfBinLocalPath"] == nil {
 		toolsDir, exists := merged["toolsDir"]
 		if !exists {
 			return nil, fmt.Errorf("toolsDir option is required but not provided")
@@ -428,11 +273,14 @@ func NewNetPerfOptions(override suites.Options) (*NetworkOptions, error) {
 		if merged["netPerfServerLocalPath"] == nil {
 			merged["netPerfServerLocalPath"] = filepath.Join(cast, "netserver")
 		}
+		if merged["iperfBinLocalPath"] == nil {
+			merged["iperfBinLocalPath"] = filepath.Join(cast, "iperf3")
+		}
 	}
 	return options.FromOptions[*NetworkOptions](merged)
 }
 
-func podIPByIPFamily(pod *corev1.Pod, o *NetworkOptions) (string, error) {
+func podIPByIPFamily(pod *corev1.Pod, ipFamily IPFamilyOption) (string, error) {
 	var serverIP string
 LOOP:
 	for _, ip := range pod.Status.PodIPs {
@@ -442,54 +290,18 @@ LOOP:
 		}
 
 		switch {
-		case o.NetPerfIPFamily == IPv4 && addr.Is4():
+		case ipFamily == IPv4 && addr.Is4():
 			serverIP = ip.IP
 			break LOOP
-		case o.NetPerfIPFamily == IPv6 && addr.Is6():
+		case ipFamily == IPv6 && addr.Is6():
 			serverIP = ip.IP
 			break LOOP
 		}
 	}
 
 	if serverIP == "" {
-		return "", fmt.Errorf("no server pod IP found for requested IP family '%s'", o.NetPerfIPFamily)
+		return "", fmt.Errorf("no server pod IP found for requested IP family '%s'", ipFamily)
 	}
 
 	return serverIP, nil
-}
-
-type (
-	BenchmarkWorkloadType string
-
-	// IPFamilyOption corresponds to the -4 or -6 option in netperf, which specifies
-	// whether to use IPv4 or IPv6.
-	IPFamilyOption string
-
-	// ProfileName is the name of a netperf test profiles as defined in
-	// https://hewlettpackard.github.io/netperf/doc/netperf.html#Options-common-to-TCP-UDP-and-SCTP-tests
-	ProfileName string
-)
-
-const (
-	BenchmarkClient BenchmarkWorkloadType = "client"
-	BenchmarkServer BenchmarkWorkloadType = "server"
-
-	IPv4 IPFamilyOption = "-4"
-	IPv6 IPFamilyOption = "-6"
-
-	ProfileTCPCRR    ProfileName = "TCP_CRR"
-	ProfileTCPRR     ProfileName = "TCP_RR"
-	ProfileTCPStream ProfileName = "TCP_STREAM"
-	ProfileUDPRR     ProfileName = "UDP_RR"
-	ProfileUDPStream ProfileName = "UDP_STREAM"
-)
-
-// ProfileParams are parameters for each test profile derived from k8s-netperf's
-// implementation
-var ProfileParams = map[ProfileName][]string{
-	ProfileTCPCRR:    {"-k", "THROUGHPUT,THROUGHPUT_UNITS,MIN_LATENCY,MEAN_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY,MAX_LATENCY,STDDEV_LATENCY,LOCAL_TRANSPORT_RETRANS", "-r", "1024,1024", "-P", "42424"},
-	ProfileTCPRR:     {"-k", "THROUGHPUT,THROUGHPUT_UNITS,MIN_LATENCY,MEAN_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY,MAX_LATENCY,STDDEV_LATENCY,LOCAL_TRANSPORT_RETRANS", "-r", "1024,1024", "-P", "42424"},
-	ProfileTCPStream: {"-k", "THROUGHPUT,THROUGHPUT_UNITS,LOCAL_SEND_CALLS,REMOTE_RECV_CALLS,LOCAL_TRANSPORT_RETRANS", "-m", "1024", "-P", "42424"},
-	ProfileUDPRR:     {"-k", "THROUGHPUT,THROUGHPUT_UNITS,MIN_LATENCY,MEAN_LATENCY,P50_LATENCY,P90_LATENCY,P99_LATENCY,MAX_LATENCY,STDDEV_LATENCY,LOCAL_TRANSPORT_RETRANS", "-r", "1024,1024", "-P", "42424"},
-	ProfileUDPStream: {"-k", "THROUGHPUT,THROUGHPUT_UNITS,LOCAL_SEND_CALLS,REMOTE_RECV_CALLS,LOCAL_TRANSPORT_RETRANS", "-m", "1024", "-R", "1", "-P", "42424"},
 }
