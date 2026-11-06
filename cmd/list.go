@@ -30,7 +30,6 @@ to specify the output format. Supported formats are "table", "name", "json", and
 func init() {
 	rootCmd.AddCommand(listCmd)
 	k8sPrintFlags.AddFlags(listCmd)
-	listCmd.SilenceUsage = true
 }
 
 func outList(format string) error {

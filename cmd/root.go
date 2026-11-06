@@ -38,6 +38,7 @@ func init() {
 	fs := flag.NewFlagSet("klog", flag.ExitOnError)
 	klog.InitFlags(fs)
 
+	rootCmd.SilenceUsage = true
 	rootCmd.PersistentFlags().AddGoFlagSet(fs)
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "set to true to disable klog output")
 }

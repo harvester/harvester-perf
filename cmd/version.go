@@ -25,8 +25,6 @@ var (
 
 func init() {
 	rootCmd.AddCommand(versionCmd)
-	versionCmd.SilenceUsage = true
-
 	versionCmd.Flags().BoolVar(&clientOnly, "client-only", false, "Only display the client version, without querying the server.")
 	k8sConfigFlags.AddFlags(versionCmd.Flags())
 }

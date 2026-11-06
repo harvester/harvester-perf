@@ -96,18 +96,11 @@ func init() {
 	toolCmd.AddCommand(toolInstallCmd)
 	toolCmd.AddCommand(toolListCmd)
 	toolCmd.AddCommand(toolUninstallCmd)
-	toolCmd.SilenceUsage = true
-
 	toolInstallCmd.Flags().StringVarP(&toolSource, "tool-source", "t", "", "Remote or local source to get the tools from. Must be a .tar.gz file")
 	if err := toolInstallCmd.MarkFlagRequired("tool-source"); err != nil {
 		klog.ErrorS(err, "failed to mark flag 'tool-source' as required")
 	}
-	toolInstallCmd.SilenceUsage = true
-
-	toolListCmd.SilenceUsage = true
-
 	toolUninstallCmd.Flags().BoolVarP(&skipUninstallConfirm, "skip-confirm", "y", false, "Skip confirmation prompt and uninstall all tools")
-	toolUninstallCmd.SilenceUsage = true
 }
 
 func fetchFromURL(url string) ([]byte, error) {
