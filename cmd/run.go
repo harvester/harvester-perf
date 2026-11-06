@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -77,7 +78,6 @@ specified as a list of comma-separated arguments.`,
 
 func init() {
 	rootCmd.AddCommand(runCmd)
-	runCmd.SilenceUsage = true
 
 	runCmd.PersistentFlags().BoolVar(&keepAlive, "keep-alive", false,
 		fmt.Sprintf("Keep the test namespace and all its resources after test suite execution. Only works if the namespace is %s. Cleanup is skipped for custom namespace", suites.DefaultNamespace))
@@ -194,15 +194,19 @@ func canonicalizeRunOptions(testSuites []suites.Suite) (map[string]suites.Option
 		return map[string]suites.Options{}, nil
 	}
 
-	canonicalizedOptions := map[string]suites.Options{}
+	var (
+		canonicalizedOptions = map[string]suites.Options{}
+		errs                 error
+	)
 
 	// canonicalize any user-provided global options if they exist
 	if globalOptions, exists := runOptions["global"]; exists {
 		canonicalized, err := globalOptions.Canonicalize(options.DefaultGlobalOptions())
 		if err != nil {
-			return nil, fmt.Errorf("failed to canonicalize global options: %w", err)
+			errs = errors.Join(errs, fmt.Errorf("failed to canonicalize global options: %w", err))
+		} else {
+			canonicalizedOptions["global"] = canonicalized
 		}
-		canonicalizedOptions["global"] = canonicalized
 	}
 
 	// for each suite, canonicalize the user-provided options if they exist, but
@@ -221,16 +225,17 @@ func canonicalizeRunOptions(testSuites []suites.Suite) (map[string]suites.Option
 		}
 	}
 	if len(unknownSuites) > 0 {
-		return nil, fmt.Errorf("unsupported suites in override options: %s", strings.Join(unknownSuites, ","))
+		errs = errors.Join(errs, fmt.Errorf("unknown suites in override options: %s", strings.Join(unknownSuites, ",")))
 	}
 
 	for _, suite := range testSuites {
 		canonicalized, err := runOptions[suite.Name()].Canonicalize(suite.OptionsSchema())
 		if err != nil {
-			return nil, fmt.Errorf("failed to canonicalize options for suite %q: %w", suite.Name(), err)
+			errs = errors.Join(errs, fmt.Errorf("failed to canonicalize options for suite %q: %w", suite.Name(), err))
+			continue
 		}
 		canonicalizedOptions[suite.Name()] = canonicalized
 	}
 
-	return canonicalizedOptions, nil
+	return canonicalizedOptions, errs
 }
