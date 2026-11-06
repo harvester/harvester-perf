@@ -2,6 +2,18 @@
 
 Everything you need to know about developing and contributing to this project.
 
+## Table of contents
+
+- [Repository layout](#repository-layout)
+- [Building](#building)
+- [Adding a suite](#adding-a-suite)
+- [Design Abstraction](#design-abstraction)
+  - [Test suites](#test-suites)
+  - [Config canonicalization](#config-canonicalization)
+  - [The `config` command](#the-config-command)
+  - [Result types](#result-types)
+  - [Errors](#errors)
+
 ## Repository layout
 
 ```

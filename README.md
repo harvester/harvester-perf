@@ -6,6 +6,17 @@ assessing Harvester performance and benchmark results.
 `hvperf` is a CLI for running performance, capacity and benchmark test suites
 against [SUSE Harvester](https://harvesterhci.io) clusters.
 
+## Table of contents
+
+- [Requirements](#requirements)
+- [Concept](#concept)
+- [Quick start](#quick-start)
+- [Commands](#commands)
+  - [Setting up the tools](#setting-up-the-tools)
+  - [Configuration File For Parameters Overrides](#configuration-file-for-parameters-overrides)
+- [Development](#development)
+- [License](#license)
+
 ## Requirements
 
 * A kubeconfig with cluster-admin on the target Harvester cluster.
