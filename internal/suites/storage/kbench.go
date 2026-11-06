@@ -349,6 +349,10 @@ func overrideKBenchPVCMount(job *batchv1.Job, pvc *corev1.PersistentVolumeClaim)
 	}
 }
 
+func (s *KBenchSuite) OptionsSchema() suites.Options {
+	return options.DefaultKBenchOptions()
+}
+
 func (s *KBenchSuite) SetClients(clients *suites.Clients) {
 	s.Clients = clients
 }

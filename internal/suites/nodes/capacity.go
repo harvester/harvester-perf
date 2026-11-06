@@ -196,6 +196,10 @@ func (s *NodeCapacitySuite) execNodeDiskInfo(
 	return suites.NewCaseResult(caseName, start, time.Now(), cmdResults, nil, objs...)
 }
 
+func (s *NodeCapacitySuite) OptionsSchema() suites.Options {
+	return options.DefaultNodeCapacityOptions()
+}
+
 func (s *NodeCapacitySuite) SetClients(clientSets *suites.Clients) {
 	s.Clients = clientSets
 }

@@ -2,6 +2,7 @@ package suites
 
 import (
 	"context"
+	"time"
 
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -19,26 +20,39 @@ var _ Suite = &fakeSuite{}
 
 type fakeSuite struct {
 	SuiteMarshaler
-
-	name        string
-	description string
-	readWrite   bool
+	name          string
+	description   string
+	exclusive     bool
+	optionsSchema Options
 }
 
-func newFakeSuite(name, description string, readWrite bool) *fakeSuite {
-	s := &fakeSuite{name: name, description: description, readWrite: readWrite}
+func newFakeSuite(name, description string, exclusive bool) *fakeSuite {
+	s := &fakeSuite{name: name, description: description, exclusive: exclusive}
 	s.Marshal = s
 	return s
 }
 
 func (s *fakeSuite) Name() string        { return s.name }
 func (s *fakeSuite) Description() string { return s.description }
-func (s *fakeSuite) IsExclusive() bool   { return s.readWrite }
+func (s *fakeSuite) IsExclusive() bool   { return s.exclusive }
 func (s *fakeSuite) RunE(_ context.Context, _, _ string, _ Options) SuiteResult {
 	return SuiteResult{}
 }
+func (s *fakeSuite) OptionsSchema() Options                  { return s.optionsSchema }
 func (s *fakeSuite) SetClients(_ *Clients)                   {}
 func (s *fakeSuite) SetProgressReporter(_ *ProgressReporter) {}
+
+// fakeOptions stands in for a suite's options struct, such as the
+// etcd suite's BenchmarkOptions. Only the primitive field kinds that the
+// options structs use are covered.
+type fakeOptions struct {
+	EtcdEndpoints      string
+	EtcdMetricsPort    int
+	PutLoadSize        uint64
+	JobSuspend         bool
+	JobPodReadyTimeout time.Duration
+	unexported         string //nolint:unused // asserts that ToSuiteParams skips it
+}
 
 // recordingSuite wraps fakeSuite with a SetClients that records what it
 // received, so WithClients behaviour can be observed.

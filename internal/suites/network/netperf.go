@@ -3,8 +3,6 @@ package network
 import (
 	"context"
 	"fmt"
-	"net/netip"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -12,7 +10,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/harvester/hvperf/internal/suites/options"
 	"github.com/harvester/hvperf/pkg/k8s"
 	"github.com/harvester/hvperf/pkg/suites"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -218,90 +215,4 @@ func (s *NetworkSuite) netperfSetup(
 		return nil, nil, err
 	}
 	return job, pod, nil
-}
-
-type NetworkOptions struct {
-	JobActiveDeadline      time.Duration
-	JobPodImageName        string
-	JobPodImageTag         string
-	JobPodNode             string
-	JobPodTTLAfterFinished time.Duration
-	JobPodReadyTimeout     time.Duration
-	JobSuspend             bool
-	NamespaceReadyTimeout  time.Duration
-
-	IPerfBinLocalPath           string
-	IPerfClientMessageSizeBytes int
-	IPerfClientParallelStreams  int
-	IPerfIPFamily               IPFamilyOption
-	IPerfRemoteCopyTargetDir    string
-	IPerfServerPort             int
-	IPerfTestDurationSeconds    int
-
-	NetPerfIPFamily             IPFamilyOption
-	NetPerfClientLocalPath      string
-	NetPerfServerLocalPath      string
-	NetPerfRemoteCopyTargetDir  string
-	NetPerfTestStartWaitSeconds int
-	NetPerfTestLengthSeconds    int
-}
-
-func NewNetworkOptions(override suites.Options) (*NetworkOptions, error) {
-	merged := options.DefaultGlobalOptions().
-		Merge(options.DefaultNetworkOptions()).
-		Merge(override)
-
-	// if user did not provide the netperf or iperf client/server local paths,
-	// use the toolsDir option to construct them. if toolsDir is not provided,
-	// return an error.
-	if merged["netPerfClientLocalPath"] == nil ||
-		merged["netPerfServerLocalPath"] == nil ||
-		merged["iperfBinLocalPath"] == nil {
-		toolsDir, exists := merged["toolsDir"]
-		if !exists {
-			return nil, fmt.Errorf("toolsDir option is required but not provided")
-		}
-
-		cast, ok := toolsDir.(string)
-		if !ok {
-			return nil, fmt.Errorf("toolsDir option must be a string, but got %T", toolsDir)
-		}
-
-		if merged["netPerfClientLocalPath"] == nil {
-			merged["netPerfClientLocalPath"] = filepath.Join(cast, "netperf")
-		}
-		if merged["netPerfServerLocalPath"] == nil {
-			merged["netPerfServerLocalPath"] = filepath.Join(cast, "netserver")
-		}
-		if merged["iperfBinLocalPath"] == nil {
-			merged["iperfBinLocalPath"] = filepath.Join(cast, "iperf3")
-		}
-	}
-	return options.FromOptions[*NetworkOptions](merged)
-}
-
-func podIPByIPFamily(pod *corev1.Pod, ipFamily IPFamilyOption) (string, error) {
-	var serverIP string
-LOOP:
-	for _, ip := range pod.Status.PodIPs {
-		addr, err := netip.ParseAddr(ip.IP)
-		if err != nil {
-			return "", fmt.Errorf("failed to parse server pod IP '%s': %w", ip.IP, err)
-		}
-
-		switch {
-		case ipFamily == IPv4 && addr.Is4():
-			serverIP = ip.IP
-			break LOOP
-		case ipFamily == IPv6 && addr.Is6():
-			serverIP = ip.IP
-			break LOOP
-		}
-	}
-
-	if serverIP == "" {
-		return "", fmt.Errorf("no server pod IP found for requested IP family '%s'", ipFamily)
-	}
-
-	return serverIP, nil
 }

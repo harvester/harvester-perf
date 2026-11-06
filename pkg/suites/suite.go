@@ -17,6 +17,7 @@ type Suite interface {
 	Description() string
 	IsExclusive() bool
 	RunE(ctx context.Context, runID, namespace string, opt Options) SuiteResult
+	OptionsSchema() Options
 	SetClients(clients *Clients)
 	SetProgressReporter(reporter *ProgressReporter)
 }

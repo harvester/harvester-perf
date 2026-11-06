@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/harvester/hvperf/pkg/suites"
-	"go.yaml.in/yaml/v4"
 )
 
 // FromOptions converts the given suites.Options to the specific options type V.
@@ -69,21 +68,4 @@ func structField(t reflect.Type, field string) (reflect.StructField, bool) {
 	return t.FieldByNameFunc(func(n string) bool {
 		return strings.EqualFold(n, field)
 	})
-}
-
-// DecodeSection YAML-decodes the named key from opts over def; fields absent from the section keep def's values.
-func DecodeSection[V any](opts suites.Options, key string, def V) (V, error) {
-	raw, ok := opts[key]
-	if !ok {
-		return def, nil
-	}
-	b, err := yaml.Marshal(raw)
-	if err != nil {
-		return def, fmt.Errorf("%s options: %w", key, err)
-	}
-	o := def
-	if err := yaml.Unmarshal(b, &o); err != nil {
-		return def, fmt.Errorf("%s options: %w", key, err)
-	}
-	return o, nil
 }

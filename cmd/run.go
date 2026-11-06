@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 
+	"github.com/harvester/hvperf/internal/suites/options"
 	"github.com/harvester/hvperf/pkg/suites"
 	"github.com/spf13/cobra"
 	"go.yaml.in/yaml/v4"
@@ -63,8 +64,13 @@ specified as a list of comma-separated arguments.`,
 			return err
 		}
 
+		suitesOptions, err := canonicalizeRunOptions(testSuites)
+		if err != nil {
+			return err
+		}
+
 		outputFormat := *k8sPrintFlags.OutputFormat
-		results := runSuites(cmd.Context(), testSuites, toolsDir, outputFormat, runOptions)
+		results := runSuites(cmd.Context(), testSuites, toolsDir, outputFormat, suitesOptions)
 		return outRun(results, outputFormat)
 	},
 }
@@ -87,7 +93,7 @@ func init() {
 	}
 }
 
-func runSuites(ctx context.Context, testSuites []suites.Suite, toolsDir string, format string, opts map[string]suites.Options) []*suites.SuiteResult {
+func runSuites(ctx context.Context, testSuites []suites.Suite, toolsDir string, format string, suitesOptions map[string]suites.Options) []*suites.SuiteResult {
 	var (
 		results []*suites.SuiteResult
 		runID   = time.Now().Format("20060102150405")
@@ -112,11 +118,15 @@ func runSuites(ctx context.Context, testSuites []suites.Suite, toolsDir string, 
 
 	for i, suite := range testSuites {
 		suiteOptions := suites.Options{}
-		if o, exists := opts[suite.Name()]; exists {
+		if o, exists := suitesOptions["global"]; exists {
+			maps.Copy(suiteOptions, o)
+		}
+		if o, exists := suitesOptions[suite.Name()]; exists {
 			maps.Copy(suiteOptions, o)
 		}
 
-		// every suite gets the toolsDir option, its value is not overridable
+		// every test suite gets toolsDir, needed by suites identify the location of
+		// tools like etcdctl, netperf etc. it is not overridable
 		suiteOptions["toolsDir"] = toolsDir
 
 		suite = suites.WithClients(suite, runCmdClients)
@@ -167,4 +177,60 @@ func outRun(results []*suites.SuiteResult, format string) error {
 	}
 	_, err = fmt.Fprintf(os.Stdout, "%s", out)
 	return err
+}
+
+// canonicalizeRunOptions takes the user-provided run options and canonicalizes
+// (standardizes) them against the default options for each test suite. These
+// default options serves as the schema.
+//
+// Global options are also canonicalized against the default global options
+// schema, if they exist under the 'global' key in the user-provided run options.
+//
+// The returned map contains a map of the canonicalized options with the same set
+// of keys as the user-provided run options, but with the values canonicalized
+// against the schema.
+func canonicalizeRunOptions(testSuites []suites.Suite) (map[string]suites.Options, error) {
+	if runOptions == nil {
+		return map[string]suites.Options{}, nil
+	}
+
+	canonicalizedOptions := map[string]suites.Options{}
+
+	// canonicalize any user-provided global options if they exist
+	if globalOptions, exists := runOptions["global"]; exists {
+		canonicalized, err := globalOptions.Canonicalize(options.DefaultGlobalOptions())
+		if err != nil {
+			return nil, fmt.Errorf("failed to canonicalize global options: %w", err)
+		}
+		canonicalizedOptions["global"] = canonicalized
+	}
+
+	// for each suite, canonicalize the user-provided options if they exist, but
+	// first identify and error on unknown suites in the override options
+	unknownSuites := []string{}
+	for suiteName := range runOptions {
+		known := false
+		for _, testSuite := range testSuites {
+			known = suiteName == testSuite.Name() || suiteName == "global"
+			if known {
+				break
+			}
+		}
+		if !known {
+			unknownSuites = append(unknownSuites, suiteName)
+		}
+	}
+	if len(unknownSuites) > 0 {
+		return nil, fmt.Errorf("unsupported suites in override options: %s", strings.Join(unknownSuites, ","))
+	}
+
+	for _, suite := range testSuites {
+		canonicalized, err := runOptions[suite.Name()].Canonicalize(suite.OptionsSchema())
+		if err != nil {
+			return nil, fmt.Errorf("failed to canonicalize options for suite %q: %w", suite.Name(), err)
+		}
+		canonicalizedOptions[suite.Name()] = canonicalized
+	}
+
+	return canonicalizedOptions, nil
 }

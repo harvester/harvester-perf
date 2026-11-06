@@ -130,19 +130,8 @@ Dockerfile (`ETCD_VERSION`, currently `v3.6.14`). The runtime base is
 
 ### Configuration File For Parameters Overrides
 
-`hvperf run` reads `./hvperf.yaml` by default. Copy and edit the file at the
-repo root to tune suite parameters before running:
-
-```yaml
-density:
-  batchWaitTimeout: 5m     # per-batch wait timeout
-  vmi:
-    containerDisk: quay.io/kubevirt/cirros-container-disk-demo:latest
-    memory: 90Mi
-    cpu: 100m
-```
-
-Pass `--config` to point at a different file:
+Test suites parameters can be overridden via a configuration file, using the
+`--config` flag.
 
 ```bash
 hvperf run density --config ~/my-cluster.yaml
@@ -150,7 +139,8 @@ hvperf run density --config ~/my-cluster.yaml
 
 ## Development
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for information on building, testing and additional development details.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for information on building, testing and
+additional development details.
 
 ## License
 

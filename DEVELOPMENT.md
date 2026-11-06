@@ -69,6 +69,7 @@ To build natively instead, Go 1.26+ works directly: `go build -o hvperf .`
    func (s *MySuite) Description() string { return "what it measures" }
    func (s *MySuite) IsExclusive() bool   { return false }
    func (s *MySuite) RunE(ctx context.Context, runID, namespace string, opts pkgsuites.Options) pkgsuites.SuiteResult
+   func (s *MySuite) OptionsSchema() pkgsuites.Options { return options.DefaultMyOptions() }
    func (s *MySuite) SetClients(c *pkgsuites.Clients)
    ```
 
@@ -90,7 +91,9 @@ To build natively instead, Go 1.26+ works directly: `go build -o hvperf .`
    with `internal/suites/options.FromOptions[*MyOptions]` and layer the
    suite-specific defaults on top. Passing that struct through
    `pkgsuites.ToSuiteParams` into `SuiteResult.Params` records the effective
-   configuration in the results.
+   configuration in the results. The suite's `Default*Options()` is also its
+   `OptionsSchema()`: user-supplied keys are validated against it (see
+   [Config canonicalization](#config-canonicalization)).
 
 4. Register it from the package's `init()`:
 
@@ -124,6 +127,32 @@ suite. The flag is reported by `hvperf list`.
 | `density` | yes | Import a VM image, ramp up VMs concurrently until failure, and record VMI boot-latency percentiles (p50/p95/p99). |
 | `network-benchmark` | yes | Run netperf `TCP_STREAM`, `TCP_CRR`, `TCP_RR`, `UDP_STREAM` and `UDP_RR`, then iperf3 `TCP_STREAM` and `UDP_STREAM`, between a server and a client job pod (pod network, same or different nodes), recording throughput and latency. The `netperf`/`netserver`/`iperf3` binaries are copied into the pods from the tools directory. |
 | `storage-kbench` | yes | Run Longhorn's `kbench` job against a fresh PVC to benchmark bandwidth, IOPS and latency, then read the matching Longhorn metrics from Prometheus. |
+
+### Config canonicalization
+
+`hvperf run` reads user options from a YAML file, keyed by suite name plus an
+optional `global` section. Before any suite runs, `canonicalizeRunOptions`
+(`cmd/run.go`) validates and normalizes those inputs. The `Default*Options()`
+functions in `internal/suites/options/default.go` act as the **schema**:
+
+- Each suite returns its defaults from `OptionsSchema()`. The `global` section
+  is checked against `DefaultGlobalOptions()`.
+- `Options.Canonicalize(schema)` (`pkg/suites/options.go`) matches each user
+  key against the schema, ignoring case and separators (`-`, `_`, `.`), and
+  rewrites it to the schema's spelling. `etcd-endpoints`, `etcdEndpoints` and
+  `ETCDENDPOINTS` all become `EtcdEndpoints`. Nested sections (such as the
+  `vmi` section for `density`) are canonicalized recursively.
+- The run fails fast, before touching the cluster, on: an unknown key, an
+  empty key, two keys that collapse to the same schema key, a section for a
+  suite that is not being run, and a nested/scalar shape mismatch against the
+  schema.
+- Only keys are checked. Value types are validated later, when
+  `options.FromOptions` decodes the merged options into the suite's own struct.
+
+At run time each suite receives `global` options first, then its own section
+on top, then `toolsDir`, which cannot be overridden. A new option is therefore
+only accepted from users once it has an entry in the suite's `Default*Options()`
+— add it there, even if the default is zero or empty.
 
 ### Result types
 

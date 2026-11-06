@@ -405,6 +405,10 @@ func (s *BenchmarkSuite) execPromQL(
 	return metricResults
 }
 
+func (s *BenchmarkSuite) OptionsSchema() suites.Options {
+	return options.DefaultEtcdBenchmarkOptions()
+}
+
 func (s *BenchmarkSuite) SetClients(clients *suites.Clients) {
 	s.Clients = clients
 }

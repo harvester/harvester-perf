@@ -28,18 +28,6 @@ func newPod(namespace, name string) *corev1.Pod {
 	}
 }
 
-// fakeOptions stands in for a suite's options struct, such as the
-// etcd suite's BenchmarkOptions. Only the primitive field kinds that the
-// options structs use are covered.
-type fakeOptions struct {
-	EtcdEndpoints      string
-	EtcdMetricsPort    int
-	PutLoadSize        uint64
-	JobSuspend         bool
-	JobPodReadyTimeout time.Duration
-	unexported         string //nolint:unused // asserts that ToSuiteParams skips it
-}
-
 func TestToSuiteParams(t *testing.T) {
 	opts := fakeOptions{
 		EtcdEndpoints:      "https://127.0.0.1:2379",

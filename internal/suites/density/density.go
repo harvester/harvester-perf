@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/harvester/hvperf/internal/suites/options"
 	pkgk8s "github.com/harvester/hvperf/pkg/k8s"
 	pkgprom "github.com/harvester/hvperf/pkg/prometheus"
 	"github.com/harvester/hvperf/pkg/resource"
@@ -75,6 +76,10 @@ func (s *DensitySuite) Description() string {
 }
 func (s *DensitySuite) IsExclusive() bool                  { return true }
 func (s *DensitySuite) SetClients(clients *suites.Clients) { s.Clients = clients }
+
+func (s *DensitySuite) OptionsSchema() suites.Options {
+	return options.DefaultVMDensityOptions()
+}
 
 func (s *DensitySuite) RunE(ctx context.Context, runID, namespace string, opts suites.Options) (result suites.SuiteResult) {
 	result = suites.NewSuiteResult(s.Name(), runID)
