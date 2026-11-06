@@ -80,6 +80,7 @@ hvperf run network-benchmark
 | --- | --- |
 | `hvperf list` | List registered suites. `-o` accepts `table` (default), `name`, `json`, `yaml`. |
 | `hvperf run <suite>[,<suite>...]` | Run the named suites, given as a single comma-separated argument. An unknown name fails the run. An exclusive suite cannot be run together with other suites. `-o` accepts `text` (default), `json`, `yaml`. |
+| `hvperf config template` / `validate -c <file>` | Print a config template holding every overridable parameter and its default, or check a config file without running anything. See [Configuration file](#configuration-file-for-parameters-overrides). |
 | `hvperf tool install -t <tar.gz>` / `list` / `uninstall [-y]` | Install, list or remove the benchmark tools in `~/.hvperf/tools`. See [Setting up the tools](#setting-up-the-tools). |
 | `hvperf version [--client-only]` | Print the client version and, unless `--client-only` is set, the cluster's server version. |
 
@@ -136,6 +137,25 @@ Test suites parameters can be overridden via a configuration file, using the
 ```bash
 hvperf run density --config ~/my-cluster.yaml
 ```
+
+The file is YAML with one section per suite, plus an optional `global` section
+for settings shared by all suites. Only the parameters you want to change need
+to be listed; everything else keeps its default. Keys are matched
+case-insensitively and may use `-`, `_` or `.` as separators, so `etcd-endpoints`
+and `etcdEndpoints` are the same key. An unknown key or suite name is an error.
+
+Use `hvperf config` to build and check the file:
+
+```bash
+# print a template with every parameter at its default value
+hvperf config template > my-cluster.yaml
+
+# edit it (keep only the parameters you want to override), then check it
+hvperf config validate --config my-cluster.yaml
+```
+
+`validate` reports every problem it finds and exits non-zero, without touching
+the cluster. `run --config` performs the same check before starting.
 
 ## Development
 

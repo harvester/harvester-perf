@@ -140,7 +140,7 @@ functions in `internal/suites/options/default.go` act as the **schema**:
 - `Options.Canonicalize(schema)` (`pkg/suites/options.go`) matches each user
   key against the schema, ignoring case and separators (`-`, `_`, `.`), and
   rewrites it to the schema's spelling. `etcd-endpoints`, `etcdEndpoints` and
-  `ETCDENDPOINTS` all become `EtcdEndpoints`. Nested sections (such as the
+  `ETCDENDPOINTS` all become `etcdEndpoints`. Nested sections (such as the
   `vmi` section for `density`) are canonicalized recursively.
 - The run fails fast, before touching the cluster, on: an unknown key, an
   empty key, two keys that collapse to the same schema key, a section for a
@@ -153,6 +153,21 @@ At run time each suite receives `global` options first, then its own section
 on top, then `toolsDir`, which cannot be overridden. A new option is therefore
 only accepted from users once it has an entry in the suite's `Default*Options()`
 — add it there, even if the default is zero or empty.
+
+### The `config` command
+
+`cmd/config.go` exposes the schema to users:
+
+- `hvperf config template` dumps every suite's `OptionsSchema()` (suites with an
+  empty schema are skipped) plus `DefaultGlobalOptions()` under `global`, as
+  YAML on stdout. It is generated from the schema, so a new option shows up in
+  the template as soon as it has a `Default*Options()` entry.
+- `hvperf config validate -c <file>` loads the file with `loadRunOptions` and
+  runs it through `canonicalizeRunOptions` against all registered suites. It
+  never contacts the cluster. All errors are joined into one report.
+
+`run --config` calls the same `canonicalizeRunOptions`, so `validate` and `run`
+cannot disagree about what is valid.
 
 ### Result types
 
