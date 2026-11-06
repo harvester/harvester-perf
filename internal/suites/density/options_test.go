@@ -11,10 +11,10 @@ import (
 
 func TestDecodeOptionsOverridesProvidedFields(t *testing.T) {
 	override := suites.Options{
-		"BatchWaitTimeout": "90s",
-		"MaxVMs":           1000,
-		"VMI": suites.Options{
-			"CPU": "200m",
+		"batchWaitTimeout": "90s",
+		"maxVMs":           1000,
+		"vmi": suites.Options{
+			"cpu": "200m",
 		},
 	}
 	got, err := NewOptions(override)

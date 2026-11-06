@@ -18,6 +18,7 @@ type Options map[string]any
 // If a key exists in both Options, the value from the other Options will
 // overwrite the value in the current Options. Nested Options will be merged
 // recursively.
+// Key comparison is case-sensitive.
 func (o Options) Merge(other Options) Options {
 	merged := Options{}
 	maps.Copy(merged, o)

@@ -5,77 +5,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/harvester/hvperf/pkg/suites"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
-
-func TestDefaultGlobalOptions(t *testing.T) {
-	want := suites.Options{
-		"EtcdNamespace":                   "kube-system",
-		"EtcdReadyTimeout":                300 * time.Second,
-		"JobActiveDeadline":               3600 * time.Second,
-		"JobPodImageName":                 "registry.suse.com/bci/bci-base",
-		"JobPodImageTag":                  "latest",
-		"JobPodNode":                      "",
-		"JobPodTTLAfterFinished":          300 * time.Second,
-		"JobPodReadyTimeout":              3600 * time.Second,
-		"JobSuspend":                      false,
-		"LonghornNamespace":               "longhorn-system",
-		"MonitoringAddonName":             "rancher-monitoring",
-		"MonitoringNamespace":             "cattle-monitoring-system",
-		"MonitoringRangeDuration":         300 * time.Second,
-		"MonitoringWaitPodMonitorTimeout": 600 * time.Second,
-		"NamespaceReadyTimeout":           300 * time.Second,
-	}
-
-	if diff := cmp.Diff(DefaultGlobalOptions(), want); diff != "" {
-		t.Errorf("DefaultGlobalOptions() mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func TestDefaultNodeCapacityOptions(t *testing.T) {
-	want := suites.Options{
-		"PodActiveDeadline": 3600 * time.Second,
-		"PodImageName":      "registry.suse.com/bci/bci-base",
-		"PodImageTag":       "latest",
-		"PodReadyTimeout":   3600 * time.Second,
-	}
-
-	if diff := cmp.Diff(DefaultNodeCapacityOptions(), want); diff != "" {
-		t.Errorf("DefaultNodeCapacityOptions() mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func TestDefaultKBenchOptions(t *testing.T) {
-	want := suites.Options{
-		"CPUIdleProf":         "disabled",
-		"BandwidthBlockSize":  "128K",
-		"BandwidthIoDepth":    16,
-		"BandwidthNumJobs":    4,
-		"IOPSBlockSize":       "4K",
-		"IOPSIoDepth":         32,
-		"IOPSNumJobs":         4,
-		"LatencyBlockSize":    "4K",
-		"LatencyIoDepth":      1,
-		"LatencyNumJobs":      1,
-		"Mode":                "full",
-		"RampTime":            60 * time.Second,
-		"TestSize":            "30G",
-		"KBenchImageName":     "longhornio/kbench",
-		"KBenchImageTag":      "main-head",
-		"KBenchLimitCPU":      "4",
-		"KBenchLimitMem":      "512Mi",
-		"KBenchRequestCPU":    "4",
-		"KBenchRequestMem":    "256Mi",
-		"PVCBoundTimeout":     300 * time.Second,
-		"PVCStorageClassName": "",
-		"PVCStorageSize":      "33Gi",
-	}
-
-	if diff := cmp.Diff(DefaultKBenchOptions(), want); diff != "" {
-		t.Errorf("DefaultKBenchOptions() mismatch (-want +got):\n%s", diff)
-	}
-}
 
 // TestDefaultOptionsFromOptions checks that each defaults function produces
 // an Options map that round-trips through FromOptions into its corresponding
@@ -164,23 +95,4 @@ func TestDefaultOptionsFromOptions(t *testing.T) {
 			t.Errorf("FromOptions() mismatch (-want +got):\n%s", diff)
 		}
 	})
-}
-
-func TestDefaultNetworkOptions(t *testing.T) {
-	want := suites.Options{
-		"IPerfClientMessageSizeBytes": 1024,
-		"IPerfClientParallelStreams":  1,
-		"IPerfIPFamily":               "-4",
-		"IPerfServerPort":             22865,
-		"IPerfTestDurationSeconds":    10,
-		"IPerfRemoteCopyTargetDir":    "/usr/local/bin/",
-		"NetPerfIPFamily":             "-4",
-		"NetPerfRemoteCopyTargetDir":  "/usr/local/bin/",
-		"NetPerfTestStartWaitSeconds": 2,
-		"NetPerfTestLengthSeconds":    10,
-	}
-
-	if diff := cmp.Diff(DefaultNetworkOptions(), want); diff != "" {
-		t.Errorf("DefaultNetworkOptions() mismatch (-want +got):\n%s", diff)
-	}
 }

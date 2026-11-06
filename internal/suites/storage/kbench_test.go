@@ -68,10 +68,10 @@ func TestNewKBenchOptionsOverride(t *testing.T) {
 	want.JobPodReadyTimeout = 10 * time.Second // global default overridden
 
 	got, err := NewKBenchOptions(suites.Options{
-		"IOPSNumJobs":        8,
-		"TestSize":           "10G",
-		"PVCStorageSize":     "20Gi",
-		"JobPodReadyTimeout": 10 * time.Second,
+		"iopsNumJobs":        8,
+		"testSize":           "10G",
+		"pvcStorageSize":     "20Gi",
+		"jobPodReadyTimeout": 10 * time.Second,
 	})
 	if err != nil {
 		t.Fatalf("NewKBenchOptions() error = %v, want nil", err)
@@ -83,8 +83,8 @@ func TestNewKBenchOptionsOverride(t *testing.T) {
 
 func TestNewKBenchOptionsOverrideInvalid(t *testing.T) {
 	tests := map[string]suites.Options{
-		"test size not smaller than PVC size": {"TestSize": "40G"},
-		"unparsable test size":                {"TestSize": "bogus"},
+		"test size not smaller than PVC size": {"testSize": "40G"},
+		"unparsable test size":                {"testSize": "bogus"},
 	}
 	for name, override := range tests {
 		t.Run(name, func(t *testing.T) {

@@ -110,67 +110,6 @@ func TestNewNetworkOptions(t *testing.T) {
 		}
 	})
 
-	t.Run("explicit paths win, toolsDir not required", func(t *testing.T) {
-		o, err := NewNetworkOptions(suites.Options{
-			"netPerfClientLocalPath": "/a/netperf",
-			"netPerfServerLocalPath": "/a/netserver",
-			"iperfBinLocalPath":      "/a/iperf3",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if o.NetPerfClientLocalPath != "/a/netperf" ||
-			o.NetPerfServerLocalPath != "/a/netserver" ||
-			o.IPerfBinLocalPath != "/a/iperf3" {
-			t.Errorf("got %q, %q, %q", o.NetPerfClientLocalPath, o.NetPerfServerLocalPath, o.IPerfBinLocalPath)
-		}
-	})
-
-	t.Run("partial explicit paths: explicit wins, rest derived from toolsDir", func(t *testing.T) {
-		o, err := NewNetworkOptions(suites.Options{
-			"toolsDir":               "/tools",
-			"netPerfClientLocalPath": "/a/netperf",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if o.NetPerfClientLocalPath != "/a/netperf" {
-			t.Errorf("NetPerfClientLocalPath = %q, want /a/netperf", o.NetPerfClientLocalPath)
-		}
-		if o.NetPerfServerLocalPath != "/tools/netserver" {
-			t.Errorf("NetPerfServerLocalPath = %q, want /tools/netserver", o.NetPerfServerLocalPath)
-		}
-		if o.IPerfBinLocalPath != "/tools/iperf3" {
-			t.Errorf("IPerfBinLocalPath = %q, want /tools/iperf3", o.IPerfBinLocalPath)
-		}
-	})
-
-	t.Run("explicit iperf path only, netperf paths derived from toolsDir", func(t *testing.T) {
-		o, err := NewNetworkOptions(suites.Options{
-			"toolsDir":          "/tools",
-			"iperfBinLocalPath": "/a/iperf3",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if o.IPerfBinLocalPath != "/a/iperf3" {
-			t.Errorf("IPerfBinLocalPath = %q, want /a/iperf3", o.IPerfBinLocalPath)
-		}
-		if o.NetPerfClientLocalPath != "/tools/netperf" || o.NetPerfServerLocalPath != "/tools/netserver" {
-			t.Errorf("got %q, %q", o.NetPerfClientLocalPath, o.NetPerfServerLocalPath)
-		}
-	})
-
-	t.Run("explicit netperf paths without iperf path or toolsDir errors", func(t *testing.T) {
-		_, err := NewNetworkOptions(suites.Options{
-			"netPerfClientLocalPath": "/a/netperf",
-			"netPerfServerLocalPath": "/a/netserver",
-		})
-		if err == nil {
-			t.Fatal("want error")
-		}
-	})
-
 	t.Run("missing toolsDir errors", func(t *testing.T) {
 		if _, err := NewNetworkOptions(suites.Options{}); err == nil {
 			t.Fatal("want error")
@@ -186,10 +125,10 @@ func TestNewNetworkOptions(t *testing.T) {
 	t.Run("override beats defaults", func(t *testing.T) {
 		o, err := NewNetworkOptions(suites.Options{
 			"toolsDir":                 "/tools",
-			"NetPerfTestLengthSeconds": 30,
-			"NetPerfIPFamily":          "-6",
-			"IPerfServerPort":          5201,
-			"IPerfIPFamily":            "-6",
+			"netPerfTestLengthSeconds": 30,
+			"netPerfIPFamily":          "-6",
+			"iPerfServerPort":          5201,
+			"iPerfIPFamily":            "-6",
 		})
 		if err != nil {
 			t.Fatal(err)

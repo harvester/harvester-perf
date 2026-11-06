@@ -86,3 +86,30 @@ func TestNewBenchmarkOptionsOverride(t *testing.T) {
 		t.Errorf("NewBenchmarkOptions() mismatch (-want +got):\n%s", diff)
 	}
 }
+
+func TestNewBenchmarkOptionsToolsDir(t *testing.T) {
+	t.Run("local paths derived from toolsDir", func(t *testing.T) {
+		o, err := NewBenchmarkOptions(suites.Options{"toolsDir": "/tools"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if o.EtcdBenchmarkLocalPath != "/tools/benchmark" {
+			t.Errorf("EtcdBenchmarkLocalPath = %q", o.EtcdBenchmarkLocalPath)
+		}
+		if o.EtcdctlLocalPath != "/tools/etcdctl" {
+			t.Errorf("EtcdctlLocalPath = %q", o.EtcdctlLocalPath)
+		}
+	})
+
+	t.Run("missing toolsDir errors", func(t *testing.T) {
+		if _, err := NewBenchmarkOptions(suites.Options{}); err == nil {
+			t.Fatal("want error")
+		}
+	})
+
+	t.Run("non-string toolsDir errors", func(t *testing.T) {
+		if _, err := NewBenchmarkOptions(suites.Options{"toolsDir": 1}); err == nil {
+			t.Fatal("want error")
+		}
+	})
+}

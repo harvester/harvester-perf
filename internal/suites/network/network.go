@@ -168,32 +168,19 @@ func NewNetworkOptions(override suites.Options) (*NetworkOptions, error) {
 		Merge(options.DefaultNetworkOptions()).
 		Merge(override)
 
-	// if user did not provide the netperf or iperf client/server local paths,
-	// use the toolsDir option to construct them. if toolsDir is not provided,
-	// return an error.
-	if merged["netPerfClientLocalPath"] == nil ||
-		merged["netPerfServerLocalPath"] == nil ||
-		merged["iperfBinLocalPath"] == nil {
-		toolsDir, exists := merged["toolsDir"]
-		if !exists {
-			return nil, fmt.Errorf("toolsDir option is required but not provided")
-		}
-
-		cast, ok := toolsDir.(string)
-		if !ok {
-			return nil, fmt.Errorf("toolsDir option must be a string, but got %T", toolsDir)
-		}
-
-		if merged["netPerfClientLocalPath"] == nil {
-			merged["netPerfClientLocalPath"] = filepath.Join(cast, "netperf")
-		}
-		if merged["netPerfServerLocalPath"] == nil {
-			merged["netPerfServerLocalPath"] = filepath.Join(cast, "netserver")
-		}
-		if merged["iperfBinLocalPath"] == nil {
-			merged["iperfBinLocalPath"] = filepath.Join(cast, "iperf3")
-		}
+	// the tools local paths are derived from the toolsDir, set by the 'tool' command
+	toolsDir, exists := merged["toolsDir"]
+	if !exists {
+		return nil, fmt.Errorf("toolsDir option is required but not provided")
 	}
+	cast, ok := toolsDir.(string)
+	if !ok {
+		return nil, fmt.Errorf("toolsDir option must be a string, but got %T", toolsDir)
+	}
+	merged["netPerfClientLocalPath"] = filepath.Join(cast, "netperf")
+	merged["netPerfServerLocalPath"] = filepath.Join(cast, "netserver")
+	merged["iPerfBinLocalPath"] = filepath.Join(cast, "iperf3")
+
 	return options.FromOptions[*NetworkOptions](merged)
 }
 

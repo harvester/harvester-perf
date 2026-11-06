@@ -36,9 +36,9 @@ func TestNewCapacityOptionsOverride(t *testing.T) {
 	want.NamespaceReadyTimeout = 20 * time.Second // global default overridden
 
 	got, err := NewCapacityOptions(suites.Options{
-		"PodImageTag":           "v1",
-		"PodReadyTimeout":       10 * time.Second,
-		"NamespaceReadyTimeout": 20 * time.Second,
+		"podImageTag":           "v1",
+		"podReadyTimeout":       10 * time.Second,
+		"namespaceReadyTimeout": 20 * time.Second,
 	})
 	if err != nil {
 		t.Fatalf("NewCapacityOptions() error = %v, want nil", err)

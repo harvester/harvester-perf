@@ -31,36 +31,36 @@ func TestCanonicalizeRunOptions(t *testing.T) {
 		&fakeSuite{
 			SuiteName: "density",
 			SuiteOptionsSchema: suites.Options{
-				"BatchSize":        10,
-				"BatchWaitTimeout": 5 * time.Minute,
-				"VMI": suites.Options{
-					"ContainerDisk": "quay.io/kubevirt/cirros-container-disk-demo:latest",
-					"Memory":        "90Mi",
-					"CPU":           "100m",
+				"batchSize":        10,
+				"batchWaitTimeout": 5 * time.Minute,
+				"vmi": suites.Options{
+					"containerDisk": "quay.io/kubevirt/cirros-container-disk-demo:latest",
+					"memory":        "90Mi",
+					"cpu":           "100m",
 				},
 			},
 		},
 		&fakeSuite{
 			SuiteName: "etcd",
 			SuiteOptionsSchema: suites.Options{
-				"EtcdEndpoints":       "https://127.0.0.1:2379",
-				"EtcdMetricsPath":     "/metrics",
-				"EtcdMetricsPortName": "metrics",
+				"etcdEndpoints":       "https://127.0.0.1:2379",
+				"etcdMetricsPath":     "/metrics",
+				"etcdMetricsPortName": "metrics",
 			},
 		},
 		&fakeSuite{
 			SuiteName: "kbench",
 			SuiteOptionsSchema: suites.Options{
-				"BandwidthBlockSize":  "128K",
-				"BandwidthIoDepth":    16,
-				"BandwidthNumJobs":    4,
-				"IOPSBlockSize":       "4K",
-				"IOPSIoDepth":         32,
-				"IOPSNumJobs":         4,
-				"LatencyBlockSize":    "4K",
-				"LatencyIoDepth":      1,
-				"LatencyNumJobs":      1,
-				"PVCStorageClassName": "longhorn",
+				"bandwidthBlockSize":  "128K",
+				"bandwidthIoDepth":    16,
+				"bandwidthNumJobs":    4,
+				"iopsBlockSize":       "4K",
+				"iopsIoDepth":         32,
+				"iopsNumJobs":         4,
+				"latencyBlockSize":    "4K",
+				"latencyIoDepth":      1,
+				"latencyNumJobs":      1,
+				"pvcStorageClassName": "longhorn",
 			},
 		},
 	}
@@ -97,19 +97,19 @@ func TestCanonicalizeRunOptions(t *testing.T) {
 
 		want := map[string]suites.Options{
 			"global": {
-				"EtcdNamespace":    "etcd-system",
-				"EtcdReadyTimeout": 10 * time.Second,
+				"etcdNamespace":    "etcd-system",
+				"etcdReadyTimeout": 10 * time.Second,
 			},
 			"etcd": {
-				"EtcdEndpoints": "https://etcd.cluster:2379",
+				"etcdEndpoints": "https://etcd.cluster:2379",
 			},
 			"kbench": {
-				"PVCStorageClassName": "localpath",
+				"pvcStorageClassName": "localpath",
 			},
 			"density": {
-				"VMI": suites.Options{
-					"Memory": "128Mi",
-					"CPU":    "200m",
+				"vmi": suites.Options{
+					"memory": "128Mi",
+					"cpu":    "200m",
 				},
 			},
 		}
@@ -212,8 +212,14 @@ func TestLoadRunOptionsMissingCustomPath(t *testing.T) {
 
 func TestCanonicalizeRunOptionsEdgeCases(t *testing.T) {
 	fake := []suites.Suite{
-		&fakeSuite{SuiteName: "etcd", SuiteOptionsSchema: suites.Options{"EtcdEndpoints": "x"}},
-		&fakeSuite{SuiteName: "kbench", SuiteOptionsSchema: suites.Options{"PVCStorageClassName": "x"}},
+		&fakeSuite{
+			SuiteName:          "etcd",
+			SuiteOptionsSchema: suites.Options{"etcdEndpoints": "x"},
+		},
+		&fakeSuite{
+			SuiteName:          "kbench",
+			SuiteOptionsSchema: suites.Options{"pvcStorageClassName": "x"},
+		},
 	}
 
 	t.Run("nil run options yield empty result", func(t *testing.T) {
@@ -255,7 +261,7 @@ func TestCanonicalizeRunOptionsEdgeCases(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		want := map[string]suites.Options{
-			"etcd":   {"EtcdEndpoints": "e"},
+			"etcd":   {"etcdEndpoints": "e"},
 			"kbench": {},
 		}
 		if diff := cmp.Diff(want, got); diff != "" {
@@ -271,8 +277,8 @@ func TestCanonicalizeRunOptionsEdgeCases(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got["global"]["EtcdNamespace"] != "ns" {
-			t.Errorf("global = %v, want EtcdNamespace=ns", got["global"])
+		if got["global"]["etcdNamespace"] != "ns" {
+			t.Errorf("global = %v, want etcdNamespace=ns", got["global"])
 		}
 	})
 }
@@ -281,10 +287,20 @@ func TestCanonicalizeRunOptionsEdgeCases(t *testing.T) {
 // validation breaks. error must name the section.
 func TestCanonicalizeRunOptionsBadKeyPerSection(t *testing.T) {
 	fake := []suites.Suite{
-		&fakeSuite{SuiteName: "etcd", SuiteOptionsSchema: suites.Options{"EtcdEndpoints": "x"}},
-		&fakeSuite{SuiteName: "density", SuiteOptionsSchema: suites.Options{
-			"VMI": suites.Options{"Memory": "x"},
-		}},
+		&fakeSuite{
+			SuiteName: "etcd",
+			SuiteOptionsSchema: suites.Options{
+				"EtcdEndpoints": "x",
+			},
+		},
+		&fakeSuite{
+			SuiteName: "density",
+			SuiteOptionsSchema: suites.Options{
+				"vmi": suites.Options{
+					"memory": "x",
+				},
+			},
+		},
 	}
 	testCases := []struct {
 		name    string
